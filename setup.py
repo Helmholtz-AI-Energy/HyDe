@@ -5,9 +5,9 @@ import codecs
 with codecs.open("README.md", "r", "utf-8") as handle:
     long_description = handle.read()
 
-# __version__ = None  # appeases flake, assignment in exec() below
-# with open("./heat/core/version.py") as handle:
-#    exec(handle.read())
+__version__ = None  # appeases flake, assignment in exec() below
+with open("./hyperspectraldenoising/version.py") as handle:
+   exec(handle.read())
 
 setup(
     name="hyperspectral denoising",
