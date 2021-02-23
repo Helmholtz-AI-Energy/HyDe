@@ -6,11 +6,11 @@ with codecs.open("README.md", "r", "utf-8") as handle:
     long_description = handle.read()
 
 __version__ = None  # appeases flake, assignment in exec() below
-with open("./hyperspectraldenoising/version.py") as handle:
+with open("./hyde/version.py") as handle:
    exec(handle.read())
 
 setup(
-    name="hyperspectral denoising",
+    name="HyDe",
     packages=find_packages(exclude=(,)),
     data_files=["README.md", "LICENSE"],
     version=__version__,
@@ -18,11 +18,12 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Helmholtz AI Local Energy",
-    author_email="markus.goetz@kit.edu",
+    author_email="consultant-helmholtz.ai@kit.edu",
     url="https://github.com/Helmholtz-AI-Energy/HyperspectralDenoising",
     keywords=["hyperspectral", "denoising", "remote sensing", "gpu"],
-    python_requires="~=3.8",
+    python_requires="~=3.7",
     classifiers=[
+        "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "License :: OSI Approved :: BSD-3 License",
         "Intended Audience :: Science/Research",
