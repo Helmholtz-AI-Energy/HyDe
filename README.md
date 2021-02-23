@@ -20,7 +20,8 @@ Image denoising is the task of recovering the true unknown image from a degraded
 Features
 --------
 
-* Automatic Hyperspectral ImageRestoration Using Sparse and Low-Rank Modeling ([paper](https://ieeexplore.ieee.org/document/8098642))
+* Automatic Hyperspectral Image Restoration Using Sparse and Low-Rank Modeling ([source](https://ieeexplore.ieee.org/document/8098642))
+* Hyperspectral Mixed Gaussian and Sparse Noise Reduction ([source](https://ieeexplore.ieee.org/document/8760540))
 
 Requirements
 ------------
