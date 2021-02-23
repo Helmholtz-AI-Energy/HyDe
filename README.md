@@ -1,4 +1,4 @@
-# Hyperspectral Denoising
+# HyDe - Hyperspectral Denoising
 
 Hyperspectral Denoising algorithm toolbox in Python
 
