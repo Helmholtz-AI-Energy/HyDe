@@ -43,5 +43,6 @@ under the Helmholtz AI platform grant.*
 ---
 
 <div align="center">
-  <a href="https://www.helmholtz.de/en/"><img src="https://raw.githubusercontent.com/helmholtz-analytics/heat/master/doc/images/helmholtz_logo.svg" height="50px" hspace="3%" vspace="20px"></a>
+    <a href="https://www.helmholtz.ai/"><img src="https://raw.githubusercontent.com/Helmholtz-AI-Energy/HyDe/master/logo/helmholtzai_logo.png" height="50px" hspace="3%" vspace="20px"></a><a href="http://www.kit.edu/english/index.php"><img src="https://raw.githubusercontent.com/Helmholtz-AI-Energy/HyDe/master/logo/kit_logo.svg" height="50px" hspace="3%" vspace="20px"></a><a href="http://www.kit.edu/english/index.php"><img src="https://raw.githubusercontent.com/Helmholtz-AI-Energy/HyDe/master/logo/hif_logo.png" height="50px" hspace="3%" vspace="20px"></a><a href="https://www.helmholtz.de/en/"><img src="https://raw.githubusercontent.com/Helmholtz-AI-Energy/HyDe/master/logo/helmholtz_logo.svg" height="50px" hspace="3%" vspace="20px"></a>
 </div>
+
