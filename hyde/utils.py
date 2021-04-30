@@ -4,6 +4,7 @@ import pywt
 import collections
 import scipy as sp
 import math
+from typing import Tuple
 
 __all__ = [
     "daubcqf",
@@ -97,14 +98,43 @@ def daubcqf(N, TYPE='min'):
     return h_0, h_1
 
 
-def estimate_hyperspectral_noise(data, noise_type="additive", verbose=False):
+def estimate_hyperspectral_noise(
+        data,
+        noise_type="additive",
+        calculation_dtype: torch.dtype=torch.float,
+):
+    """
+    Infer teh noise in a hyperspectral dataset. Assumes that the
+    reflectance at a given band is well modelled by a linear regression
+    on the remaining bands
+
+    Parameters
+    ----------
+    data: torch.Tensor
+        an LxN matrix with the hyperspectral data where L is the number of bands
+        and N is the number of pixels
+    noise_type: str, optional
+        The type of noise to estimate.
+        Options: ["additive", "poisson"]
+        Default: "additive"
+    calculation_dtype:
+        Option to change the datatype for the noise calculation
+        Default: torch.float
+
+    Returns
+    -------
+    w: torch.Tensor
+        the noise estimates for every pixel (LxN)
+    r_w: torch.Tensor
+        the noise correlation matrix (LxL)
+    """
     # todo: verbose options
     # data must be a torch tensor
 
     if noise_type == "poisson":
         sqdat = torch.sqrt(data * (data > 0))  # todo: this feels wrong...
         # sqy = sqrt(y.*(y>0));          % prevent negative values
-        u, r_u = _est_additive_noise(sqdat)
+        u, r_u = _est_additive_noise(sqdat, calculation_dtype)
         # [u Ru] = estAdditiveNoise(sqy,verb); % noise estimates
         x = (sqdat - u) ^ 2
         # x = (sqy - u).^2;            % signal estimates
@@ -112,21 +142,29 @@ def estimate_hyperspectral_noise(data, noise_type="additive", verbose=False):
         # w = sqrt(x).*u*2;
         r_w = (w @ torch.conj(w)) / data.shape[1]
         # Rw = w*w'/N;
-    else:
-        w, r_w = _est_additive_noise(data)
+    elif noise_type == "additive":
+        w, r_w = _est_additive_noise(data, calculation_dtype)
         # [w Rw] = estAdditiveNoise(y,verb); % noise estimates
+    else:
+        raise ValueError(f"noise_type must be one of ['additive', 'poisson'], currently {noise_type}")
     return w, r_w
 
 
-def _est_additive_noise(subdata):
+@torch.jit.script
+def _est_additive_noise(subdata: torch.Tensor, calculation_dtype: torch.dtype=torch.float) -> Tuple[torch.Tensor, torch.Tensor]:
     eps = 1e-6
     dim0data, dim1data = subdata.shape
-    w = torch.zeros(subdata.shape, device=subdata.device)
+    subdata = subdata.to(dtype=calculation_dtype)
+    w = torch.zeros(subdata.shape, dtype=calculation_dtype, device=subdata.device)
     ddp = subdata @ torch.conj(subdata).T
-    hld = (ddp + eps) @ torch.eye(int(dim0data))
-    ddpi = torch.eye(*tuple(hld.shape)) @ torch.inverse(hld)
+    hld = (ddp + eps) @ torch.eye(int(dim0data), dtype=calculation_dtype, device=subdata.device)
+    # print(hld.shape)
+    ddpi = torch.eye(hld.shape[0], hld.shape[1], dtype=calculation_dtype, device=subdata.device) @ torch.inverse(hld)
+    ddp = ddp.to(dtype=torch.float)
+    subdata = subdata.to(dtype=torch.float)
     for i in range(dim0data):
         xx = ddpi - torch.outer(ddpi[:, i], ddpi[i, :]) / ddpi[i, i]
+        xx = xx.to(torch.float)
         # XX = RRi - (RRi(:,i)*RRi(i,:))/RRi(i,i);
         ddpa = ddp[:, i]
         # RRa = RR(:,i);
@@ -137,22 +175,15 @@ def _est_additive_noise(subdata):
         beta[i] = 0
         # beta(i)=0; % this remove the effects of XX(i,:)
         w[i, :] = subdata[i, :] - (torch.conj(beta).T @ subdata)
+        # print(w.dtype)
         # w(i,:) = r(i,:) - beta'*r; % note that beta(i)=0 => beta(i)*r(i,:)=0
     # ret = torch.diag(torch.diag(ddp / dim1data))
     # Rw=diag(diag(w*w'/N));
     hold2 = torch.matmul(w, w.conj().t())
     ret = torch.diag(torch.diagonal(hold2))
+    w = w.to(dtype=torch.float)
+    ret = ret.to(dtype=torch.float)
     return w, ret
-
-
-def soft(x: torch.Tensor, threshold):
-    y, _ = torch.max(torch.abs(x) - threshold, dim=0)
-    y = y / (y + threshold) * x
-    return y
-
-
-def vectorize(x):
-    return torch.reshape(x, (1, x.numel()))
 
 
 def sure_soft_modified_lr2(x: torch.Tensor, t1=None, stdev=None):
@@ -203,3 +234,35 @@ def sure_soft_modified_lr2(x: torch.Tensor, t1=None, stdev=None):
     min_idx = torch.argmin(sure1)
     h_opt = t1[min_idx]
     return sure1, h_opt, t1, min_sure
+
+
+def soft(x: torch.Tensor, threshold):
+    y, _ = torch.max(torch.abs(x) - threshold, dim=0)
+    y = y / (y + threshold) * x
+    return y
+
+
+def vectorize(x):
+    return torch.reshape(x, (1, x.numel()))
+
+
+def vertical_difference(x: torch.Tensor, n: int = 1):
+    """
+    Find the vertical differences in x
+
+    Parameters
+    ----------
+    x
+    n
+
+    Returns
+    -------
+
+    """
+    # y=zeros(size(x));
+    y = torch.zeros_like(x)
+    # y(1:end-1,:)=diff(x,n);
+    # end
+
+    n
+    pass

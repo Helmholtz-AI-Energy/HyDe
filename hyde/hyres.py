@@ -24,7 +24,6 @@ class HyRes:
     def forward(self, x: torch.Tensor):
         # todo: need to have the dims be (num images (1), C_in, H_in, W_in) for twave ops
         # todo: current order: rows, columns, bands (H, W, C) -> permute tuple (2, 0, 1)
-        perm_tuple = (2, 0, 1)
         og_rows, og_cols, og_channels = x.shape
         two_d_shape = (og_rows * og_cols, og_channels)
 
@@ -47,7 +46,7 @@ class HyRes:
         # -------------------------------------------------------
         # next is twoDWTon3Ddata -> requires permute + unsqueeze
         # TODO: determine if the padding is okay here...this will be different from the matlab ones
-        v_dwt_lows, v_dwt_highs = self.dwt_forward.forward(pc.permute(perm_tuple).unsqueeze(0))
+        v_dwt_lows, v_dwt_highs = self.dwt_forward.forward(pc.permute((2, 0, 1)).unsqueeze(0))
         # need to put it back into the order of all the other stuff reshape into 2D
         v_dwt_permed = v_dwt_lows.squeeze().permute((1, 2, 0))
         v_dwt_permed = v_dwt_permed.reshape((v_dwt_permed.shape[0] * v_dwt_permed.shape[1], og_channels))
@@ -71,7 +70,7 @@ class HyRes:
             min_sure1_h, _ = sure1[:, c].min(0)
             min_sure1.append(min_sure1_h)
 
-        _, rank_sel_sure = torch.tensor(min_sure1).min(0)
+        _, rank_sel_sure = torch.tensor(min_sure1, device=x.device).min(0)
 
         inv_lows = v_dwt_lows[:, :rank_sel_sure + 1]
         inv_highs = [asdf[:, :rank_sel_sure + 1] for asdf in v_dwt_highs]
@@ -96,5 +95,5 @@ if __name__ == "__main__":
     # import matplotlib.image as mpimg
 
     # imgplot = plt.imshow(input_tens.numpy()[:, :, 0])
-    imgplot = plt.imshow(output.numpy()[:, :, 0], cmap="Greys")
+    imgplot = plt.imshow(output.numpy()[:, :, 0], cmap="binary")
     plt.show()
