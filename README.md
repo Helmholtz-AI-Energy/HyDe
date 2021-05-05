@@ -1,5 +1,8 @@
-# HyDe - Hyperspectral Denoising
+<div align="center">
+  <img src="logos/hyde_logo.svg" height="100px">
+</div>
 
+---
 Hyperspectral Denoising algorithm toolbox in Python
 
 ## Project Status
