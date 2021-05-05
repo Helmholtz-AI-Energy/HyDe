@@ -29,12 +29,12 @@ repos:
 #     ]
 
 - repo: https://github.com/pycqa/isort
-  rev: 5.7.0
+  rev: 5.8.0
   hooks:
   - id: isort
 
 - repo: https://github.com/psf/black
-  rev: 20.8b1
+  rev: 21.5b0
   hooks:
   - id: black
     language_version: python3
@@ -47,7 +47,7 @@ repos:
 #     additional_dependencies: [black]
 
 - repo: https://gitlab.com/pycqa/flake8
-  rev: 3.8.4
+  rev: 3.9.1
   hooks:
   - id: flake8
   ## You can add flake8 plugins via `additional_dependencies`:

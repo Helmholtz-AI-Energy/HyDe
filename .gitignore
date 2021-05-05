@@ -51,3 +51,7 @@ MANIFEST
 # Per-project virtualenvs
 .venv*/
 .conda*/
+
+# ignore the pip egg
+src/hyde.egg-info/
+venv_hyde/
