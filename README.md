@@ -102,7 +102,7 @@ Then take a look into the `scripts` and `notebooks` folders.
 
 ## License
 
-Hyperspectral Denoising is distributed under the BSD-3 license, see our [LICENSE](LICENSE) file.
+Hyperspectral Denoising is distributed under the BSD-3 license, see our [LICENSE](LICENSE.txt) file.
 
 ## Acknowledgements
 
@@ -113,8 +113,10 @@ under the Helmholtz AI platform grant.*
 ---
 
 <div align="center">
-  <a href="https://www.helmholtz.de/en/"><img src="https://raw.githubusercontent.com/helmholtz-analytics/heat/master/doc/images/helmholtz_logo.svg" height="50px" hspace="3%" vspace="20px"></a>
+    <a href="https://www.helmholtz.ai/"><img src="logos/helmholtzai_logo.jpg" height="45px" hspace="3%" vspace="20px"></a><a href="http://www.kit.edu/english/index.php"><img src="logos/kit_logo.svg" height="45px" hspace="3%" vspace="20px"></a><a href="https://www.hzdr.de/db/Cms?pOid=32948&pNid=2423"><img src="logos/hif_logo.png" height="45px" hspace="3%" vspace="20px"></a><a href="https://www.helmholtz.de/en/"><img src="logos/helmholtz_logo.svg" height="45px" hspace="3%" vspace="20px"></a>
 </div>
+
+---
 
 <!-- pyscaffold-notes -->
 
