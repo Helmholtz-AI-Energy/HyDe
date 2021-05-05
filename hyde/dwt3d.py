@@ -1,75 +1,102 @@
 import torch
-import numpy as np
-from . import utils
+import pywt
+import pytorch_wavelets.dwt.lowlevel as lowlevel
+import torch
 
 
-__all__ = ["two_dwt_on_3d"]
+__all__ = ["DWTForwardOverwrite"]
 
 
-def two_dwt_on_3d(image, decomp_levl=3, qmf=None, fwt="FWT_PO_1D_2D_3D_fast"):
+class DWTForwardOverwrite(torch.nn.Module):
     """
-    # % usage
-    % [y, s1, s2]=twoDWTon3Ddata(x,L,qmf,FWT)
-    % Take the 2D-DWT for each band and reshape subbands as [wLL(:);wLH(:);wHL(:);wHH(:)];
-    % input
-    % x: 3D data
-    % L: level of dicomposition
-    % qmf: quadrature mirror filter
-    % FWT: either 'mdwt', or 'FWT_PO_1D_2D_3D'. mdwt is defualt which is a mex
-    % and faster if there is any difficulty choose FWT_PO_1D_2D_3D
+    mirrors the setup of function wc = FWT2_PO_fast(x,L,qmf)
+    % FWT2_PO_fast -- 2-d MRA wavelet transform (periodized, orthogonal)
+    %  Usage
+    %    wc = FWT2_PO_fast(x,L,qmf)
+    %  Inputs
+    %    x     2-d object (nx by ny by nz array, nx,ny,nz dyadic)
+    %    L     coarse level
+    %    qmf   quadrature mirror filter
+    %  Outputs
+    %    wc    2-d wavelet transform
     %
-    % output
-    % y: vactorized 2D ortho-wavelet coefficient for each band as [wLL(:);wLH(:);wHL(:);wHH(:)];
-    % s1: the number of rows
-    % s2: the number of columns
-
-    Parameters
-    ----------
-    image
-    decomp_levl
-    qmf
-    fwt
-
-    Returns
-    -------
+    %  Description
+    %    A three-dimensional Wavelet Transform is computed for the
+    %    array x.  To reconstruct, use IWT2_PO_fast.
+    %
+    %  See Also
+    %    IWT2_PO_fast, MakeONFilter
+    %
+    % This is a fast implementation for FWT2_PO from Wavelab
+    % (c) 2013 Behnood Rasti
+    % behnood.rasti@gmail.com
 
     """
-    s1, s2, s3 = image.shape
-    if qmf is None:
-        qmf = utils.daubcqf(4)
 
-    ret = torch.zeros(s1 * s2, s3)
+    def __init__(self, decomp_level=1, wave='db1', mode='zero'):
+        super().__init__()
+        if isinstance(wave, str):
+            wave = pywt.Wavelet(wave)
+        if isinstance(wave, pywt.Wavelet):
+            h0_col, h1_col = wave.dec_lo, wave.dec_hi
+            h0_row, h1_row = h0_col, h1_col
+        else:
+            if len(wave) == 2:
+                h0_col, h1_col = wave[0], wave[1]
+                h0_row, h1_row = h0_col, h1_col
+            elif len(wave) == 4:
+                h0_col, h1_col = wave[0], wave[1]
+                h0_row, h1_row = wave[2], wave[3]
 
-    if fwt == "wavedec2":
-        raise NotImplementedError("wavedec2 not implemented")
-        # todo: implement the wavedec2 option, not needed yet, see matlab code below
-        # if strcmpi(FWT,'wavedec2')
-        #     s1=[];
-        #     for i=1:s3
-        #         [y1,S_S] = wavedec2(image(:,:,i),L,['db',num2str(length(qmf)+2)]);
-        #         y(:,i)=vec(y1);
-        #         s1(:,:,i)=S_S;
-        #     end
+        # Prepare the filters
+        filts = lowlevel.prep_filt_afb2d(h0_col, h1_col, h0_row, h1_row)
+        self.register_buffer('h0_col', filts[0])
+        self.register_buffer('h1_col', filts[1])
+        self.register_buffer('h0_row', filts[2])
+        self.register_buffer('h1_row', filts[3])
+        # todo: register the buffer for the output
+        self.decomp_level = decomp_level
+        self.mode = mode
 
-    for i in range(s3):
-        ydum2 = None
-        nx, ny = s1, s2
-        
-    # for i=1:s3
-    #     ydum2=[];
-    #     nx=s1;
-    #     ny=s2;
-    #     y1=eval([FWT '(image(:,:,i),qmf,L)']);
-    #     ydum=y1;
-    #     for j=1:L
-    #         y2 = mat2cell(ydum,[nx/2,nx/2],[ny/2,ny/2]);
-    #         wLH=cell2mat(y2(1,2));
-    #         wHL=cell2mat(y2(2,1));
-    #         wHH=cell2mat(y2(2,2));
-    #         ydum2= [wLH(:);wHL(:);wHH(:);ydum2];
-    #         nx=nx/2;ny=ny/2;
-    #         ydum=cell2mat(y2(1,1));
-    #     end
-    #     y(:,i)=[ydum(:);ydum2];
-    # end
+    def forward(self, x):
+        """ Forward pass of the DWT.
+        Args:
+            x (tensor): Input of shape :math:`(N, C_{in}, H_{in}, W_{in})`
+        Returns:
+            (yl, yh)
+                tuple of lowpass (yl) and bandpass (yh) coefficients.
+                yh is a list of length J with the first entry
+                being the finest scale coefficients. yl has shape
+                :math:`(N, C_{in}, H_{in}', W_{in}')` and yh has shape
+                :math:`list(N, C_{in}, 3, H_{in}'', W_{in}'')`. The new
+                dimension in yh iterates over the LH, HL and HH coefficients.
+        Note:
+            :math:`H_{in}', W_{in}', H_{in}'', W_{in}''` denote the correctly
+            downsampled shapes of the DWT pyramid.
+        """
+        yh = []
+        ll = x
+        mode = lowlevel.mode_to_int(self.mode)
+        ret = None
+
+        # Do a multilevel transform
+        for _ in range(self.decomp_level):
+            # Do a level of the transform
+            ll, high = lowlevel.AFB2D.apply(
+                ll, self.h0_col, self.h1_col, self.h0_row, self.h1_row, mode)
+
+            s = ll.shape[-2]
+            if ret is None:
+                ret_shape = list(ll.shape)
+                ret_shape[-1] *= 2
+                ret_shape[-2] *= 2
+                ret = torch.zeros(ret_shape, device=ll.device, dtype=ll.dtype)
+            ret[:, :, :s, :s] = ll
+            ret[:, :, :s, s:s*2] = high[:, :, 0]
+            ret[:, :, s:s*2, :s] = high[:, :, 1]
+            ret[:, :, s:s*2, s:s*2] = high[:, :, 2]
+
+            yh.append(high)
+
+        return ret, ll, yh
 

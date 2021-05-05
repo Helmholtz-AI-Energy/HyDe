@@ -9,9 +9,11 @@ from typing import Tuple
 __all__ = [
     "daubcqf",
     "estimate_hyperspectral_noise",
-    "soft",
+    "soft_threshold",
     "sure_soft_modified_lr2",
     "vectorize",
+    "vertical_difference",
+    "vertical_difference_transpose",
 ]
 
 
@@ -153,42 +155,102 @@ def estimate_hyperspectral_noise(
 @torch.jit.script
 def _est_additive_noise(subdata: torch.Tensor, calculation_dtype: torch.dtype=torch.float) -> Tuple[torch.Tensor, torch.Tensor]:
     eps = 1e-6
+    # print(subdata[:5, :5])
     dim0data, dim1data = subdata.shape
     subdata = subdata.to(dtype=calculation_dtype)
     w = torch.zeros(subdata.shape, dtype=calculation_dtype, device=subdata.device)
     ddp = subdata @ torch.conj(subdata).T
     hld = (ddp + eps) @ torch.eye(int(dim0data), dtype=calculation_dtype, device=subdata.device)
-    # print(hld.shape)
     ddpi = torch.eye(hld.shape[0], hld.shape[1], dtype=calculation_dtype, device=subdata.device) @ torch.inverse(hld)
-    ddp = ddp.to(dtype=torch.float)
-    subdata = subdata.to(dtype=torch.float)
+    # ddp = ddp.to(dtype=torch.float)
+    # subdata = subdata.to(dtype=torch.float)
     for i in range(dim0data):
-        xx = ddpi - torch.outer(ddpi[:, i], ddpi[i, :]) / ddpi[i, i]
-        xx = xx.to(torch.float)
+        xx = ddpi - (torch.outer(ddpi[:, i], ddpi[i, :]) / ddpi[i, i])
+        # if i == 1:
+        #     print(xx[:10, 0])
+        # xx = xx.to(torch.float)
         # XX = RRi - (RRi(:,i)*RRi(i,:))/RRi(i,i);
         ddpa = ddp[:, i]
         # RRa = RR(:,i);
-        ddpa[i] = 0
+        ddpa[i] = 0.
         # RRa(i)=0; % this remove the effects of XX(:,i)
-        beta = xx @ ddpa
+        beta = (xx @ ddpa)
+        # print(beta.shape)
         # beta = XX * RRa;
         beta[i] = 0
         # beta(i)=0; % this remove the effects of XX(i,:)
-        w[i, :] = subdata[i, :] - (torch.conj(beta).T @ subdata)
-        # print(w.dtype)
+        # print(torch.conj(beta).T.shape, subdata.shape)
+        w[i, :] = subdata[i, :] - (beta.T @ subdata)
+        # if i == 4:
+        #     print(beta.T[:10])
         # w(i,:) = r(i,:) - beta'*r; % note that beta(i)=0 => beta(i)*r(i,:)=0
     # ret = torch.diag(torch.diag(ddp / dim1data))
     # Rw=diag(diag(w*w'/N));
     hold2 = torch.matmul(w, w.conj().t())
+    # print(w[:10, 0])
     ret = torch.diag(torch.diagonal(hold2))
     w = w.to(dtype=torch.float)
     ret = ret.to(dtype=torch.float)
     return w, ret
 
 
-def sure_soft_modified_lr2(x: torch.Tensor, t1=None, stdev=None):
+def sure_thresh(x: torch.Tensor):
+    if x.ndim:
+        x = x.unsqueeze(1)
+    # print(x.shape)
+    n, m = x.shape
+    #         sx = sort(abs(x),1);
+    #         sx2 = sx.^2;
+    sx = torch.sort(torch.abs(x), dim=0)[0].T  #.to(torch.float64)
+    sx2 = sx ** 2
+    # print(sx.shape)
+    # print('h', sx[-10:])
+    #         N1 = repmat((n-2*(1:n))',1,m);
+    hold = (n-2*torch.arange(1, n + 1)).T
+    n1 = hold.repeat(1, m)#.to(torch.float64)
+    # print(torch.where(n1 < 0))
+    hold = torch.arange(n-1, -1, -1)
+    # print(torch.where(hold < 0))
+    #         N2 = repmat((n-1:-1:0)',1,m);
+    n2 = hold.T.repeat(1, m)#.to(torch.float64)
+    # print('n2', n2)
+    #         CS1 = cumsum(sx2,1);
+    if sx2.shape[1] >= 1:
+        cs1 = torch.cumsum(sx2, dim=0)  #.to(torch.float64)
+    else:
+        cs1 = sx2
+    # print('sx2', sx2.shape)
+    # print(n1[0, -10:])
+    #         risks = (N1+CS1+N2.*sx2)./n;
+    # print(n1.shape, cs1.shape, n2.shape, sx2.shape)
+    risks = (n1 + cs1 + n2 * sx2) / n
+    # print('r', risks.shape)
+    #         [~,best] = min(risks,[],1, 'linear');
+    _, best_min = torch.min(risks, 1)
+    # print('b', best_min)
+    #         % thr will be row vector
+    #         thr = sx(best);
+    thr = sx[0, best_min].item()
+    # print(best_min, thr)
+    return thr
+
+    # n = x.shape[0]
+    #
+    # # a = mtlb_sort(abs(X)).^2
+    # a = torch.sort(torch.abs(x))[0] ** 2
+    #
+    # c = torch.linspace(n - 1, 0, n)
+    # s = torch.cumsum(a, dim=0) + c * a
+    # risk = (n - (2 * torch.arange(n)) + s) / n
+    # # risk = (n-(2*(1:n))+(cumsum(a,'m')+c(:).*a))/n;
+    # ibest = torch.argmin(risk)
+    # THR = torch.sqrt(a[ibest])
+    # return THR
+
+
+def sure_soft_modified_lr2(x: torch.Tensor, t1=None):
     """
-    SUREsoft -- apply soft threshold + compute Stein's unbiased risk estimator
+    SUREsoft -- apply soft_threshold threshold + compute Stein's unbiased risk estimator
     %  Usage
     %    [sure1,h_opt,t1,Min_sure] = SUREsoft(x,t1,stdev);
     %    [sure1,h_opt,t1,Min_sure] = SUREsoft(x,t1);
@@ -198,7 +260,7 @@ def sure_soft_modified_lr2(x: torch.Tensor, t1=None, stdev=None):
     %    t1 : Search interval for selecting the optimum tuning parameter
     %    stdev  noise standard deviation (default is 1)
     %  Outputs
-    %    sure1    the value of the SURE, using soft thresholding
+    %    sure1    the value of the SURE, using soft_threshold thresholding
     %    h_opt : The optimum tuning parameter
     %    t1 : Search interval for selecting the optimum tuning parameter
     %    Min_sure : Min value of SURE
@@ -214,12 +276,10 @@ def sure_soft_modified_lr2(x: torch.Tensor, t1=None, stdev=None):
 
     """
     N = x.shape[0]
-    if stdev is None and t1 is None:
+    if t1 is None:
         n = 15
         t_max = torch.sqrt(torch.log(torch.tensor(n, device=x.device)))
         t1 = torch.linspace(0, t_max.item(), n)
-    if stdev is None:
-        stdev = 1
 
     n = len(t1)
     x = x.clone()
@@ -236,8 +296,11 @@ def sure_soft_modified_lr2(x: torch.Tensor, t1=None, stdev=None):
     return sure1, h_opt, t1, min_sure
 
 
-def soft(x: torch.Tensor, threshold):
-    y, _ = torch.max(torch.abs(x) - threshold, dim=0)
+def soft_threshold(x: torch.Tensor, threshold):
+    # y = max(abs(x) - T, 0) -> this will replace the value below with 0
+    hld = torch.abs(x) - threshold
+    y = torch.where(hld > 0, hld, torch.tensor(0.))
+    # y, _ = torch.max(torch.abs(x) - threshold, dim=0)
     y = y / (y + threshold) * x
     return y
 
@@ -261,8 +324,38 @@ def vertical_difference(x: torch.Tensor, n: int = 1):
     """
     # y=zeros(size(x));
     y = torch.zeros_like(x)
+    ret = x
+    for _ in range(n):
+        # todo: torch.diff does the *last* axis but matlab diff does it on the *first* non-1 dimension
+        ret = torch.diff(ret, dim=0)
     # y(1:end-1,:)=diff(x,n);
-    # end
+    y[:ret.shape[0]] = ret
+    return y
 
+
+def vertical_difference_transpose(x: torch.Tensor):
+    """
+    Find the vertical differences in x
+
+    Parameters
+    ----------
+    x
     n
-    pass
+
+    Returns
+    -------
+
+    """
+    # u0 = -z(1,:);
+    # u1 = -diff(z);
+    # u2 = z(end-1,:);
+    # y = [u0; u1(1:(end-1),:); u2];
+    # print(x.shape)
+    u0 = (-1. * x[0]).unsqueeze(0)
+    # todo: torch.diff does the *last* axis but matlab diff does it on the *first* non-1 dimension
+    u1 = (-1. * torch.diff(x, dim=0))[:-1]
+    u2 = (x[-2]).unsqueeze(0)
+    # print(u0.shape, u1.shape, u2.shape)
+    ret = torch.cat([u0, u1, u2], dim=0)
+    # print(u2)
+    return ret
