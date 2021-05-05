@@ -1,33 +1,21 @@
-from setuptools import setup, find_packages
-import codecs
+"""
+    Setup file for hyde.
+    Use setup.cfg to configure your project.
 
+    This file was generated with PyScaffold 4.0.1.
+    PyScaffold helps you to put up the scaffold of your new Python project.
+    Learn more under: https://pyscaffold.org/
+"""
+from setuptools import setup
 
-with codecs.open("README.md", "r", "utf-8") as handle:
-    long_description = handle.read()
-
-__version__ = None  # appeases flake, assignment in exec() below
-with open("./hyde/version.py") as handle:
-   exec(handle.read())
-
-setup(
-    name="HyDe",
-    packages=find_packages(exclude=(,)),
-    data_files=["README.md", "LICENSE"],
-    version=__version__,
-    description="Hyperspectral Denoising algorithm toolbox",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    author="Helmholtz AI Local Energy",
-    author_email="consultant-helmholtz.ai@kit.edu",
-    url="https://github.com/Helmholtz-AI-Energy/HyperspectralDenoising",
-    keywords=["hyperspectral", "denoising", "remote sensing", "gpu"],
-    python_requires="~=3.7",
-    classifiers=[
-        "Programming Language :: Python :: 3.7",
-        "Programming Language :: Python :: 3.8",
-        "License :: OSI Approved :: BSD-3 License",
-        "Intended Audience :: Science/Research",
-        "Topic :: Scientific/Engineering",
-    ],
-    install_requires=["numpy>=1.15.0", "torch>=1.7.0"]
-)
+if __name__ == "__main__":
+    try:
+        setup(use_scm_version={"version_scheme": "no-guess-dev"})
+    except:  # noqa
+        print(
+            "\n\nAn error occurred while building the project, "
+            "please ensure you have the most updated version of setuptools, "
+            "setuptools_scm and wheel with:\n"
+            "   pip install -U setuptools setuptools_scm wheel\n\n"
+        )
+        raise
