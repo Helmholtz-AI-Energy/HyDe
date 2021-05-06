@@ -54,4 +54,4 @@ MANIFEST
 
 # ignore the pip egg
 src/hyde.egg-info/
-venv_hyde/
+hyde_venv/
