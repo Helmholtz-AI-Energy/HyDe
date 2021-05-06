@@ -14,3 +14,6 @@ except PackageNotFoundError:  # pragma: no cover
     __version__ = "unknown"
 finally:
     del version, PackageNotFoundError
+
+# todo: fix top level import statement
+# from . import dwt3d, hyminor, hyres, utils
