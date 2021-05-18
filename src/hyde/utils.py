@@ -3,12 +3,14 @@ from typing import Tuple
 
 import numpy as np
 import torch
+from torch.nn.functional import pad
 
 __all__ = [
     "daubcqf",
     "estimate_hyperspectral_noise",
     "soft_threshold",
     "sure_soft_modified_lr2",
+    "symmetric_pad",
     "vectorize",
     "vertical_difference",
     "vertical_difference_transpose",
@@ -311,6 +313,25 @@ def soft_threshold(x: torch.Tensor, threshold):
     # y, _ = torch.max(torch.abs(x) - threshold, dim=0)
     y = y / (y + threshold) * x
     return y
+
+
+def symmetric_pad(img, n):
+    """
+    Replacement for 2D symmetric padding in torch (not in function space)
+    """
+    # img_pad = np.pad(img, ((N, N), (N, N)), 'symmetric')
+    padded = pad(img, (n, n, n, n), "constant", 0.0)
+    for i in range(n):  # dim 1 (reflect the cols first -> taste)
+        padded[:, 0 + i] = padded[:, 2 * n - i - 1]
+        # n == 4
+        # 0 -> 7, 1 -> 6, 2 -> 5, 3 -> 4, break
+        padded[:, -1 - (0 + i)] = padded[:, -2 * n + i]
+        # n == 4
+        # -1 -> -8, -2 -> -7, -3 -> -6, -4 -> -5, break
+    for i in range(n):
+        padded[0 + i] = padded[2 * n - i - 1]
+        padded[-1 - (0 + i)] = padded[-2 * n + i]
+    return padded
 
 
 def vectorize(x):
