@@ -20,9 +20,6 @@ __all__ = [
     "build_3D_group",
     "closest_power_of_2",
     "compute_psnr",
-    "dct_2d_forward",
-    "dct_2d_reverse",
-    "end_T",
     "get_add_patch_matrix",
     "get_coef",
     "get_kaiser_window",
@@ -158,44 +155,6 @@ def compute_psnr(img1, img2):
     if mse == 0:
         return "Same Image"
     return 10 * math.log10(1.0 / mse)
-
-
-def dct_2d_forward(block):
-    """
-    :forward 2d Discrete Cosine Transformation
-    :param tensor:
-    :return:
-    """
-    block = end_T(block)
-    block = dct(block, norm="ortho")
-    block = end_T(block)
-    block = dct(block, norm="ortho")
-    return block
-
-
-def dct_2d_reverse(block):
-    """
-    :reverse 2d Discrete Cosine Transformation
-    :param tensor:
-    :return:
-    """
-    block = end_T(block)
-    block = idct(block, norm="ortho")
-    block = end_T(block)
-    block = idct(block, norm="ortho")
-    return block
-
-
-def end_T(tensor):
-    """
-    :transpose the last two axes
-    :param tensor:
-    :return:
-    """
-    axes = list(range(tensor.ndim))
-    axes[-1], axes[-2] = axes[-2], axes[-1]
-    tensor = tensor.permute(axes)
-    return tensor
 
 
 def get_add_patch_matrix(h, w, nHW, kHW, device="cpu", dtype=torch.float):

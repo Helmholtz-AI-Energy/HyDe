@@ -1,5 +1,5 @@
 import math
-from typing import Union
+from typing import Tuple
 
 import torch
 
@@ -16,8 +16,8 @@ def hadamard_transform(vec):
 
 
 def ht_filtering_hadamard(
-    group_3D: torch.Tensor, sigma: Union[int, float], lambdaHard3D, doWeight
-):  # group_3D shape=(n*n, nSx_r)
+    group_3D: torch.Tensor, sigma: float, lambdaHard3D, doWeight: bool
+) -> Tuple[torch.Tensor, torch.Tensor]:  # group_3D shape=(n*n, nSx_r)
     """
     :hard threshold filtering after hadamard transform
     :param group_3D:
@@ -44,7 +44,8 @@ def ht_filtering_hadamard(
 
     group_3D *= coef
     if doWeight:
-        weight = 1.0 / (sigma * sigma * weight) if weight > 0.0 else 1.0
+        one = torch.tensor(1.0, dtype=group_3D.dtype, device=group_3D.device)
+        weight = 1.0 / (sigma * sigma * weight) if weight > 0.0 else one
 
     return group_3D, weight
 
@@ -52,7 +53,7 @@ def ht_filtering_hadamard(
 @torch.jit.script
 def wiener_filtering_hadamard(
     group_3D_img: torch.Tensor, group_3D_est: torch.Tensor, sigma: float, doWeight: bool
-):
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     :wiener_filtering after hadamard transform
     :param group_3D_img:

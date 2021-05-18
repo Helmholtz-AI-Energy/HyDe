@@ -76,8 +76,8 @@ def dct(x: torch.Tensor, norm: str = "None"):
     V = Vc[:, :, 0] * W_r - Vc[:, :, 1] * W_i
 
     if norm == "ortho":
-        V[:, 0] /= torch.sqrt(N) * 2  # np.sqrt(N) * 2
-        V[:, 1:] /= torch.sqrt(N) * 2  # np.sqrt(N / 2) * 2
+        V[:, 0] /= torch.sqrt(4 * N)  # torch.sqrt(N) * 2  # np.sqrt(N) * 2
+        V[:, 1:] /= torch.sqrt(2 * N)  # torch.sqrt(N) * 2  # np.sqrt(N / 2) * 2
 
     V = 2 * V.view(x_shape)
 
@@ -101,8 +101,10 @@ def idct(x: torch.Tensor, norm: str = "None"):
     X_v = x.contiguous().view(-1, x_shape[-1]) / 2
 
     if norm == "ortho":
-        X_v[:, 0] *= torch.sqrt(N) * 2
-        X_v[:, 1:] *= torch.sqrt(N / 2) * 2
+        # X_v[:, 0] *= torch.sqrt(N) * 2
+        # X_v[:, 1:] *= torch.sqrt(N / 2) * 2
+        X_v[:, 0] *= torch.sqrt(4 * N)  # torch.sqrt(N) * 2  # np.sqrt(N) * 2
+        X_v[:, 1:] *= torch.sqrt(2 * N)  # torch.sqrt(N) * 2  # np.sqrt(N / 2) * 2
 
     k = (
         torch.arange(x_shape[-1], dtype=x.dtype, device=x.device)[None, :]
