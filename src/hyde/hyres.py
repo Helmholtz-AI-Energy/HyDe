@@ -1,8 +1,8 @@
-import dwt3d
 import matplotlib.pyplot as plt
 import pytorch_wavelets as twave
 import torch
-import utils
+
+from . import dwt3d, utils
 
 
 # define this as a class like a transform

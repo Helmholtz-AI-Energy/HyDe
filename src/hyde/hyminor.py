@@ -1,7 +1,9 @@
-import scipy.io as sio
 import torch
-import utils
-from hyres import HyRes
+
+from . import utils
+
+# import utils
+from .hyres import HyRes
 
 
 class HyMiNoR:
@@ -61,6 +63,8 @@ class HyMiNoR:
 
 if __name__ == "__main__":
     import time
+
+    import scipy.io as sio
 
     t0 = time.perf_counter()
     input = sio.loadmat("/home/daniel/git/Codes_4_HyMiNoR/noisy_J_M_8_09.mat")
