@@ -16,4 +16,4 @@ finally:
     del version, PackageNotFoundError
 
 # todo: fix top level import statement
-# from . import dwt3d, hyminor, hyres, utils
+from . import dwt3d, hyres, utils  # , hyminor
