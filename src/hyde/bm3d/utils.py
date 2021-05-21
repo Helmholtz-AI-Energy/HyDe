@@ -17,7 +17,7 @@ __all__ = [
     "add_gaussian_noise",
     "bior_2d_forward",
     "bior_2d_reverse",
-    "build_3D_group",
+    "build_3d_group",
     "closest_power_of_2",
     "compute_psnr",
     "get_add_patch_matrix",
@@ -26,14 +26,31 @@ __all__ = [
     "hadamard",
     "image2patches",
     "image2patches_naive",
-    "ind_initialize",
-    "precompute_BM",
+    "indices_initialize",
+    "precompute_block_matching",
     "sd_weighting",
     "translation_2d_mat",
 ]
 
 
-def add_gaussian_noise(im: torch.Tensor, sigma, seed=None):
+def add_gaussian_noise(im: torch.Tensor, sigma: float, seed: int = None):
+    """
+    Add gaussian noise to an image (`im`). The added noise will have a standard deviation of `sigma`
+
+    Parameters
+    ----------
+    im : torch.Tensor
+        the base image
+    sigma : float
+        the standard deviation of the gaussian noise to be added to the image
+    seed : int, optional
+        if given, this defines the seed for the RNG
+
+    Returns
+    -------
+    image + noise
+        image will be cast to uint8
+    """
     if seed is not None:
         torch.random.manual_seed(seed)
     im = im + (sigma * torch.randn(*im.shape)).astype(torch.int)
@@ -42,60 +59,83 @@ def add_gaussian_noise(im: torch.Tensor, sigma, seed=None):
     return im
 
 
-def bior_2d_forward(img: torch.Tensor):
+def bior_2d_forward(img: torch.Tensor, wavelet_name: str = "bior1.1"):
     """
-    wavelet forward transform + some extra??
-    :param bior_img:
-    :return:
+    Forward discrete wavelet transform. This is intended for the bior family of wavelets.
+    There is also a non-standard joining of the high and low level coefficients done after the
+    decomposition. This is from the source code and the result is used in the BM3D steps.
+
+    Parameters
+    ----------
+    img : torch.Tensor
+        image that will be transformed
+    wavelet_name
+        the name of the wavelet to use for the transformation
+
+    Returns
+    -------
+    decomposed image composed into a single torch.Tensor
+
+    Notes
+    -----
+    this should be used with the `bio_2d_reverse` function, for which the input is the output of
+    this function.
     """
     assert img.shape[-1] == img.shape[-2]
+    assert type(wavelet_name) is str
     iter_max = int(math.log2(img.shape[-1]))
     dtp = img.dtype
-    # lev = pywt.dwtn_max_level(img.shape, 'bior1.5')
-    # lev = lev if lev > 1 else 1
-    # lev = iter_max
 
-    # todo: determine why 1.1 works and gives the same results (highs) instead of 1.5!!!
-    bior_fwd = twave.DWTForward(J=iter_max, wave="bior1.1", mode="periodization")
+    # in the source code, this uses 1.5 but ive found that 1.1 behaves better for the test
+    # images. cause is unclear
+    bior_fwd = twave.DWTForward(J=iter_max, wave=wavelet_name, mode="periodization")
     coeffs = bior_fwd(img.to(torch.float32))
 
-    wave_im = torch.zeros_like(img)  # , dtype=torch.float64)  # og: float64
+    wave_im = torch.zeros_like(img)
 
     N = 1
-    # N = coeffs[0].shape[-1]
     low_levels = coeffs[1]
     low_levels.reverse()
     wave_im[..., :N, :N] = coeffs[0].to(dtp)
     for i in range(0, iter_max):
         # this inverts the off-diag elements and puts them into the opposite corners
-        # print(low_levels[i][-1, -1, 2, :4, :4])
         wave_im[..., N : 2 * N, N : 2 * N] = low_levels[i][:, :, 2].to(dtp)
         wave_im[..., 0:N, N : 2 * N] = -low_levels[i][:, :, 1].to(dtp)
         wave_im[..., N : 2 * N, 0:N] = -low_levels[i][:, :, 0].to(dtp)
         N *= 2
-    # wave_im = coeffs[0]
-    # print(wave_im[10, 10, 2:6, 2:6])
 
     return wave_im
 
 
-def bior_2d_reverse(bior_img):
+def bior_2d_reverse(bior_img: torch.Tensor, wavelet_name: str = "bior1.1"):
     """
-    :wavelet reverse transform
-    :param bior_img:
-    :return:
+    Inverse/reverse discrete wavelet transform. This is intended for the bior family of wavelets.
+    There is also a non-standard decomposition of the high and low level coefficients done before
+    the inverse decomposition. This is from the source code and the result is used in the BM3D
+    steps.
+
+    Parameters
+    ----------
+    bior_img : torch.Tensor
+        output of the
+    wavelet_name
+        the name of the wavelet to use for the transformation
+
+    Returns
+    -------
+    reconstructed input
+
+    Notes
+    -----
+    this should be used with the `bio_2d_reverse` function, for which the input is the output of
+    this function.
     """
     assert bior_img.shape[-1] == bior_img.shape[-2]
     iter_max = int(math.log2(bior_img.shape[-1]))
-    #
-    # lev = pywt.dwtn_max_level(img.shape, 'bior1.5')
-    # lev = lev if lev > 1 else 2
 
-    bior_inv = twave.DWTInverse(wave="bior1.1", mode="periodization")
-    # if lev
+    bior_inv = twave.DWTInverse(wave=wavelet_name, mode="periodization")
+
     N = 1
-    # inv = bior_img[..., 0:1, 0:1]
-    # bior_img = bior_img.unqueeze(0)
     rec_coeffs = [bior_img[..., 0:1, 0:1].unsqueeze(1), []]
     for i in range(iter_max):
         LL = bior_img[..., N : 2 * N, N : 2 * N].unsqueeze(1)  # sz: N x 3 x Y x Y
@@ -107,46 +147,78 @@ def bior_2d_reverse(bior_img):
         rec_coeffs[1].append(t)
         N *= 2
     rec_coeffs[1].reverse()
-    # rec_im = pywt.waverec2(rec_coeffs, 'bior1.5', mode='periodization')
-    # print('r', rec_coeffs[0].shape, rec_coeffs[1][0].shape,
-    # rec_coeffs[1][1].shape, rec_coeffs[1][2].shape)
     rec_im = bior_inv(rec_coeffs).squeeze(1)
-    # print(rec_im[0])
 
     return rec_im
 
 
 @torch.jit.script
-def build_3D_group(
-    fre_all_patches: torch.Tensor, N__ni_nj: torch.Tensor, nSx_r: int
+def build_3d_group(
+    fre_all_patches: torch.Tensor, sim_patch_pos: torch.Tensor, nsx_r: int
 ) -> torch.Tensor:
     """
-    :stack frequency patches into a 3D block
-    :param fre_all_patches: all frequency patches
-    :param N__ni_nj: the position of the N most similar patches
-    :param nSx_r: how many similar patches according to threshold
-    :return: the 3D block
+    Stack frequency patches into a 3D block
+
+    Parameters
+    ----------
+    fre_all_patches: torch.Tensor
+        input tensor which holds all patches
+    sim_patch_pos: torch.Tensor
+        the position of the N most similar patches. N is a parameter of the BM3D function.
+        This Tensor is calculated by the `precompute_block_matching` function
+    nsx_r: int
+        number of similar patches according to a threshold calculation
+
+    Returns
+    -------
+    the 3D block
     """
     _, _, k, k_ = fre_all_patches.shape
     assert k == k_
-    group_3D = torch.zeros((nSx_r, k, k), device=fre_all_patches.device)
-    for n in range(nSx_r):
-        ni = N__ni_nj[n][0]
-        nj = N__ni_nj[n][1]
+    group_3D = torch.zeros((nsx_r, k, k), device=fre_all_patches.device)
+    for n in range(nsx_r):
+        ni = sim_patch_pos[n][0]
+        nj = sim_patch_pos[n][1]
         group_3D[n] = fre_all_patches[ni, nj]
     group_3D = group_3D.permute((1, 2, 0))
     return group_3D  # shape=(k, k, nSx_r)
 
 
-def closest_power_of_2(M, max_):
-    M = torch.where(max_ < M, max_, M)
+def closest_power_of_2(m, max_):
+    """
+    Determine the closest power of 2 for all elements in a Tensor which are less than max_
+
+    Parameters
+    ----------
+    m: torch.Tensor
+        input tensor
+    max_: int
+        the maximum
+
+    Returns
+    -------
+
+    """
+    m = torch.where(max_ < m, max_, m)
     while max_ > 1:
-        M = torch.where((max_ // 2 < M) * (M < max_), max_ // 2, M)
+        m = torch.where((max_ // 2 < m) * (m < max_), max_ // 2, m)
         max_ //= 2
-    return M
+    return m
 
 
 def compute_psnr(img1, img2):
+    """
+    Compute the peak signal to noise ratio between two images
+
+    Parameters
+    ----------
+    img1 : torch.Tensor
+    img2 : torch.Tensor
+
+    Returns
+    -------
+    float
+    """
     # img1 = img1.astype(np.float64) / 255.
     # img2 = img2.astype(np.float64) / 255.
     img1 = img1.to(torch.float32) / 255.0
@@ -157,7 +229,27 @@ def compute_psnr(img1, img2):
     return 10 * math.log10(1.0 / mse)
 
 
+# TODO: add RGB support: need to have the estimate sigma function for the multiple dims
+#       if the image is greyscale, then it is just the float value
+
+
 def get_add_patch_matrix(h, w, nHW, kHW, device="cpu", dtype=torch.float):
+    """
+
+
+    Parameters
+    ----------
+    h
+    w
+    nHW
+    kHW
+    device
+    dtype
+
+    Returns
+    -------
+
+    """
     row_add = torch.eye(h - 2 * nHW, device=device, dtype=dtype)
     # row_add = np.pad(row_add, nHW, 'constant')
     row_add = pad(row_add, (nHW, nHW, nHW, nHW), "constant")
@@ -214,26 +306,13 @@ def hadamard(n: int, dtype: torch.dtype = torch.float):
     ----------
     n : int
         The order of the matrix. `n` must be a power of 2.
-    dtype : dtype, optional
+    dtype : torch.dtype
         The data type of the array to be constructed.
 
     Returns
     -------
-    H : (n, n) ndarray
+    H : (n, n) torch.Tensor
         The Hadamard matrix.
-
-
-    Examples
-    --------
-    >>> from scipy.linalg import hadamard
-    >>> hadamard(2, dtype=complex)
-    array([[ 1.+0.j,  1.+0.j],
-           [ 1.+0.j, -1.-0.j]])
-    >>> hadamard(4)
-    array([[ 1,  1,  1,  1],
-           [ 1, -1,  1, -1],
-           [ 1,  1, -1, -1],
-           [ 1, -1, -1,  1]])
     """
     if n < 1:
         lg2 = 0
@@ -296,15 +375,32 @@ def image2patches_naive(im, patch_h, patch_w):
     return patch_table
 
 
-def ind_initialize(max_size, N, step):
-    ind = torch.arange(N, max_size - N, step)
+def indices_initialize(max_size, N, step, device):
+    """
+    create a range of indices with a step as given. If the last element (max_size - N - 1)
+    if not included in the list, it is cat'ed to the end.
+
+    Parameters
+    ----------
+    max_size
+    N
+    step
+    device
+
+    Returns
+    -------
+
+    """
+    ind = torch.arange(N, max_size - N, step, device=device)
     if ind[-1] < max_size - N - 1:
-        ind = torch.cat((ind, torch.tensor([max_size - N - 1])), dim=0)
+        ind = torch.cat((ind, torch.tensor([max_size - N - 1], device=device)), dim=0)
     return ind
 
 
-def precompute_BM(img, kHW, NHW, nHW, tauMatch):
+def precompute_block_matching(img, kHW, NHW, nHW, tauMatch):
     """
+    precompute block matching
+
     :search for similar patches
     :param img: input image
     :param kHW: length of side of patch
@@ -322,7 +418,7 @@ def precompute_BM(img, kHW, NHW, nHW, tauMatch):
         torch.ones((Ns, Ns, height, width), dtype=img.dtype) * 2 * threshold
     )  # di, dj, ph, pw
     row_add_mat, column_add_mat = get_add_patch_matrix(
-        height, width, nHW, kHW, dtype=img.dtype
+        height, width, nHW, kHW, dtype=img.dtype, device=img.device
     )
 
     # diff_margin = \
