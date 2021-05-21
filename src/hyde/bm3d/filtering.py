@@ -9,76 +9,117 @@ __all__ = ["hadamard_transform", "ht_filtering_hadamard", "wiener_filtering_hada
 
 
 def hadamard_transform(vec):
+    """
+    Perform a hadamard transform on a vector
+
+    Parameters
+    ----------
+    vec: torch.Tensor
+
+    Returns
+    -------
+    transformed vector
+    """
     n = vec.shape[-1]
-    h_mat = hadamard(n)  # .astype(np.float64)
+    h_mat = hadamard(n)
     v_h = vec @ h_mat
     return v_h
 
 
 def ht_filtering_hadamard(
-    group_3D: torch.Tensor, sigma: float, lambdaHard3D, doWeight: bool
-) -> Tuple[torch.Tensor, torch.Tensor]:  # group_3D shape=(n*n, nSx_r)
+    group_3d: torch.Tensor, sigma: float, lambda_hard: float, do_weight: bool
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
-    :hard threshold filtering after hadamard transform
-    :param group_3D:
-    :param sigma:
-    :param lambdaHard3D:
-    :param doWeight:
-    :return:
-    """
-    nSx_r = group_3D.shape[-1]
-    coef_norm = math.sqrt(nSx_r)
-    coef = 1.0 / nSx_r
+    hard threshold filtering after hadamard transform
 
-    group_3D_h = hadamard_transform(group_3D)
+    Parameters
+    ----------
+    group_3d: torch.Tensor
+        contains the 3D block for a reference patch
+    sigma: float
+        value of the noise estimate
+    lambda_hard: float
+        value of thresholding
+    do_weight: bool
+        if true process the weighting, otherwise do nothing
+
+    Returns
+    -------
+    group_3d : torch.Tensor
+        filtered and threshold 3D block for a reference patch
+    weight : torch.Tensor
+        weight for the threshold
+    """
+    one = torch.tensor(1.0, dtype=group_3d.dtype, device=group_3d.device)
+    zed = torch.tensor(0.0, dtype=group_3d.dtype, device=group_3d.device)
+
+    nsx_r = group_3d.shape[-1]
+    coef_norm = math.sqrt(nsx_r)
+    coef = 1.0 / nsx_r
+
+    group_3d_h = hadamard_transform(group_3d)
 
     # hard threshold filtering in this block
-    T = lambdaHard3D * sigma * coef_norm
-    T_3D = torch.where(torch.abs(group_3D_h) > T, 1, 0)
-    weight = torch.sum(T_3D)
-    # print((torch.abs(group_3D_h) > T).dtype)
-    # todo: device setting
-    group_3D_h = torch.where(torch.abs(group_3D_h) > T, group_3D_h, torch.tensor(0.0))
+    th = lambda_hard * sigma * coef_norm
+    th_3d = torch.where(torch.abs(group_3d_h) > th, 1, 0)
+    weight = torch.sum(th_3d)
 
-    group_3D = hadamard_transform(group_3D_h)
+    group_3d_h = torch.where(torch.abs(group_3d_h) > th, group_3d_h, zed)
 
-    group_3D *= coef
-    if doWeight:
-        one = torch.tensor(1.0, dtype=group_3D.dtype, device=group_3D.device)
+    group_3d = hadamard_transform(group_3d_h)
+
+    group_3d *= coef
+    if do_weight:
         weight = 1.0 / (sigma * sigma * weight) if weight > 0.0 else one
 
-    return group_3D, weight
+    return group_3d, weight
 
 
 @torch.jit.script
 def wiener_filtering_hadamard(
-    group_3D_img: torch.Tensor, group_3D_est: torch.Tensor, sigma: float, doWeight: bool
+    group_3d_img: torch.Tensor,
+    group_3d_est: torch.Tensor,
+    sigma: float,
+    do_weight: bool,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
-    :wiener_filtering after hadamard transform
-    :param group_3D_img:
-    :param group_3D_est:
-    :param sigma:
-    :param doWeight:
-    :return:
-    """
-    assert group_3D_img.shape == group_3D_est.shape
-    nSx_r = group_3D_img.shape[-1]
-    coef = 1.0 / nSx_r
+    wiener_filtering after hadamard transform
 
-    group_3D_img_h = hadamard_transform(group_3D_img)  # along nSx_r axis
-    group_3D_est_h = hadamard_transform(group_3D_est)
+    Parameters
+    ----------
+    group_3d_img : torch.Tensor
+        contains the 3D block for a reference patch for the base image
+    group_3d_est : torch.Tensor
+        contains the 3D block for a reference patch for the image after the first step of BM3D
+    sigma: float
+        value of the noise estimate
+    do_weight: bool
+        if true process the weighting, otherwise do nothing
+
+    Returns
+    -------
+    group_3d : torch.Tensor
+        filtered and threshold 3D block for a reference patch
+    weight : torch.Tensor
+        weight for the threshold
+    """
+    assert group_3d_img.shape == group_3d_est.shape
+    nsx_r = group_3d_img.shape[-1]
+    coef = 1.0 / nsx_r
+
+    group_3d_img_h = hadamard_transform(group_3d_img)  # along nSx_r axis
+    group_3d_est_h = hadamard_transform(group_3d_est)
 
     # wiener filtering in this block
-    value = torch.pow(group_3D_est_h, 2) * coef
+    value = torch.pow(group_3d_est_h, 2) * coef
     value /= value + sigma * sigma
-    group_3D_est_h = group_3D_img_h * value * coef
+    group_3d_est_h = group_3d_img_h * value * coef
     weight = torch.sum(value)
 
-    group_3D_est = hadamard_transform(group_3D_est_h)
+    group_3d_est = hadamard_transform(group_3d_est_h)
 
-    if doWeight:
-        one = torch.tensor(1.0, dtype=group_3D_img.dtype, device=group_3D_img.device)
+    if do_weight:
+        one = torch.tensor(1.0, dtype=group_3d_img.dtype, device=group_3d_img.device)
         weight = 1.0 / (sigma * sigma * weight) if weight > 0.0 else one
 
-    return group_3D_est, weight
+    return group_3d_est, weight
