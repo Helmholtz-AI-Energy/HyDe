@@ -1,6 +1,5 @@
 import dwt3d
 import matplotlib.pyplot as plt
-import pytorch_wavelets as twave
 import torch
 import utils
 
@@ -145,42 +144,32 @@ if __name__ == "__main__":
 
     import scipy.io as sio
 
-    t0 = time.perf_counter()
     # input = sio.loadmat("/home/daniel/git/Codes_4_HyMiNoR/HyRes/img_noisy_npdB21.mat")
     # imp = input["img_noisy_npdB21"].reshape(input["img_noisy_npdB21"].shape, order="C")
-    input = sio.loadmat("/home/daniel/git/Codes_4_HyMiNoR/HyRes/Indian.mat")
+    input = sio.loadmat("/path/git/Codes_4_HyMiNoR/HyRes/Indian.mat")
     imp = input["Indian"].reshape(input["Indian"].shape, order="C")
 
     # print(imp.flags)
+    t0 = time.perf_counter()
     input_tens = torch.tensor(imp, dtype=torch.float32)
     test = HyRes(device="cpu")
     output = test.forward(input_tens)
     print(time.perf_counter() - t0)
-    # import numpy as np
     mdic = {"a": output.numpy(), "label": "img_noisy_npdB21_hyde_denoised"}
     # sio.savemat("/home/daniel/git/Codes_4_HyMiNoR/HyRes/indian_hyde_denoised.mat", mdic)
-    #
-    comp = sio.loadmat("/home/daniel/git/HyRes/hyres_final.mat")
+
+    comp = sio.loadmat("/path/git/HyRes/hyres_final.mat")
     # comp = sio.loadmat("/home/daniel/git/Codes_4_HyMiNoR/HyRes/img_noisy_npdB21_denoised.mat")
-    # print(comp.keys())
     comp_tens = torch.tensor(comp["Y_restored"], dtype=torch.float32)
-    # for c in range(comp_tens.shape[0]):
 
     s = torch.sum(input_tens ** 2.0)
-    print(s)
     d = torch.sum((input_tens - output) ** 2.0)
-    print(d)
     snr = 10 * torch.log10(s / d)
     print(snr)
-    # snr =
 
     # channel = 0
     compare_btw = output[:, :, :] - comp_tens[:, :, :]
-    #
-    # # comp_og = comp_tens[:, :, :] - input_tens
-    # # comp_new = comp_tens[:, :, :] - output
-    # # comp_noise_diffs = comp_new - comp_og
-    # # compare = comp_tens - input_tens
+
     print(torch.mean(compare_btw), torch.std(compare_btw))
     # print(torch.min(output[..., 0]))
     # import matplotlib.image as mpimg
