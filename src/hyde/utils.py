@@ -110,12 +110,14 @@ def sure_thresh(signal: torch.Tensor):
     # using principle of Stein's Unbiased Risk Estimate.)
     if signal.ndim:
         signal = signal.unsqueeze(1)
+
+    dev = signal.device
     n, m = signal.shape
     sx = torch.sort(torch.abs(signal), dim=0)[0].T
     sx2 = sx ** 2
-    hold = (n - 2 * torch.arange(1, n + 1)).T
+    hold = (n - 2 * torch.arange(1, n + 1, device=dev)).T
     n1 = hold.repeat(1, m)
-    hold = torch.arange(n - 1, -1, -1)
+    hold = torch.arange(n - 1, -1, -1, device=dev)
     n2 = hold.T.repeat(1, m)
     if sx2.shape[1] >= 1:
         cs1 = torch.cumsum(sx2, dim=0)
