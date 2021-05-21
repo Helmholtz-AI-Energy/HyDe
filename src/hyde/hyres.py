@@ -37,14 +37,20 @@ class HyRes:
         no. 12, pp. 2335-2339, Dec. 2017, doi: 10.1109/LGRS.2017.2764059.
     """
 
-    def __init__(self, decomp_level=5, wavelet_level=5):
+    def __init__(self, decomp_level=5, wavelet_level=5, device="cpu"):
         self.decomp_level = decomp_level  # L
         wavelet = "db" + str(wavelet_level)
 
         self.mode = "symmetric"  # this has shown the most similar results, more testing required
 
-        self.dwt_forward = dwt3d.DWTForwardOverwrite(decomp_level, wavelet, self.mode)
-        self.dwt_inverse = twave.DWTInverse(wave=wavelet, mode=self.mode)
+        self.dwt_forward = dwt3d.DWTForwardOverwrite(
+            decomp_level,
+            wavelet,
+            self.mode,
+            device=device,
+        )
+        # self.dwt_inverse = twave.DWTInverse(wave=wavelet, mode=self.mode)
+        self.dwt_inverse = dwt3d.DWTInverse(wave=wavelet, mode=self.mode, device=device)
 
     def forward(self, x: torch.Tensor):
         """
@@ -147,7 +153,7 @@ if __name__ == "__main__":
 
     # print(imp.flags)
     input_tens = torch.tensor(imp, dtype=torch.float32)
-    test = HyRes()
+    test = HyRes(device="cpu")
     output = test.forward(input_tens)
     print(time.perf_counter() - t0)
     # import numpy as np
