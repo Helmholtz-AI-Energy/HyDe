@@ -15,5 +15,7 @@ except PackageNotFoundError:  # pragma: no cover
 finally:
     del version, PackageNotFoundError
 
-# todo: fix top level import statement
+# in progress features
+# "development" features
+# imports on main
 from . import bm3d, dct, dwt3d, hyminor, hyres, utils

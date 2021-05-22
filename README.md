@@ -9,6 +9,7 @@ Hyperspectral Denoising algorithm toolbox in Python
 
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![license: BSD-3](https://img.shields.io/badge/License-BSD3-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
+[![Mail : Helmholtz AI](https://img.shields.io/badge/Mail-Helmholtz%20AI-blue.svg)](mailto:consultant-helmholtz.ai@kit.edu)
 
 ## Description
 
