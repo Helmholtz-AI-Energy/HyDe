@@ -23,6 +23,10 @@ class HyRes:
     wavelet_level : int, optional
         the integer value indicating which Daubechies wavelet to use. i.e. 5 -> db5
         default: 5
+    device : str, optional
+        the device to use. this must match the device of the tensors which are passed into the
+        forward function
+        default: cpu
 
     Notes
     -----
