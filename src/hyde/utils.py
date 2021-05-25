@@ -198,12 +198,25 @@ def soft_threshold(x: torch.Tensor, threshold):
     return y
 
 
-def symmetric_pad(img, n):
+def symmetric_pad(tens, n):
     """
     Replacement for 2D symmetric padding in torch (not in function space)
+
+    Parameters
+    ----------
+    tens : torch.Tensor
+        the tensor to pad
+        must be 2D!
+    n : int
+        the amount to pad to the 2D tensor
+
+    Returns
+    -------
+    padded
+        2D tensor with symmetric padding
     """
     # img_pad = np.pad(img, ((N, N), (N, N)), 'symmetric')
-    padded = pad(img, (n, n, n, n), "constant", 0.0)
+    padded = pad(tens, (n, n, n, n), "constant", 0.0)
     for i in range(n):  # dim 1 (reflect the cols first -> taste)
         padded[:, 0 + i] = padded[:, 2 * n - i - 1]
         # n == 4

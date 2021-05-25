@@ -197,7 +197,7 @@ def closest_power_of_2(m, max_):
 
     Returns
     -------
-
+    tensor with the values with the closest value of 2 for each value
     """
     m = torch.where(max_ < m, max_, m)
     while max_ > 1:
