@@ -1,7 +1,9 @@
-import dwt3d
 import matplotlib.pyplot as plt
 import torch
-import utils
+
+from . import dwt3d, utils
+
+__all__ = ["HyRes"]
 
 
 class HyRes(torch.nn.Module):

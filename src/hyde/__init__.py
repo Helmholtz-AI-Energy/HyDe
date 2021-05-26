@@ -15,5 +15,6 @@ except PackageNotFoundError:  # pragma: no cover
 finally:
     del version, PackageNotFoundError
 
-# todo: fix top level import statement
-from . import dwt3d, hyres, utils  # , hyminor
+from dwt3d import *
+from hyres import *
+from utils import *
