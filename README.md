@@ -5,6 +5,17 @@
 ---
 Hyperspectral Denoising algorithm toolbox in Python
 
+## General User Installation
+
+This project requires the PyTorch-wavelets package. However, this package does not have a PyPi release.
+Therefore, the way to install *this* package as a pip package is as follows. Developers should use the
+Development Installation section further down this page.
+
+```
+pip install git+https://github.com/fbcotter/pytorch_wavelets
+pip install hyde
+```
+
 ## Project Status
 
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
@@ -52,7 +63,7 @@ output = hyres(input_tens)
 
 Hyperspectral denoises makes heavy use of PyTorch
 
-## Installation
+## Development Installation
 
 In order to set up the necessary environment:
 

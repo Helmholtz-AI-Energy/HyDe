@@ -17,7 +17,7 @@ if __name__ == "__main__":
         setuptools.setup(
             name="hyde",
             description="Hyperspectral Denoising algorithm toolbox in Python for GPUs",
-            version="0.1.0",
+            version="0.1.1-0",
             author="Helmholtz-AI-Energy",
             author_email="consultant-helmholtz.ai@kit.edu",
             license="BSD-3-Clause",
@@ -25,7 +25,7 @@ if __name__ == "__main__":
             url="https://github.com/Helmholtz-AI-Energy/HyDe",
             long_description_content_type="text/markdown",
             project_urls={
-                "Source": " https://github.com/Helmholtz-AI-Energy/HyDe",
+                "Source": "https://github.com/Helmholtz-AI-Energy/HyDe",
                 "Changelog": "https://github.com/Helmholtz-AI-Energy/HyDe/blob/main/CHANGELOG.md",
             },
             classifiers=[
@@ -43,6 +43,14 @@ if __name__ == "__main__":
             package_dir={"": "src"},
             packages=setuptools.find_packages(where="src"),
             python_requires=">=3.6",
+            install_requires=[
+                "numpy>=1.13.0",
+                "torch>=1.8.0",
+                # "pytorch-wavelets @ git+https://github.com/fbcotter/pytorch_wavelets@v1.3.0#egg"
+                # "=pytorch-wavelets",
+                # "pytorch-wavelets>=1.3.0",
+                "PyWavelets>=1.1.1",
+            ],
         )
     except:  # noqa
         print(
