@@ -21,7 +21,6 @@ __all__ = [
     "closest_power_of_2",
     "compute_psnr",
     "get_add_patch_matrix",
-    "get_coef",
     "get_kaiser_window",
     "hadamard",
     "image2patches",
@@ -219,8 +218,6 @@ def compute_psnr(img1, img2):
     -------
     float
     """
-    # img1 = img1.astype(np.float64) / 255.
-    # img2 = img2.astype(np.float64) / 255.
     img1 = img1.to(torch.float32) / 255.0
     img2 = img2.to(torch.float32) / 255.0
     mse = torch.mean((img1 - img2) ** 2)
@@ -265,26 +262,6 @@ def get_add_patch_matrix(h, w, nHW, kHW, device="cpu", dtype=torch.float):
         column_add_mat += translation_2d_mat(column_add, right=0, down=k)
 
     return row_add_mat, column_add_mat
-
-
-def get_coef(kHW):
-    # todo: optimize
-    coef_norm = torch.zeros(kHW * kHW)
-    coef_norm_inv = torch.zeros(kHW * kHW)
-    coef = 0.5 / ((float)(kHW))
-    for i in range(kHW):
-        for j in range(kHW):
-            if i == 0 and j == 0:
-                coef_norm[i * kHW + j] = 0.5 * coef
-                coef_norm_inv[i * kHW + j] = 2.0
-            elif i * j == 0:
-                coef_norm[i * kHW + j] = 0.7071067811865475 * coef
-                coef_norm_inv[i * kHW + j] = 1.414213562373095
-            else:
-                coef_norm[i * kHW + j] = 1.0 * coef
-                coef_norm_inv[i * kHW + j] = 1.0
-
-    return coef_norm, coef_norm_inv
 
 
 def get_kaiser_window(kHW):
