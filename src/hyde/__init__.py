@@ -15,6 +15,6 @@ except PackageNotFoundError:  # pragma: no cover
 finally:
     del version, PackageNotFoundError
 
-from dwt3d import *
-from hyres import *
-from utils import *
+from .dwt3d import *
+from .hyres import *
+from .utils import *
