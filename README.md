@@ -25,6 +25,20 @@ Image denoising is the task of recovering the true unknown image from a degraded
 * Automatic Hyperspectral Image Restoration Using Sparse and Low-Rank Modeling ([HyRes](https://ieeexplore.ieee.org/document/8098642))
 * Hyperspectral Mixed Gaussian and Sparse Noise Reduction ([HyMiNoR](https://ieeexplore.ieee.org/document/8760540))
 
+## High Level Function Usage
+
+The high level functions (see Features above) are created with torch.nn.Modules. This means that they are classes
+which must be initialized before they can be used. An example of the using HyRes with the default parameters is shown
+below.
+
+```python
+import hyde
+import torch
+input_tens = torch.tensor(loaded_image, dtype=torch.float32, device="gpu or cpu")
+hyres = hyde.HyRes()
+output = hyres(input_tens)
+```
+
 ## Future Features
 
 * [BM3D](https://www.cs.tut.fi/~foi/GCF-BM3D/)
@@ -34,11 +48,9 @@ Image denoising is the task of recovering the true unknown image from a degraded
 * [OTVCA](https://ieeexplore.ieee.org/document/7530874)
 * [FORPDN](https://ieeexplore.ieee.org/document/6570741)
 
-Requirements
-------------
+## Requirements
 
 Hyperspectral denoises makes heavy use of PyTorch
-
 
 ## Installation
 
