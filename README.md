@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="logos/hyde_logo.svg" height="100px">
+  <img src="https://github.com/Helmholtz-AI-Energy/HyDe/blob/main/logos/hyde_logo.svg" height="100px">
 </div>
 
 ---
@@ -13,7 +13,7 @@ Development Installation section further down this page.
 
 ```
 pip install git+https://github.com/fbcotter/pytorch_wavelets
-pip install hyde
+pip install hyde-images
 ```
 
 ## Project Status
