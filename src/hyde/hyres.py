@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 import torch
 
 from . import dwt3d, utils
@@ -158,38 +157,22 @@ class HyRes(torch.nn.Module):
 if __name__ == "__main__":
     import time
 
+    import matplotlib.pyplot as plt
     import scipy.io as sio
 
-    # input = sio.loadmat("/home/daniel/git/Codes_4_HyMiNoR/HyRes/img_noisy_npdB21.mat")
-    # imp = input["img_noisy_npdB21"].reshape(input["img_noisy_npdB21"].shape, order="C")
-    input = sio.loadmat("/home/daniel/git/Codes_4_HyMiNoR/HyRes/Indian.mat")
+    input = sio.loadmat("/path/git/Codes_4_HyMiNoR/HyRes/Indian.mat")
     imp = input["Indian"].reshape(input["Indian"].shape, order="C")
 
-    # print(imp.flags)
     t0 = time.perf_counter()
     input_tens = torch.tensor(imp, dtype=torch.float32)
     hyres = HyRes()
     output = hyres(input_tens)
     print(time.perf_counter() - t0)
-    mdic = {"a": output.numpy(), "label": "img_noisy_npdB21_hyde_denoised"}
-    # sio.savemat("/home/daniel/git/Codes_4_HyMiNoR/HyRes/indian_hyde_denoised.mat", mdic)
-
-    comp = sio.loadmat("/home/daniel/git/HyRes/hyres_final.mat")
-    # comp = sio.loadmat("/home/daniel/git/Codes_4_HyMiNoR/HyRes/img_noisy_npdB21_denoised.mat")
-    comp_tens = torch.tensor(comp["Y_restored"], dtype=torch.float32)
 
     s = torch.sum(input_tens ** 2.0)
     d = torch.sum((input_tens - output) ** 2.0)
     snr = 10 * torch.log10(s / d)
     print(snr)
 
-    # channel = 0
-    compare_btw = output[:, :, :] - comp_tens[:, :, :]
-
-    print(torch.mean(compare_btw), torch.std(compare_btw))
-    # print(torch.min(output[..., 0]))
-    # import matplotlib.image as mpimg
-
-    # imgplot = plt.imshow(input_tens.numpy()[:, :, 0])
     imgplot = plt.imshow(output.numpy()[:, :, 0], cmap="gray")  # , vmin=50., vmax=120.)
     plt.show()
