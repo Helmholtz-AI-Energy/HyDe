@@ -15,9 +15,9 @@ if __name__ == "__main__":
     try:
         # setup(use_scm_version={"version_scheme": "no-guess-dev"})
         setuptools.setup(
-            name="hyde",
+            name="hyde-images",
             description="Hyperspectral Denoising algorithm toolbox in Python for GPUs",
-            version="0.1.1-0",
+            version="0.1.2",
             author="Helmholtz-AI-Energy",
             author_email="consultant-helmholtz.ai@kit.edu",
             license="BSD-3-Clause",
@@ -46,8 +46,6 @@ if __name__ == "__main__":
             install_requires=[
                 "numpy>=1.13.0",
                 "torch>=1.8.0",
-                # "pytorch-wavelets @ git+https://github.com/fbcotter/pytorch_wavelets@v1.3.0#egg"
-                # "=pytorch-wavelets",
                 # "pytorch-wavelets>=1.3.0",
                 "PyWavelets>=1.1.1",
             ],
