@@ -45,16 +45,16 @@ class HyRes(torch.nn.Module):
         self.wavelet_name = "db" + str(wavelet_level)
         self.device = "cpu"
 
-        self.mode = "symmetric"
+        self.padding_method = "symmetric"
 
         self.dwt_forward = dwt3d.DWTForwardOverwrite(
             decomp_level,
             self.wavelet_name,
-            self.mode,
+            self.padding_method,
             device=self.device,
         )
         self.dwt_inverse = dwt3d.DWTInverse(
-            wave=self.wavelet_name, mode=self.mode, device=self.device
+            wave=self.wavelet_name, padding_method=self.padding_method, device=self.device
         )
 
     def forward(self, x: torch.Tensor):
@@ -75,11 +75,11 @@ class HyRes(torch.nn.Module):
             self.dwt_forward = dwt3d.DWTForwardOverwrite(
                 self.decomp_level,
                 self.wavelet_name,
-                self.mode,
+                self.padding_method,
                 device=self.device,
             )
             self.dwt_inverse = dwt3d.DWTInverse(
-                wave=self.wavelet_name, mode=self.mode, device=self.device
+                wave=self.wavelet_name, padding_method=self.padding_method, device=self.device
             )
         # need to have the dims be (num images (1), C_in, H_in, W_in) for twave ops
         # current order: rows, columns, bands (H, W, C) -> permute tuple (2, 0, 1)
