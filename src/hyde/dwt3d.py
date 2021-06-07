@@ -7,31 +7,40 @@ __all__ = ["DWTForwardOverwrite"]
 
 class DWTForwardOverwrite(torch.nn.Module):
     """
-    mirrors the setup of function wc = FWT2_PO_fast(x,L,qmf)
-    % FWT2_PO_fast -- 2-d MRA wavelet transform (periodized, orthogonal)
-    %  Usage
-    %    wc = FWT2_PO_fast(x,L,qmf)
-    %  Inputs
-    %    x     2-d object (nx by ny by nz array, nx,ny,nz dyadic)
-    %    L     coarse level
-    %    qmf   quadrature mirror filter
-    %  Outputs
-    %    wc    2-d wavelet transform
-    %
-    %  Description
-    %    A three-dimensional Wavelet Transform is computed for the
-    %    array x.  To reconstruct, use IWT2_PO_fast.
-    %
-    %  See Also
-    %    IWT2_PO_fast, MakeONFilter
-    %
-    % This is a fast implementation for FWT2_PO from Wavelab
-    % (c) 2013 Behnood Rasti
-    % behnood.rasti@gmail.com
+    Mirrors the setup of the matlab function `FWT2_PO_fast`.
+    This will compute a normal (2D) DWT transform and will layer the found filters in to a 2D
+    matrix. After each decomposition level, the found filers will be put into a 2D matrix
+    starting at (0, 0). The filters take this form, where the top left point is (0, 0):
 
+    .. code-block:: python
+
+        -------------------
+        |        |        |
+        | cA(LL) | cH(LH) |
+        |        |        |
+        -------------------
+        |        |        |
+        | cV(HL) | cD(HH) |
+        |        |        |
+        -------------------
+
+    Parameters
+    ----------
+    decomp_level : int, optional
+        how many levels to decompose a given image
+        default: 1 (a single level)
+    wave: str, pywt.Wavelet, optional
+        which wavelet to use in the wavelet decomposition
+        default: db1
+    padding_method: str, optional
+        the padding method to use during the decomposition
+        options: [zero, symmetric, periodization, constant, reflect, replicate, periodic]
+        default: zero
+    device: str, torch.Device, optional
+        the torch device to do the calculations on
     """
 
-    def __init__(self, decomp_level=1, wave="db1", mode="zero", device="cpu"):
+    def __init__(self, decomp_level=1, wave="db1", padding_method="zero", device="cpu"):
         super().__init__()
         if isinstance(wave, str):
             wave = pywt.Wavelet(wave)
@@ -54,34 +63,44 @@ class DWTForwardOverwrite(torch.nn.Module):
         self.register_buffer("h1_row", filts[3])
         # todo: register the buffer for the output
         self.decomp_level = decomp_level
-        self.mode = mode
+        self.padding_method = padding_method
 
     def forward(self, x):
-        """Forward pass of the DWT.
-        Args:
-            x (tensor): Input of shape :math:`(N, C_{in}, H_{in}, W_{in})`
-        Returns:
-            (yl, yh)
-                tuple of lowpass (yl) and bandpass (yh) coefficients.
-                yh is a list of length J with the first entry
-                being the finest scale coefficients. yl has shape
-                :math:`(N, C_{in}, H_{in}', W_{in}')` and yh has shape
-                :math:`list(N, C_{in}, 3, H_{in}'', W_{in}'')`. The new
-                dimension in yh iterates over the LH, HL and HH coefficients.
-        Note:
-            :math:`H_{in}', W_{in}', H_{in}'', W_{in}''` denote the correctly
-            downsampled shapes of the DWT pyramid.
+        """
+        Forward pass of the DWT.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input of shape :math:`(N, C_{in}, H_{in}, W_{in})`
+
+        Returns
+        -------
+        overwriten_results : torch.Tensor
+            the 2D torch Tensor which has all of the results in it
+        yl : torch.Tensor
+            the lowpass coefficients. yl has shape :math:`(N, C_{in}, H_{in}', W_{in}')`.
+        yh : torch.Tensor
+            the bandpass coefficients. yh is a list of length `self.decomp_level` with the first
+            entry being the finest scale coefficients. it has shape :math:`list(N, C_{in}, 3,
+            H_{in}'', W_{in}'')`. The new dimension in yh iterates over the LH, HL and HH
+            coefficients.
+
+        Notes
+        -----
+        :math:`H_{in}', W_{in}', H_{in}'', W_{in}''` denote the correctly downsampled shapes of
+        the DWT pyramid.
         """
         yh = []
         ll = x
-        mode = lowlevel.mode_to_int(self.mode)
+        padding_method = lowlevel.mode_to_int(self.padding_method)
         ret = None
 
         # Do a multilevel transform
         for _ in range(self.decomp_level):
             # Do a level of the transform
             ll, high = lowlevel.AFB2D.apply(
-                ll, self.h0_col, self.h1_col, self.h0_row, self.h1_row, mode
+                ll, self.h0_col, self.h1_col, self.h0_row, self.h1_row, padding_method
             )
 
             s = ll.shape[-2]
@@ -101,19 +120,27 @@ class DWTForwardOverwrite(torch.nn.Module):
 
 
 class DWTInverse(torch.nn.Module):
-    """Performs a 2d DWT Inverse reconstruction of an image
+    """
+    Performs a 2d DWT Inverse reconstruction of an array
 
-    Args:
-        wave (str or pywt.Wavelet or tuple(ndarray)): Which wavelet to use.
-            Can be:
-            1) a string to pass to pywt.Wavelet constructor
-            2) a pywt.Wavelet class
-            3) a tuple of numpy arrays, either (h0, h1) or (h0_col, h1_col, h0_row, h1_row)
-        mode (str): 'zero', 'symmetric', 'reflect' or 'periodization'. The
-            padding scheme
+    Parameters
+    ----------
+    wave : str, pywt.Wavelet, tuple(np.ndarray)
+        Which wavelet to use.
+        Options: [
+            string to pass to pywt.Wavelet constructor,
+            pywt.Wavelet class,
+            tuple of numpy arrays, either (h0, h1) or (h0_col, h1_col, h0_row, h1_row),
+            ]
+        default: "db1"
+    padding_method : str
+        the padding scheme to use. Options: 'zero', 'symmetric', 'reflect' or 'periodization'
+        default: "zero"
+    device : str, torch.Device
+        the device to use for the calculation
     """
 
-    def __init__(self, wave="db1", mode="zero", device="cpu"):
+    def __init__(self, wave="db1", padding_method="zero", device="cpu"):
         super().__init__()
         if isinstance(wave, str):
             wave = pywt.Wavelet(wave)
@@ -134,31 +161,35 @@ class DWTInverse(torch.nn.Module):
         self.register_buffer("g1_col", filts[1])
         self.register_buffer("g0_row", filts[2])
         self.register_buffer("g1_row", filts[3])
-        self.mode = mode
+        self.padding_method = padding_method
 
     def forward(self, coeffs):
         """
-        Args:
-            coeffs (yl, yh): tuple of lowpass and bandpass coefficients, where:
-              yl is a lowpass tensor of shape :math:`(N, C_{in}, H_{in}',
-              W_{in}')` and yh is a list of bandpass tensors of shape
-              :math:`list(N, C_{in}, 3, H_{in}'', W_{in}'')`. I.e. should match
-              the format returned by DWTForward
+        Do the 2D DWT inverse reconstruction for a set of coefficients
 
-        Returns:
+        Parameters
+        ----------
+        coeffs: tuple
+            tuple of lowpass and bandpass coefficients, where yl is a lowpass tensor of shape
+            :math:`(N, C_{in}, H_{in}', W_{in}')` and yh is a list of bandpass tensors of shape
+            :math:`list(N, C_{in}, 3, H_{in}'', W_{in}'')`. I.e. should match the format returned
+            by DWTForward
+
+        Returns
+        -------
+        torch.Tensor
             Reconstructed input of shape :math:`(N, C_{in}, H_{in}, W_{in})`
 
-        Note:
-            :math:`H_{in}', W_{in}', H_{in}'', W_{in}''` denote the correctly
-            downsampled shapes of the DWT pyramid.
-
-        Note:
-            Can have None for any of the highpass scales and will treat the
-            values as zeros (not in an efficient way though).
+        Notes
+        -----
+        - :math:`H_{in}', W_{in}', H_{in}'', W_{in}''` denote the correctly downsampled shapes
+        of the DWT pyramid.
+        - Can have None for any of the highpass scales and will treat the values as zeros (not
+        in an efficient way though).
         """
         yl, yh = coeffs
         ll = yl
-        mode = lowlevel.mode_to_int(self.mode)
+        padding_method = lowlevel.mode_to_int(self.padding_method)
 
         # Do a multilevel inverse transform
         for h in yh[::-1]:
@@ -173,6 +204,6 @@ class DWTInverse(torch.nn.Module):
             if ll.shape[-1] > h.shape[-1]:
                 ll = ll[..., :-1]
             ll = lowlevel.SFB2D.apply(
-                ll, h, self.g0_col, self.g1_col, self.g0_row, self.g1_row, mode
+                ll, h, self.g0_col, self.g1_col, self.g0_row, self.g1_row, padding_method
             )
         return ll

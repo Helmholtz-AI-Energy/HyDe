@@ -1,16 +1,19 @@
-import matplotlib.pyplot as plt
 import torch
 
 from . import dwt3d, utils
 
+__all__ = ["HyRes"]
 
-class HyRes:
+
+class HyRes(torch.nn.Module):
     """
     HyRes -- Automatic Hyperspectral Restoration Using low-rank and sparse modeling.
 
     The model used is :math:`Y=D_2XV'+N` and penalized least squares with :math:`\ell_1` penalty.
     The formula to restore the signal is:
-    ..math::
+
+    .. math::
+
         argmax(0.5 * ||Y-D_2XV'||_F^2+\lambda||X||_1)
 
     This method relies on Daubechies wavelets for wavelet decomposition
@@ -23,10 +26,6 @@ class HyRes:
     wavelet_level : int, optional
         the integer value indicating which Daubechies wavelet to use. i.e. 5 -> db5
         default: 5
-    device : str, optional
-        the device to use. this must match the device of the tensors which are passed into the
-        forward function
-        default: cpu
 
     Notes
     -----
@@ -35,25 +34,28 @@ class HyRes:
 
     References
     ----------
-    [1] B. Rasti, M. O. Ulfarsson and P. Ghamisi, "Automatic Hyperspectral Image Restoration Using
-        Sparse and Low-Rank Modeling," in IEEE Geoscience and Remote Sensing Letters, vol. 14,
-        no. 12, pp. 2335-2339, Dec. 2017, doi: 10.1109/LGRS.2017.2764059.
+    [1] B. Rasti, M. O. Ulfarsson and P. Ghamisi, "Automatic Hyperspectral Image Restoration
+    Using Sparse and Low-Rank Modeling," in IEEE Geoscience and Remote Sensing Letters, vol. 14,
+    no. 12, pp. 2335-2339, Dec. 2017, doi: 10.1109/LGRS.2017.2764059.
     """
 
-    def __init__(self, decomp_level=5, wavelet_level=5, device="cpu"):
+    def __init__(self, decomp_level=5, wavelet_level=5):
+        super(HyRes, self).__init__()
         self.decomp_level = decomp_level  # L
-        wavelet = "db" + str(wavelet_level)
+        self.wavelet_name = "db" + str(wavelet_level)
+        self.device = "cpu"
 
-        self.mode = "symmetric"  # this has shown the most similar results, more testing required
+        self.mode = "symmetric"
 
         self.dwt_forward = dwt3d.DWTForwardOverwrite(
             decomp_level,
-            wavelet,
+            self.wavelet_name,
             self.mode,
-            device=device,
+            device=self.device,
         )
-        # self.dwt_inverse = twave.DWTInverse(wave=wavelet, mode=self.mode)
-        self.dwt_inverse = dwt3d.DWTInverse(wave=wavelet, mode=self.mode, device=device)
+        self.dwt_inverse = dwt3d.DWTInverse(
+            wave=self.wavelet_name, mode=self.mode, device=self.device
+        )
 
     def forward(self, x: torch.Tensor):
         """
@@ -68,6 +70,17 @@ class HyRes:
         -------
         denoised_image : torch.Tensor
         """
+        if x.device != self.device:
+            self.device = x.device
+            self.dwt_forward = dwt3d.DWTForwardOverwrite(
+                self.decomp_level,
+                self.wavelet_name,
+                self.mode,
+                device=self.device,
+            )
+            self.dwt_inverse = dwt3d.DWTInverse(
+                wave=self.wavelet_name, mode=self.mode, device=self.device
+            )
         # need to have the dims be (num images (1), C_in, H_in, W_in) for twave ops
         # current order: rows, columns, bands (H, W, C) -> permute tuple (2, 0, 1)
         og_rows, og_cols, og_channels = x.shape
@@ -146,38 +159,22 @@ class HyRes:
 if __name__ == "__main__":
     import time
 
+    import matplotlib.pyplot as plt
     import scipy.io as sio
 
-    # input = sio.loadmat("/home/daniel/git/Codes_4_HyMiNoR/HyRes/img_noisy_npdB21.mat")
-    # imp = input["img_noisy_npdB21"].reshape(input["img_noisy_npdB21"].shape, order="C")
     input = sio.loadmat("/path/git/Codes_4_HyMiNoR/HyRes/Indian.mat")
     imp = input["Indian"].reshape(input["Indian"].shape, order="C")
 
-    # print(imp.flags)
     t0 = time.perf_counter()
     input_tens = torch.tensor(imp, dtype=torch.float32)
-    test = HyRes(device="cpu")
-    output = test.forward(input_tens)
+    hyres = HyRes()
+    output = hyres(input_tens)
     print(time.perf_counter() - t0)
-    mdic = {"a": output.numpy(), "label": "img_noisy_npdB21_hyde_denoised"}
-    # sio.savemat("/home/daniel/git/Codes_4_HyMiNoR/HyRes/indian_hyde_denoised.mat", mdic)
-
-    comp = sio.loadmat("/path/git/HyRes/hyres_final.mat")
-    # comp = sio.loadmat("/home/daniel/git/Codes_4_HyMiNoR/HyRes/img_noisy_npdB21_denoised.mat")
-    comp_tens = torch.tensor(comp["Y_restored"], dtype=torch.float32)
 
     s = torch.sum(input_tens ** 2.0)
     d = torch.sum((input_tens - output) ** 2.0)
     snr = 10 * torch.log10(s / d)
     print(snr)
 
-    # channel = 0
-    compare_btw = output[:, :, :] - comp_tens[:, :, :]
-
-    print(torch.mean(compare_btw), torch.std(compare_btw))
-    # print(torch.min(output[..., 0]))
-    # import matplotlib.image as mpimg
-
-    # imgplot = plt.imshow(input_tens.numpy()[:, :, 0])
     imgplot = plt.imshow(output.numpy()[:, :, 0], cmap="gray")  # , vmin=50., vmax=120.)
     plt.show()
