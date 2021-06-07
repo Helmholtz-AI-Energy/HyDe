@@ -1,7 +1,6 @@
 # hyde
 
-Add a short description here!
-
+Hyperspectral Denoising algorithm toolbox in Python
 
 ## Note
 

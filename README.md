@@ -60,10 +60,6 @@ output = hyres(input_tens)
 * [OTVCA](https://ieeexplore.ieee.org/document/7530874)
 * [FORPDN](https://ieeexplore.ieee.org/document/6570741)
 
-## Requirements
-
-Hyperspectral denoises makes heavy use of PyTorch
-
 ## Development Installation
 
 In order to set up the necessary environment:

@@ -11,7 +11,9 @@ class HyRes(torch.nn.Module):
 
     The model used is :math:`Y=D_2XV'+N` and penalized least squares with :math:`\ell_1` penalty.
     The formula to restore the signal is:
-    ..math::
+
+    .. math::
+
         argmax(0.5 * ||Y-D_2XV'||_F^2+\lambda||X||_1)
 
     This method relies on Daubechies wavelets for wavelet decomposition
@@ -32,9 +34,9 @@ class HyRes(torch.nn.Module):
 
     References
     ----------
-    [1] B. Rasti, M. O. Ulfarsson and P. Ghamisi, "Automatic Hyperspectral Image Restoration Using
-        Sparse and Low-Rank Modeling," in IEEE Geoscience and Remote Sensing Letters, vol. 14,
-        no. 12, pp. 2335-2339, Dec. 2017, doi: 10.1109/LGRS.2017.2764059.
+    [1] B. Rasti, M. O. Ulfarsson and P. Ghamisi, "Automatic Hyperspectral Image Restoration
+    Using Sparse and Low-Rank Modeling," in IEEE Geoscience and Remote Sensing Letters, vol. 14,
+    no. 12, pp. 2335-2339, Dec. 2017, doi: 10.1109/LGRS.2017.2764059.
     """
 
     def __init__(self, decomp_level=5, wavelet_level=5):
