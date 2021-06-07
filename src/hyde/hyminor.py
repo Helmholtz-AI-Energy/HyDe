@@ -1,17 +1,51 @@
-import scipy.io as sio
 import torch
-import utils
-from hyres import HyRes
+
+from . import utils
+from .hyres import HyRes
 
 
 class HyMiNoR:
+    """
+    HyMiNoT -- Hyperspectral Mixed Gaussian and Sparse Noise Reduction
+
+    This is a two step mixed nose removal technique for hypersperctral images which was presented
+    in [1] The two steps are:
+
+        1. The Gaussian noise is removed using :func:`HyRes <hyde.hyres.HyRes>`
+        2. The sparse noised is solved as: :math:`\min\limits_{X} ||H-X||_1+ \lambda ||X*D'||_1` where :math:`D` is the difference matrix.
+
+    The data used should be normalized to range from 0 to 1.
+
+    Notes
+    -----
+    Algorithmic questions should be forwarded to the original authors. This is purely an
+    implementation of the algorithm detailed in [1].
+
+    References
+    ----------
+    [1] B. Rasti, P. Ghamisi and J. A. Benediktsson, "Hyperspectral Mixed Gaussian and Sparse Noise Reduction," in IEEE Geoscience and Remote Sensing Letters, vol. 17, no. 3, pp. 474-478, March 2020, doi: 10.1109/LGRS.2019.2924344.
+    """
+
     def __init__(self):
         self.hyres = HyRes()
 
     def forward(self, x: torch.Tensor, lam: int = 10):
+        """
+        Do the HyMiNoR decomposition.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            the image/array to be de-noised
+        lam : int, optional
+            the tuning parameter
+
+        Returns
+        -------
+        denoised image : torch.Tensor
+        """
         # H_M -> x ; lambda -> lam
         mu1, mu2, its = 0.5, 0.5, 50
-        print(x.shape)
         hyres_result = self.hyres.forward(x)
         # H=HyRes(H_M);
         m, n, d = hyres_result.shape
@@ -61,6 +95,8 @@ class HyMiNoR:
 
 if __name__ == "__main__":
     import time
+
+    import scipy.io as sio
 
     t0 = time.perf_counter()
     input = sio.loadmat("/home/daniel/git/Codes_4_HyMiNoR/noisy_J_M_8_09.mat")
