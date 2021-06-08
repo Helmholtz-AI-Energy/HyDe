@@ -19,16 +19,12 @@ __all__ = [
     "bior_2d_reverse",
     "build_3d_group",
     "closest_power_of_2",
-    "compute_psnr",
-    "get_add_patch_matrix",
     "get_kaiser_window",
     "hadamard",
     "image2patches",
-    "image2patches_naive",
     "indices_initialize",
     "precompute_block_matching",
     "sd_weighting",
-    "translation_2d_mat",
 ]
 
 
@@ -205,68 +201,47 @@ def closest_power_of_2(m, max_):
     return m
 
 
-def compute_psnr(img1, img2):
-    """
-    Compute the peak signal to noise ratio between two images
-
-    Parameters
-    ----------
-    img1 : torch.Tensor
-    img2 : torch.Tensor
-
-    Returns
-    -------
-    float
-    """
-    img1 = img1.to(torch.float32) / 255.0
-    img2 = img2.to(torch.float32) / 255.0
-    mse = torch.mean((img1 - img2) ** 2)
-    if mse == 0:
-        return "Same Image"
-    return 10 * math.log10(1.0 / mse)
-
-
 # TODO: add RGB support: need to have the estimate sigma function for the multiple dims
 #       if the image is greyscale, then it is just the float value
 
 
-def get_add_patch_matrix(h, w, nHW, kHW, device="cpu", dtype=torch.float):
-    """
-
-
-    Parameters
-    ----------
-    h
-    w
-    nHW
-    kHW
-    device
-    dtype
-
-    Returns
-    -------
-
-    """
-    row_add = torch.eye(h - 2 * nHW, device=device, dtype=dtype)
+def __get_add_patch_matrix(h, w, boundary_sz, patch_sz, device="cpu", dtype=torch.float):
+    # helper function to abstract the creation of the adding row and column matrices?
+    row_add = torch.eye(h - 2 * boundary_sz, device=device, dtype=dtype)
     # row_add = np.pad(row_add, nHW, 'constant')
-    row_add = pad(row_add, (nHW, nHW, nHW, nHW), "constant")
+    row_add = pad(row_add, (boundary_sz, boundary_sz, boundary_sz, boundary_sz), "constant")
     row_add_mat = row_add.clone()
-    for k in range(1, kHW):
-        row_add_mat += translation_2d_mat(row_add, right=k, down=0)
+    for k in range(1, patch_sz):
+        row_add_mat += __translation_2d_mat(row_add, right=k, down=0)
 
-    column_add = torch.eye(w - 2 * nHW, device=device, dtype=dtype)
+    column_add = torch.eye(w - 2 * boundary_sz, device=device, dtype=dtype)
     # column_add = np.pad(column_add, nHW, 'constant')
-    column_add = pad(column_add, (nHW, nHW, nHW, nHW), "constant")
+    column_add = pad(column_add, (boundary_sz, boundary_sz, boundary_sz, boundary_sz), "constant")
     column_add_mat = column_add.clone()
-    for k in range(1, kHW):
-        column_add_mat += translation_2d_mat(column_add, right=0, down=k)
+    for k in range(1, patch_sz):
+        column_add_mat += __translation_2d_mat(column_add, right=0, down=k)
 
     return row_add_mat, column_add_mat
 
 
-def get_kaiser_window(kHW):
+def get_kaiser_window(pts: int):
+    """
+    Get a 2D Kaiser window. This will generate a 1D, pts-point Kaiser window first, then it will
+    perform an outer product to make it 2D.
+
+    Parameters
+    ----------
+    pts : int
+        the number of points for the Kaiser windo
+
+    Returns
+    -------
+    window : torch.Tensor
+        2D Kaiser window
+
+    """
     # k = np.kaiser(kHW, 2)
-    k = torch.kaiser_window(kHW, False, beta=2)
+    k = torch.kaiser_window(pts, False, beta=2)
     k_2d = torch.outer(k, k)  # k[:, np.newaxis] @ k[np.newaxis, :]
     return k_2d
 
@@ -309,11 +284,21 @@ def hadamard(n: int, dtype: torch.dtype = torch.float):
 
 def image2patches(im, patch_h, patch_w):
     """
-    :cut the image into patches
-    :param im:
-    :param patch_h:
-    :param patch_w:
-    :return:
+    Cut an image into patches
+
+    Parameters
+    ----------
+    im : torch.Tensor
+        the base image
+    patch_h : int
+        the patch height
+    patch_w : int
+        the patch width
+
+    Returns
+    -------
+    patches : torch.Tensor
+        4D tensor containing the image patches
     """
     im_h, im_w = im.shape[0], im.shape[1]
     im_h_idx = torch.arange(im_h - patch_h + 1)
@@ -329,27 +314,8 @@ def image2patches(im, patch_h, patch_w):
     # [np.newaxis, np.newaxis, np.newaxis, :]
     h_idx = im_h_idx + patch_h_idx
     w_idx = im_w_idx + patch_w_idx
-    # print('h', im.shape)
+
     return im[h_idx, w_idx]  # .astype(np.float64)
-
-
-def image2patches_naive(im, patch_h, patch_w):
-    """
-    :cut the image into patches
-    :param im:
-    :param patch_h:
-    :param patch_w:
-    :return:
-    """
-    im_h, im_w = im.shape[0], im.shape[1]
-    patch_table = torch.zeros(
-        (im_h - patch_h + 1, im_w - patch_w + 1, patch_h, patch_w)
-    )  # og: dtype=np.float64
-    for i in range(im_h - patch_h + 1):
-        for j in range(im_w - patch_w + 1):
-            patch_table[i][j] = im[i : i + patch_h, j : j + patch_w]
-
-    return patch_table
 
 
 def indices_initialize(max_size, N, step, device):
@@ -374,45 +340,56 @@ def indices_initialize(max_size, N, step, device):
     return ind
 
 
-def precompute_block_matching(img, kHW, NHW, nHW, tauMatch):
+def precompute_block_matching(img, patch_size, npatches, boundary_sz, tau_match):
     """
-    precompute block matching
+    precompute similar blocks using threshold distances
 
-    :search for similar patches
-    :param img: input image
-    :param kHW: length of side of patch
-    :param NHW: how many patches are stacked
-    :param nHW: length of side of search area
-    :param tauMatch: threshold determine whether two patches are similar
-    :return ri_rj_N__ni_nj: The top N most similar patches to the referred patch
-    :return threshold_count: according to tauMatch how many patches are similar to the referred one
+    Parameters
+    ----------
+    img : torch.Tensor
+        the base image
+    patch_size : int
+        length of side of patch, patches are (patch_size_h x patch_size_h)
+    npatches : int
+        maximum similar patches wanted for each patch
+    boundary_sz : int
+        size of the boundary around img_noisy
+    tau_match : float
+        threshold determine whether two patches are similar
+
+    Returns
+    -------
+    ri_rj_N__ni_nj : torch.Tensor
+        The top N most similar patches to the referred patch
+    threshold_count : torch.Tensor
+        how many patches are similar to the referred one according to tau_match
     """
     # img = img.astype(np.float64)
     height, width = img.shape
-    Ns = 2 * nHW + 1
-    threshold = tauMatch * kHW * kHW
+    Ns = 2 * boundary_sz + 1
+    threshold = tau_match * patch_size * patch_size
     sum_table = (
         torch.ones((Ns, Ns, height, width), dtype=img.dtype) * 2 * threshold
     )  # di, dj, ph, pw
-    row_add_mat, column_add_mat = get_add_patch_matrix(
-        height, width, nHW, kHW, dtype=img.dtype, device=img.device
+    row_add_mat, column_add_mat = __get_add_patch_matrix(
+        height, width, boundary_sz, patch_size, dtype=img.dtype, device=img.device
     )
 
     # diff_margin = \
     #   np.pad(np.ones((height - 2 * nHW, width - 2 * nHW)), nHW, 'constant', constant_values=0.)
-    hold = torch.ones((height - 2 * nHW, width - 2 * nHW), dtype=img.dtype)
-    diff_margin = pad(hold, (nHW, nHW, nHW, nHW), "constant", 0.0)
+    hold = torch.ones((height - 2 * boundary_sz, width - 2 * boundary_sz), dtype=img.dtype)
+    diff_margin = pad(hold, (boundary_sz, boundary_sz, boundary_sz, boundary_sz), "constant", 0.0)
 
     sum_margin = (1 - diff_margin) * 2 * threshold
 
-    for di in range(-nHW, nHW + 1):
-        for dj in range(-nHW, nHW + 1):
-            t_img = translation_2d_mat(img, right=-dj, down=-di)
+    for di in range(-boundary_sz, boundary_sz + 1):
+        for dj in range(-boundary_sz, boundary_sz + 1):
+            t_img = __translation_2d_mat(img, right=-dj, down=-di)
             diff_table_2 = (img - t_img) * (img - t_img) * diff_margin
 
             sum_diff_2 = row_add_mat @ diff_table_2 @ column_add_mat
             # todo: check maximum behavior v numpy
-            sum_table[di + nHW, dj + nHW] = torch.maximum(sum_diff_2, sum_margin)
+            sum_table[di + boundary_sz, dj + boundary_sz] = torch.maximum(sum_diff_2, sum_margin)
             # sum_table (2n+1, 2n+1, height, width) (from repo)
 
     sum_table = sum_table.reshape((Ns * Ns, height * width))  # di_dj, ph_pw
@@ -420,10 +397,10 @@ def precompute_block_matching(img, kHW, NHW, nHW, tauMatch):
 
     # argsort = np.argpartition(sum_table_T, range(NHW))[:, :NHW]
     # the above argpartition is essentially a torch.topk.indices with largest=False
-    bottomk = torch.topk(sum_table_T, NHW, largest=False).indices
+    bottomk = torch.topk(sum_table_T, npatches, largest=False).indices
     bottomk[:, 0] = (Ns * Ns - 1) // 2
-    bottomk_di = bottomk // Ns - nHW
-    bottomk_dj = bottomk % Ns - nHW
+    bottomk_di = bottomk // Ns - boundary_sz
+    bottomk_dj = bottomk % Ns - boundary_sz
     hold = torch.arange(height).unsqueeze(-1).unsqueeze(-1)
     near_pi = bottomk_di.reshape((height, width, -1)) + hold
     hold = torch.arange(width).unsqueeze(0).unsqueeze(-1)
@@ -432,7 +409,7 @@ def precompute_block_matching(img, kHW, NHW, nHW, tauMatch):
 
     sum_filter = torch.where(sum_table_T < threshold, 1, 0)
     threshold_count = torch.sum(sum_filter, axis=1)
-    threshold_count = closest_power_of_2(threshold_count, max_=NHW)
+    threshold_count = closest_power_of_2(threshold_count, max_=npatches)
     threshold_count = threshold_count.reshape((height, width))
 
     return ri_rj_N__ni_nj, threshold_count
@@ -440,6 +417,19 @@ def precompute_block_matching(img, kHW, NHW, nHW, tauMatch):
 
 @torch.jit.script
 def sd_weighting(group_3D: torch.Tensor) -> torch.Tensor:
+    """
+    Calculate the standard deviation weighting
+
+    Parameters
+    ----------
+    group_3D : torch.Tensor
+        the 3D group of patches to weight with the standard deviation
+
+    Returns
+    -------
+    weights : torch.Tensor
+        the sd weights
+    """
     N = group_3D.numel()
 
     mean = torch.sum(group_3D)
@@ -451,7 +441,8 @@ def sd_weighting(group_3D: torch.Tensor) -> torch.Tensor:
     return weight
 
 
-def translation_2d_mat(mat, right, down):
+def __translation_2d_mat(mat, right, down):
+    # utility function to roll a tensor to the right then down
     mat = torch.roll(mat, right, dims=1)
     mat = torch.roll(mat, down, dims=0)
     return mat

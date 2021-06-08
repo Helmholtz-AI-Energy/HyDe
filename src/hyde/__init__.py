@@ -15,6 +15,7 @@ except PackageNotFoundError:  # pragma: no cover
 finally:
     del version, PackageNotFoundError
 
+from . import bm3d
 from .dct import *
 from .dwt3d import *
 from .hyres import *

@@ -27,14 +27,10 @@ def dct1(x):
     x = x.view(-1, x_shape[-1])
 
     if TORCH_VER >= 1.8:
-        return torch.fft.fft(torch.cat([x, x.flip([1])[:, 1:-1]], dim=1))[:, :, 0].view(
-            *x_shape
-        )
+        return torch.fft.fft(torch.cat([x, x.flip([1])[:, 1:-1]], dim=1))[:, :, 0].view(*x_shape)
     else:
         # this option works for torch before 1.8
-        return torch.rfft(torch.cat([x, x.flip([1])[:, 1:-1]], dim=1), 1)[:, :, 0].view(
-            *x_shape
-        )
+        return torch.rfft(torch.cat([x, x.flip([1])[:, 1:-1]], dim=1), 1)[:, :, 0].view(*x_shape)
 
 
 def idct1(x):
@@ -106,11 +102,7 @@ def idct(x: torch.Tensor, norm: str = "None"):
         X_v[:, 0] *= torch.sqrt(4 * N)  # torch.sqrt(N) * 2  # np.sqrt(N) * 2
         X_v[:, 1:] *= torch.sqrt(2 * N)  # torch.sqrt(N) * 2  # np.sqrt(N / 2) * 2
 
-    k = (
-        torch.arange(x_shape[-1], dtype=x.dtype, device=x.device)[None, :]
-        * np.pi
-        / (2 * N)
-    )
+    k = torch.arange(x_shape[-1], dtype=x.dtype, device=x.device)[None, :] * np.pi / (2 * N)
     W_r = torch.cos(k)
     W_i = torch.sin(k)
 

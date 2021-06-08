@@ -1,3 +1,4 @@
+import math
 from typing import Tuple
 
 import torch
@@ -5,6 +6,7 @@ from torch.nn.functional import pad
 
 __all__ = [
     "estimate_hyperspectral_noise",
+    "peak_snr",
     "soft_threshold",
     "sure_soft_modified_lr2",
     "symmetric_pad",
@@ -92,6 +94,27 @@ def _est_additive_noise(
     w = w.to(dtype=torch.float)
     ret = ret.to(dtype=torch.float)
     return w, ret
+
+
+def peak_snr(img1, img2):
+    """
+    Compute the peak signal to noise ratio between two images
+
+    Parameters
+    ----------
+    img1 : torch.Tensor
+    img2 : torch.Tensor
+
+    Returns
+    -------
+    float
+    """
+    img1 = img1.to(torch.float32) / 255.0
+    img2 = img2.to(torch.float32) / 255.0
+    mse = torch.mean((img1 - img2) ** 2)
+    if mse == 0:
+        return "Same Image"
+    return 10 * math.log10(1.0 / mse)
 
 
 def sure_thresh(signal: torch.Tensor):

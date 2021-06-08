@@ -189,7 +189,11 @@ def _bm3d_1st_step_ht(
 
     kaiser_window = utils.get_kaiser_window(patch_sz)
     ri_rj_n__ni_nj, threshold_count = utils.precompute_block_matching(
-        img_noisy, kHW=patch_sz, NHW=npatches, nHW=img_bndry_sz, tauMatch=tau_match
+        img_noisy,
+        patch_size=patch_sz,
+        npatches=npatches,
+        boundary_sz=img_bndry_sz,
+        tau_match=tau_match,
     )
     # ri_rj_n__ni_nj -> The top N most similar patches to the referred patch
     # threshold_count -> (according to tau_match) how many patches are similar to the referred one
@@ -210,12 +214,8 @@ def _bm3d_1st_step_ht(
     for i_r in row_ind:
         for j_r in col_ind:
             nsx_r = threshold_count[i_r, j_r].item()
-            group_3d = utils.build_3d_group(
-                fre_all_patches, ri_rj_n__ni_nj[i_r, j_r], nsx_r
-            )
-            group_3d, weight = ht_filtering_hadamard(
-                group_3d, sigma, lambda_hard_3d, not use_sd
-            )
+            group_3d = utils.build_3d_group(fre_all_patches, ri_rj_n__ni_nj[i_r, j_r], nsx_r)
+            group_3d, weight = ht_filtering_hadamard(group_3d, sigma, lambda_hard_3d, not use_sd)
             group_3d = group_3d.permute((2, 0, 1))
             group_3d_table[acc_pointer : acc_pointer + nsx_r] = group_3d
             acc_pointer += nsx_r
@@ -231,9 +231,7 @@ def _bm3d_1st_step_ht(
         group_3d_table = utils.bior_2d_reverse(group_3d_table)
 
     # aggregation part
-    numerator = torch.zeros_like(
-        img_noisy, dtype=img_noisy.dtype, device=img_noisy.device
-    )
+    numerator = torch.zeros_like(img_noisy, dtype=img_noisy.dtype, device=img_noisy.device)
     denominator = torch.zeros(
         (img_noisy.shape[0] - 2 * img_bndry_sz, img_noisy.shape[1] - 2 * img_bndry_sz),
         dtype=img_noisy.dtype,
@@ -290,12 +288,8 @@ def __agg_loop(
                 nj = n_ni_nj[n][1]
                 patch = group[n]
 
-                numerator[ni : ni + patch_sz, nj : nj + patch_sz] += (
-                    patch * kaiser_window * weight
-                )
-                denominator[ni : ni + patch_sz, nj : nj + patch_sz] += (
-                    kaiser_window * weight
-                )
+                numerator[ni : ni + patch_sz, nj : nj + patch_sz] += patch * kaiser_window * weight
+                denominator[ni : ni + patch_sz, nj : nj + patch_sz] += kaiser_window * weight
 
     return numerator / denominator
 
@@ -315,15 +309,9 @@ def __step2_weight_calc(
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     # calculate the weights for the 2nd bm3d step
     nsx_r = threshold_count[i_r, j_r]
-    group_3d_img = utils.build_3d_group(
-        fre_noisy_patches, ri_rj_n__ni_nj[i_r, j_r], nsx_r
-    )
-    group_3d_est = utils.build_3d_group(
-        fre_basic_patches, ri_rj_n__ni_nj[i_r, j_r], nsx_r
-    )
-    group_3d, weight = wiener_filtering_hadamard(
-        group_3d_img, group_3d_est, sigma, not use_sd
-    )
+    group_3d_img = utils.build_3d_group(fre_noisy_patches, ri_rj_n__ni_nj[i_r, j_r], nsx_r)
+    group_3d_est = utils.build_3d_group(fre_basic_patches, ri_rj_n__ni_nj[i_r, j_r], nsx_r)
+    group_3d, weight = wiener_filtering_hadamard(group_3d_img, group_3d_est, sigma, not use_sd)
     group_3d = group_3d.permute((2, 0, 1))
 
     group_3d_table[acc_pointer : acc_pointer + nsx_r] = group_3d
@@ -390,15 +378,17 @@ def _bm3d_2nd_step_hadamard(
 
     kaiser_window = utils.get_kaiser_window(patch_sz)
     ri_rj_n__ni_nj, threshold_count = utils.precompute_block_matching(
-        img_basic, kHW=patch_sz, NHW=npatches, nHW=img_bndry_sz, tauMatch=tau_match
+        img_basic,
+        patch_size=patch_sz,
+        npatches=npatches,
+        boundary_sz=img_bndry_sz,
+        tau_match=tau_match,
     )
     group_len = int(torch.sum(threshold_count))
     group_3d_table = torch.zeros(
         (group_len, patch_sz, patch_sz), device=img_noisy.device, dtype=img_noisy.dtype
     )
-    weight_table = torch.zeros(
-        (height, width), device=img_noisy.device, dtype=img_noisy.dtype
-    )
+    weight_table = torch.zeros((height, width), device=img_noisy.device, dtype=img_noisy.dtype)
 
     noisy_patches = utils.image2patches(img_noisy, patch_sz, patch_sz)
     basic_patches = utils.image2patches(img_basic, patch_sz, patch_sz)
@@ -433,9 +423,7 @@ def _bm3d_2nd_step_hadamard(
         group_3d_table = utils.bior_2d_reverse(group_3d_table)
 
     # aggregation part
-    numerator = torch.zeros_like(
-        img_noisy, device=img_noisy.device, dtype=img_noisy.dtype
-    )
+    numerator = torch.zeros_like(img_noisy, device=img_noisy.device, dtype=img_noisy.dtype)
     denominator = torch.zeros(
         (img_noisy.shape[0] - 2 * img_bndry_sz, img_noisy.shape[1] - 2 * img_bndry_sz),
         device=img_noisy.device,
