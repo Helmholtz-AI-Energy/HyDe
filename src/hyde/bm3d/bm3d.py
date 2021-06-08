@@ -32,7 +32,15 @@ def bm3d(
     trans_2d_w: str,  # tau_2D_W
 ):
     """
+    BM3D denoising. This is composed of two steps:
 
+        1. estimate the image noise using hard thresholding during the collaborative filtering
+        2. Using both the original image and the result of the first step, use Wiener filtering
+            to determine the remaining noise
+
+    For more information see [1].
+
+    This implementation is based heavily on https://github.com/Ryanshuai/BM3D_py/
 
     Parameters
     ----------
@@ -91,6 +99,10 @@ def bm3d(
     img_denoised: torch.Tensor
         the output of the 2nd denoising step (wiener filtering). The second step uses the output
         of the first as an imput
+
+    Notes
+    -----
+    [1] Lebrun, M. (2012). An Analysis and Implementation of the BM3D Image Denoising Method. Image Processing On Line, 2, 175–213.
     """
     # todo: raise statements for transforms
     patch_size_h = 8 if (trans_2d_h == "BIOR" or sigma < 40.0) else patch_size_h
@@ -144,7 +156,7 @@ def _bm3d_1st_step_ht(
     transform: str,
 ):
     """
-    1st step of BM3D denoising
+    1st step of BM3D denoising. This step uses hard thersholding during the collaborative filtering
 
     Parameters
     ----------
@@ -175,7 +187,8 @@ def _bm3d_1st_step_ht(
 
     Returns
     -------
-
+    denoised_ht : torch.Tensor
+        the denoised image
     """
     height, width = img_noisy.shape[0], img_noisy.shape[1]
 
@@ -335,6 +348,8 @@ def _bm3d_2nd_step_hadamard(
     transform,
 ):
     """
+    The second step of BM3D denoising. This uses both the original noisy image and the results of
+    the first step. This uses Wiener filtering instead of hard thresholding.
 
     Parameters
     ----------
@@ -365,7 +380,8 @@ def _bm3d_2nd_step_hadamard(
 
     Returns
     -------
-
+    denoised_image : torch.Tensor
+        the denoised image using Wiener filtering
     """
     height, width = img_noisy.shape[0], img_noisy.shape[1]
 

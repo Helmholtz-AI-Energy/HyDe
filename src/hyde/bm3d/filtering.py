@@ -1,3 +1,6 @@
+"""
+These functions are based heavily on https://github.com/Ryanshuai/BM3D_py/
+"""
 import math
 from typing import Tuple
 

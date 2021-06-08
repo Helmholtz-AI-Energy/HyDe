@@ -1,3 +1,6 @@
+"""
+These functions are based heavily on https://github.com/Ryanshuai/BM3D_py/
+"""
 import math
 from typing import Tuple
 
@@ -107,7 +110,8 @@ def peak_snr(img1, img2):
 
     Returns
     -------
-    float
+    snr : float
+        peak signal to noise ration
     """
     img1 = img1.to(torch.float32) / 255.0
     img2 = img2.to(torch.float32) / 255.0
@@ -289,8 +293,9 @@ def vertical_difference_transpose(x: torch.Tensor):
 
     Returns
     -------
-    TODO: examples and characterize output of this function, also more specific up top
+
     """
+    # TODO: examples and characterize output of this function, also more specific up top
     u0 = (-1.0 * x[0]).unsqueeze(0)
     u1 = (-1.0 * torch.diff(x, dim=0))[:-1]
     u2 = (x[-2]).unsqueeze(0)
