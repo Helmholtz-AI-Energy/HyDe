@@ -16,5 +16,6 @@ finally:
     del version, PackageNotFoundError
 
 from .dwt3d import *
+from .hyminor import *
 from .hyres import *
 from .utils import *

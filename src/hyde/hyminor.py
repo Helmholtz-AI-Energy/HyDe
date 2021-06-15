@@ -3,6 +3,8 @@ import torch
 from . import utils
 from .hyres import HyRes
 
+__all__ = ["HyMiNoR"]
+
 
 class HyMiNoR:
     """
@@ -16,6 +18,15 @@ class HyMiNoR:
 
     The data used should be normalized to range from 0 to 1.
 
+    Parameters
+    ----------
+    decomp_level : int, optional
+        the level of the wavelet decomposition to do
+        default: 5
+    wavelet_level : int, optional
+        the integer value indicating which Daubechies wavelet to use. i.e. 5 -> db5
+        default: 5
+
     Notes
     -----
     Algorithmic questions should be forwarded to the original authors. This is purely an
@@ -26,8 +37,8 @@ class HyMiNoR:
     [1] B. Rasti, P. Ghamisi and J. A. Benediktsson, "Hyperspectral Mixed Gaussian and Sparse Noise Reduction," in IEEE Geoscience and Remote Sensing Letters, vol. 17, no. 3, pp. 474-478, March 2020, doi: 10.1109/LGRS.2019.2924344.
     """
 
-    def __init__(self):
-        self.hyres = HyRes()
+    def __init__(self, decomp_level=5, wavelet_level=5):
+        self.hyres = HyRes(decomp_level=decomp_level, wavelet_level=wavelet_level)
 
     def forward(self, x: torch.Tensor, lam: int = 10):
         """
