@@ -3,12 +3,62 @@ from typing import Tuple
 import torch
 
 __all__ = [
+    "diff",
+    "diff_dim0_replace_last_row",
     "estimate_hyperspectral_noise",
     "soft_threshold",
     "sure_soft_modified_lr2",
-    "vertical_difference",
-    "vertical_difference_transpose",
 ]
+
+
+def diff(x: torch.Tensor, n: int = 1, dim=0):
+    """
+    Find the differences in x. This will return a torch.Tensor of the same shape as `x`
+    with the requisite number of zeros added to the end (`n`).
+
+    Parameters
+    ----------
+    x: torch.Tensor
+        input tensor
+    n: int, optional
+        the number of rows between each row for which to calculate the diff
+    dim: int, optional
+        the dimension to find the diff on
+
+    Returns
+    -------
+    diffs : torch.Tensor
+        the differences. This result is the same size as `x`.
+    """
+    y = torch.zeros_like(x)
+    ret = x
+    for _ in range(n):
+        # torch.diff does the *last* axis but matlab diff
+        #       does it on the *first* non-1 dimension
+        ret = torch.diff(ret, dim=dim)
+    y[: ret.shape[0]] = ret
+    return y
+
+
+def diff_dim0_replace_last_row(x: torch.Tensor):
+    """
+    Find the single row differences in x and then put the second to last row as the last row in
+    the result
+
+    Parameters
+    ----------
+    x : torch.Tensor
+
+    Returns
+    -------
+    diff_0_last_row
+        the single row differences with the second to last row and the last row
+    """
+    u0 = (-1.0 * x[0]).unsqueeze(0)
+    u1 = (-1.0 * torch.diff(x, dim=0))[:-1]
+    u2 = (x[-2]).unsqueeze(0)
+    ret = torch.cat([u0, u1, u2], dim=0)
+    return ret
 
 
 def estimate_hyperspectral_noise(
@@ -194,48 +244,3 @@ def soft_threshold(x: torch.Tensor, threshold):
     y = torch.where(hld > 0, hld, torch.tensor(0.0))
     y = y / (y + threshold) * x
     return y
-
-
-def vertical_difference(x: torch.Tensor, n: int = 1):
-    """
-    Find the row differences in x. This will return a torch.Tensor of the same shape as `x`
-    with the requisite number of zeros added to the end (`n`).
-
-    Parameters
-    ----------
-    x: torch.Tensor
-        input tensor
-    n: int
-        the number of rows between each row for which to calculate the diff
-
-    Returns
-    -------
-    torch.Tensor with the column differences. This result is the same size as `x`.
-    """
-    y = torch.zeros_like(x)
-    ret = x
-    for _ in range(n):
-        # torch.diff does the *last* axis but matlab diff
-        #       does it on the *first* non-1 dimension
-        ret = torch.diff(ret, dim=0)
-    y[: ret.shape[0]] = ret
-    return y
-
-
-def vertical_difference_transpose(x: torch.Tensor):
-    """
-    Find the row differences in x for a vector, with extra flavor.
-
-    Parameters
-    ----------
-    x : torch.Tensor
-
-    Returns
-    -------
-    TODO: examples and characterize output of this function, also more specific up top
-    """
-    u0 = (-1.0 * x[0]).unsqueeze(0)
-    u1 = (-1.0 * torch.diff(x, dim=0))[:-1]
-    u2 = (x[-2]).unsqueeze(0)
-    ret = torch.cat([u0, u1, u2], dim=0)
-    return ret

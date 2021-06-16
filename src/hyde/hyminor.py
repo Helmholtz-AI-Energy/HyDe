@@ -71,7 +71,7 @@ class HyMiNoR:
         xx = torch.zeros((d, mn), device=x.device, dtype=x.dtype)
         # X=L1;
         eye_d = torch.eye(d, device=x.device, dtype=x.dtype)
-        hold = utils.vertical_difference_transpose(utils.vertical_difference(eye_d))
+        hold = utils.diff_dim0_replace_last_row(utils.diff(eye_d))
         u, s, v = torch.linalg.svd(hold.to(torch.float64), full_matrices=False)
         u = u.to(torch.float32)
         s = s.to(torch.float32)
@@ -85,13 +85,13 @@ class HyMiNoR:
         for _ in range(its):
             # subminimization problems
             hold1 = -mu1 * (v1 - hyres_reshaped_t - l1)
-            hold2 = mu2 * utils.vertical_difference_transpose((v2 - l2))
+            hold2 = mu2 * utils.diff_dim0_replace_last_row((v2 - l2))
             xx = magic @ (hold1 + hold2)
             # X=Majic*(-mu1*(V1-Y-L1)+mu2*Dvt(V2-L2));
             # % V-Step
             v1 = utils.soft_threshold(hyres_reshaped_t - xx + l1, 1.0 / mu1)
             # V1=soft_threshold(Y-X+L1,1/mu1);
-            dv_xx = utils.vertical_difference(xx)
+            dv_xx = utils.diff(xx)
             v2 = utils.soft_threshold(dv_xx + l2, lam / mu2)
             # V2=soft_threshold(Dv(X)+L2,lambda/mu2);
             # Updating L1 and L2
