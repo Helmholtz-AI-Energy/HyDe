@@ -242,7 +242,7 @@ def sure_soft_modified_lr2(x: torch.Tensor, tuning_interval=None):
 
     x_t = x ** 2 - t ** 2
     # MATLAB: x_t=max(x_t,0) -> this replaces the things below 0 with 0
-    x_t = torch.where(x_t > 0, x_t, torch.tensor(0.0, dtype=x.dtype))
+    x_t = torch.where(x_t > 0, x_t, torch.tensor(0.0, dtype=x.dtype, device=x.device))
 
     sure1 = torch.sum(2 * abv_zero - x_t, dim=0)
     min_sure, min_idx = torch.min(sure1, dim=0)
@@ -254,7 +254,7 @@ def symmetric_pad(tens, n):
     """
     Replacement for symmetric padding in torch (not in function space)
 
-    padding goes from last dim backwards
+    padding goes from last dim backwards, with the same notation as used in torch.
 
     Parameters
     ----------
