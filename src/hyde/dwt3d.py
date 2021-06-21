@@ -34,7 +34,7 @@ class DWTForwardOverwrite(torch.nn.Module):
         default: db1
     padding_method: str, optional
         the padding method to use during the decomposition
-        options: [zero, symmetric, periodization, constant, reflect, replicate, periodic]
+        options: [zero, symmetric, periodization, constant, reflect, periodic]
         default: zero
     device: str, torch.Device, optional
         the torch device to do the calculations on

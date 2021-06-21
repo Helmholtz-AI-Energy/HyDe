@@ -145,147 +145,6 @@ def _est_additive_noise(
     return w, ret
 
 
-# def pad(mat, mode, l, loc, s3, loc_z):
-#     """
-#     extension('2d', 'sym', Y, [2^L-mod(nr1,2^L), 0], 'r',  0,  'r')
-#     extension(TYPE,  MODE, X,                     L, LOC, s3, LOCz)
-#     Parameters
-#     ----------
-#     mat
-#     mode
-#     l
-#     loc
-#     s3
-#     loc_z
-#
-#     Returns
-#     -------
-#
-#     """
-#
-#     # def pad(x, pad_widths, mode):
-#     """Extend a 1D signal using a given boundary mode.
-#
-#     This function operates like :func:`numpy.pad` but supports all signal
-#     extension modes that can be used by PyWavelets discrete wavelet transforms.
-#
-#     Parameters
-#     ----------
-#     x : ndarray
-#         The array to pad
-#     pad_widths : {sequence, array_like, int}
-#         Number of values padded to the edges of each axis.
-#         ``((before_1, after_1), … (before_N, after_N))`` unique pad widths for
-#         each axis. ``((before, after),)`` yields same before and after pad for
-#         each axis. ``(pad,)`` or int is a shortcut for
-#         ``before = after = pad width`` for all axes.
-#     mode : str, optional
-#         Signal extension mode, see :ref:`Modes <ref-modes>`.
-#
-#     Returns
-#     -------
-#     pad : ndarray
-#         Padded array of rank equal to array with shape increased according to
-#         ``pad_widths``.
-#
-#     Notes
-#     -----
-#     The performance of padding in dimensions > 1 may be substantially slower
-#     for modes ``'smooth'`` and ``'antisymmetric'`` as these modes are not
-#     supported efficiently by the underlying :func:`numpy.pad` function.
-#
-#     Note that the behavior of the ``'constant'`` mode here follows the
-#     PyWavelets convention which is different from NumPy (it is equivalent to
-#     ``mode='edge'`` in :func:`numpy.pad`).
-#     """
-#     # process pad_widths exactly as in numpy.pad
-#     pad_widths = np.array(pad_widths)
-#     pad_widths = np.round(pad_widths).astype(np.intp, copy=False)
-#     if pad_widths.min() < 0:
-#         raise ValueError("pad_widths must be > 0")
-#     pad_widths = np.broadcast_to(pad_widths, (x.ndim, 2)).tolist()
-#
-#     if mode in ['symmetric', 'reflect']:
-#         xp = np.pad(x, pad_widths, mode=mode)
-#     elif mode in ['periodic', 'periodization']:
-#         if mode == 'periodization':
-#             # Promote odd-sized dimensions to even length by duplicating the
-#             # last value.
-#             edge_pad_widths = [(0, x.shape[ax] % 2)
-#                                for ax in range(x.ndim)]
-#             x = np.pad(x, edge_pad_widths, mode='edge')
-#         xp = np.pad(x, pad_widths, mode='wrap')
-#     elif mode == 'zero':
-#         xp = np.pad(x, pad_widths, mode='constant', constant_values=0)
-#     elif mode == 'constant':
-#         xp = np.pad(x, pad_widths, mode='edge')
-#     elif mode == 'smooth':
-#         def pad_smooth(vector, pad_width, iaxis, kwargs):
-#             # smooth extension to left
-#             left = vector[pad_width[0]]
-#             slope_left = (left - vector[pad_width[0] + 1])
-#             vector[:pad_width[0]] = \
-#                 left + np.arange(pad_width[0], 0, -1) * slope_left
-#
-#             # smooth extension to right
-#             right = vector[-pad_width[1] - 1]
-#             slope_right = (right - vector[-pad_width[1] - 2])
-#             vector[-pad_width[1]:] = \
-#                 right + np.arange(1, pad_width[1] + 1) * slope_right
-#             return vector
-#
-#         xp = np.pad(x, pad_widths, pad_smooth)
-#     elif mode == 'antisymmetric':
-#         def pad_antisymmetric(vector, pad_width, iaxis, kwargs):
-#             # smooth extension to left
-#             # implement by flipping portions symmetric padding
-#             npad_l, npad_r = pad_width
-#             vsize_nonpad = vector.size - npad_l - npad_r
-#             # Note: must modify vector in-place
-#             vector[:] = np.pad(
-#                 vector[pad_width[0]:-pad_width[-1]],
-#                 pad_width, mode='symmetric'
-#             )
-#             vp = vector
-#             r_edge = npad_l + vsize_nonpad - 1
-#             l_edge = npad_l
-#             # width of each reflected segment
-#             seg_width = vsize_nonpad
-#             # flip reflected segments on the right of the original signal
-#             n = 1
-#             while r_edge <= vp.size:
-#                 segment_slice = slice(
-#                     r_edge + 1,
-#                     min(r_edge + 1 + seg_width, vp.size)
-#                     )
-#                 if n % 2:
-#                     vp[segment_slice] *= -1
-#                 r_edge += seg_width
-#                 n += 1
-#
-#             # flip reflected segments on the left of the original signal
-#             n = 1
-#             while l_edge >= 0:
-#                 segment_slice = slice(max(0, l_edge - seg_width), l_edge)
-#                 if n % 2:
-#                     vp[segment_slice] *= -1
-#                 l_edge -= seg_width
-#                 n += 1
-#             return vector
-#
-#         xp = np.pad(x, pad_widths, pad_antisymmetric)
-#     elif mode == 'antireflect':
-#         xp = np.pad(x, pad_widths, mode='reflect', reflect_type='odd')
-#     else:
-#         raise ValueError(
-#             ("unsupported mode: {}. The supported modes are {}").format(
-#                 mode, Modes.modes
-#             )
-#         )
-#     return xp
-#     pass
-
-
 def soft_threshold(x: torch.Tensor, threshold):
     """
     Calculate the soft threshold of an input
@@ -369,22 +228,6 @@ def sure_soft_modified_lr2(x: torch.Tensor, tuning_interval=None):
     min_sure : torch.Tensor
         Min value of SURE
     """
-    """
-    x=repmat(x,1,n);        ??
-    t=repmat(t1,N,1);       ??
-
-    abs_x=abs(x);
-    s = abs_x - t;
-    s = (s > 0);
-
-    x_t=x.^2-t.^2;
-
-    x_t=max(x_t,0);
-    sure1=sum(2*s-x_t);
-
-    [Min_sure,idx]=min(sure1);
-    h_opt=t1(idx);
-    """
     N = x.shape[0]
     if tuning_interval is None:
         n = 15
@@ -398,13 +241,11 @@ def sure_soft_modified_lr2(x: torch.Tensor, tuning_interval=None):
     abv_zero = (x.abs() - t) > 0
 
     x_t = x ** 2 - t ** 2
-    # x_t, _ = torch.max(x_t, dim=0)
     # MATLAB: x_t=max(x_t,0) -> this replaces the things below 0 with 0
     x_t = torch.where(x_t > 0, x_t, torch.tensor(0.0, dtype=x.dtype))
 
     sure1 = torch.sum(2 * abv_zero - x_t, dim=0)
     min_sure, min_idx = torch.min(sure1, dim=0)
-    # min_idx = torch.argmin(sure1, dim=0)
     h_opt = tuning_interval[min_idx]
     return sure1, h_opt, tuning_interval, min_sure
 
