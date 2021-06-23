@@ -26,6 +26,10 @@ class HyMiNoR:
     wavelet_level : int, optional
         the integer value indicating which Daubechies wavelet to use. i.e. 5 -> db5
         default: 5
+    padding_method : str, optional
+        the method used to pad the image during the DWT transform.
+        options: [zero, symmetric, periodization, reflect, periodic]
+        default: "symmetric"
 
     Notes
     -----
@@ -37,12 +41,14 @@ class HyMiNoR:
     [1] B. Rasti, P. Ghamisi and J. A. Benediktsson, "Hyperspectral Mixed Gaussian and Sparse Noise Reduction," in IEEE Geoscience and Remote Sensing Letters, vol. 17, no. 3, pp. 474-478, March 2020, doi: 10.1109/LGRS.2019.2924344.
     """
 
-    def __init__(self, decomp_level=5, wavelet_level=5, padding_method=None):
+    def __init__(self, decomp_level=5, wavelet_level=5, padding_method="symmetric"):
         self.hyres = HyRes(
-            decomp_level=decomp_level, wavelet_level=wavelet_level, padding_method=padding_method
+            decomp_level=decomp_level,
+            wavelet_level=wavelet_level,
+            padding_method=padding_method,
         )
 
-    def forward(self, x: torch.Tensor, lam: int = 10):
+    def forward(self, x: torch.Tensor, lam: float = 10.0, iterations: int = 50):
         """
         Do the HyMiNoR decomposition.
 
@@ -50,8 +56,12 @@ class HyMiNoR:
         ----------
         x : torch.Tensor
             the image/array to be de-noised
-        lam : int, optional
+        lam : float, optional
             the tuning parameter
+            default: 10.
+        iterations : int, optional
+            the number of iterations to do
+            default: 50
 
         Returns
         -------
@@ -59,23 +69,24 @@ class HyMiNoR:
         """
         base_dtype = x.dtype
         # H_M -> x ; lambda -> lam
-        mu1, mu2, its = 0.5, 0.5, 50
+        mu1, mu2, its = 0.5, 0.5, iterations
         # H=HyRes(H_M);
         hyres_result = self.hyres.forward(x)
+
         m, n, d = hyres_result.shape
         # [m,n,d]=size(H);
         mn = m * n
         # Y=reshape(H,mn,d)';
         hyres_reshaped_t = torch.conj(hyres_result.reshape((mn, d))).T
         l1 = torch.zeros((d, mn), device=x.device, dtype=x.dtype)
-        l2 = l1
-        v1 = l1
-        v2 = l1
-        xx = l1
+        l2 = torch.zeros((d, mn), device=x.device, dtype=x.dtype)
+        v1 = torch.zeros((d, mn), device=x.device, dtype=x.dtype)
+        v2 = torch.zeros((d, mn), device=x.device, dtype=x.dtype)
+        xx = torch.zeros((d, mn), device=x.device, dtype=x.dtype)
         # X=L1;
         eye_d = torch.eye(d, device=x.device, dtype=x.dtype)
         hold = utils.diff_dim0_replace_last_row(utils.diff(eye_d))
-        u, s, v = torch.linalg.svd(hold.to(torch.float64), full_matrices=True)
+        u, s, v = torch.linalg.svd(hold.to(torch.float64), full_matrices=False)
         v = torch.conj(v.T)
 
         magic = torch.chain_matmul(

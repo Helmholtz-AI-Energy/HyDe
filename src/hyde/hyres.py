@@ -29,7 +29,7 @@ class HyRes(torch.nn.Module):
     padding_method : str, optional
         the method used to pad the image during the DWT transform.
         options: [zero, symmetric, periodization, reflect, periodic]
-        default: "periodization"
+        default: "symmetric"
 
     Notes
     -----
@@ -43,7 +43,7 @@ class HyRes(torch.nn.Module):
     no. 12, pp. 2335-2339, Dec. 2017, doi: 10.1109/LGRS.2017.2764059.
     """
 
-    def __init__(self, decomp_level=5, wavelet_level=5, padding_method="periodization"):
+    def __init__(self, decomp_level=5, wavelet_level=5, padding_method="symmetric"):
         super(HyRes, self).__init__()
         self.decomp_level = decomp_level  # L
         self.wavelet_name = "db" + str(wavelet_level)
