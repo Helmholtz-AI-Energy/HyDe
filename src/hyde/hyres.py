@@ -26,6 +26,10 @@ class HyRes(torch.nn.Module):
     wavelet_level : int, optional
         the integer value indicating which Daubechies wavelet to use. i.e. 5 -> db5
         default: 5
+    padding_method : str, optional
+        the method used to pad the image during the DWT transform.
+        options: [zero, symmetric, periodization, reflect, periodic]
+        default: "symmetric"
 
     Notes
     -----
@@ -39,13 +43,13 @@ class HyRes(torch.nn.Module):
     no. 12, pp. 2335-2339, Dec. 2017, doi: 10.1109/LGRS.2017.2764059.
     """
 
-    def __init__(self, decomp_level=5, wavelet_level=5):
+    def __init__(self, decomp_level=5, wavelet_level=5, padding_method="symmetric"):
         super(HyRes, self).__init__()
         self.decomp_level = decomp_level  # L
         self.wavelet_name = "db" + str(wavelet_level)
         self.device = "cpu"
 
-        self.padding_method = "symmetric"
+        self.padding_method = padding_method
 
         self.dwt_forward = dwt3d.DWTForwardOverwrite(
             decomp_level,
@@ -86,34 +90,40 @@ class HyRes(torch.nn.Module):
         og_rows, og_cols, og_channels = x.shape
         two_d_shape = (og_rows * og_cols, og_channels)
         # current shape: h x w X c
-        x = x.permute((1, 0, 2))
         # current shape: w x h X c -> unclear why this needs to be this way...
         w, _ = utils.estimate_hyperspectral_noise(
             x.reshape(two_d_shape).T,
             calculation_dtype=torch.float64,
         )
-        x = x.permute((1, 0, 2))
-        # x -> h x w X c
+
+        if og_rows % (2 ** self.decomp_level) != 0:
+            x = utils.symmetric_pad(
+                x, [0, 0, 0, 0, 0, 2 ** self.decomp_level - (og_rows % 2 ** self.decomp_level)]
+            )
+        if og_cols % (2 ** self.decomp_level) != 0:
+            x = utils.symmetric_pad(
+                x, [0, 0, 0, 2 ** self.decomp_level - (og_cols % 2 ** self.decomp_level), 0, 0]
+            )
+
+        padded_shape = tuple(x.shape)
 
         p_rows, p_cols, p_ch = x.shape
         eps = 1e-30
-        omega1 = (torch.sqrt(torch.var(w, dim=1).T) + eps) ** 2
+        omega1 = (torch.sqrt(torch.var(w, dim=1)) + eps) ** 2
+        # todo: sigma is the same as MATLAB
         omega1 = omega1.reshape((1, 1, omega1.numel())).repeat(p_rows, p_cols, 1)
         y_w = torch.pow(omega1, -0.5) * x
         # -------- custom PCA_Image stuff ----------------------
         nr, nc, p = y_w.shape
-        y_w = y_w.permute((1, 0, 2))  # needed to make the arrays equal to each other (vs matlab)
         # y_w -> h x w X c
         im1 = torch.reshape(y_w, (nr * nc, p))
         u, s, v_pca = torch.linalg.svd(im1, full_matrices=False)
-        v_pca = torch.conj(v_pca.T)
         # need to modify u and s
         pc = torch.matmul(u, torch.diag(s))
-        pc = pc.reshape((nc, nr, p)).permute((1, 0, 2))
+        pc = pc.reshape((nc, nr, p))
         # -------------------------------------------------------
         # next is twoDWTon3Ddata -> requires permute + unsqueeze
-        if pc.dtype != torch.float:
-            pc = pc.to(torch.float)
+        pc = pc.to(torch.float)  # no-op if already float
 
         # pc -> h x w x c
         v_dwt_full, v_dwt_lows, v_dwt_highs = self.dwt_forward.forward(
@@ -127,12 +137,24 @@ class HyRes(torch.nn.Module):
             (v_dwt_permed.shape[0] * v_dwt_permed.shape[1], og_channels)
         )
 
-        test_sure = []
+        norm_v_dwt = torch.linalg.norm(v_dwt_permed) ** 2
+        n_xyz = v_dwt_permed.numel()
+        sure, min_sure = None, []
         rank = None
         for rank in range(og_channels):
-            sure2test = utils.sure_thresh(v_dwt_permed[:, rank])
-            test_sure.append(sure2test)
-            if rank > 1 and test_sure[rank] <= test_sure[rank - 1]:
+            sure_i, thresh_i, t1, min_sure_i = utils.sure_soft_modified_lr2(v_dwt_permed[:, rank])
+            if thresh_i != 0:
+                v_dwt_permed[:, rank] = utils.soft_threshold(v_dwt_permed[:, rank], thresh_i)
+
+            if sure is None:
+                sure = sure_i.unsqueeze(1)
+            else:
+                sure = torch.cat([sure, sure_i.unsqueeze(1)], dim=1)
+
+            sure[:, rank] = torch.sum(sure, dim=1) + norm_v_dwt - n_xyz
+            min_sure_h = torch.min(sure[:, rank])
+            min_sure.append(min_sure_h)
+            if rank > 1 and min_sure[rank] > min_sure[rank - 1]:
                 break
 
         inv_lows = v_dwt_lows[:, :rank]
@@ -140,20 +162,15 @@ class HyRes(torch.nn.Module):
         y_est_sure_model_y = self.dwt_inverse((inv_lows, inv_highs))
         # y_est_sure_model_y -> n x c x h x w  -> perm back: squeeze -> 1, 2, 0 (h, w, c)
         y_est_sure_model_y = y_est_sure_model_y.squeeze().permute((1, 2, 0))
-        dwt_inv_shape = y_est_sure_model_y.shape
-        if dwt_inv_shape[0] > og_rows:
-            # dif = og_rows - dwt_inv_shape[0]
-            y_est_sure_model_y = y_est_sure_model_y[:og_rows, :og_cols]
-        y_est_sure_model_y = y_est_sure_model_y.reshape((og_rows * og_cols, rank))
+        y_est_sure_model_y = y_est_sure_model_y.reshape((padded_shape[0] * padded_shape[1], rank))
         if y_est_sure_model_y.dtype != x.dtype:
             y_est_sure_model_y = y_est_sure_model_y.to(x.dtype)
 
         # ------ inverse PCA stuff -----------------------
-        # reshape to 2D (rows*cols, channels)
-        y_restored = (omega1 ** 0.5) * torch.matmul(y_est_sure_model_y, v_pca[:, :rank].T).reshape(
-            (og_rows, og_cols, og_channels)
+        y_restored = (omega1 ** 0.5) * torch.matmul(y_est_sure_model_y, v_pca[:rank, :]).reshape(
+            padded_shape
         )
-        return y_restored
+        return y_restored[:og_rows, :og_cols, :og_channels]
 
 
 if __name__ == "__main__":

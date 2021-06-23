@@ -1,13 +1,16 @@
 from typing import Tuple
 
 import torch
+from torch.nn.functional import pad
 
 __all__ = [
     "diff",
     "diff_dim0_replace_last_row",
     "estimate_hyperspectral_noise",
     "soft_threshold",
+    "sure_thresh",
     "sure_soft_modified_lr2",
+    "symmetric_pad",
 ]
 
 
@@ -142,6 +145,27 @@ def _est_additive_noise(
     return w, ret
 
 
+def soft_threshold(x: torch.Tensor, threshold):
+    """
+    Calculate the soft threshold of an input
+
+    Parameters
+    ----------
+    x: torch.Tensor
+        input data
+    threshold: int, float, torch.Tensor
+        threshold to test against
+
+    Returns
+    -------
+    torch.Tensor with the soft threshold result
+    """
+    hld = torch.abs(x) - threshold
+    y = torch.where(hld > 0, hld, torch.tensor(0.0, dtype=x.dtype))
+    y = y / (y + threshold) * x
+    return y
+
+
 def sure_thresh(signal: torch.Tensor):
     """
     This function find the threshold value adapted to the given signal using a modified rule
@@ -217,30 +241,85 @@ def sure_soft_modified_lr2(x: torch.Tensor, tuning_interval=None):
     abv_zero = (x.abs() - t) > 0
 
     x_t = x ** 2 - t ** 2
-    x_t, _ = torch.max(x_t, dim=0)
+    # MATLAB: x_t=max(x_t,0) -> this replaces the things below 0 with 0
+    x_t = torch.where(x_t > 0, x_t, torch.tensor(0.0, dtype=x.dtype, device=x.device))
+
     sure1 = torch.sum(2 * abv_zero - x_t, dim=0)
-    min_sure = torch.min(sure1)
-    min_idx = torch.argmin(sure1)
+    min_sure, min_idx = torch.min(sure1, dim=0)
     h_opt = tuning_interval[min_idx]
     return sure1, h_opt, tuning_interval, min_sure
 
 
-def soft_threshold(x: torch.Tensor, threshold):
+def symmetric_pad(tens, n):
     """
-    Calculate the soft threshold of an input
+    Replacement for symmetric padding in torch (not in function space)
+
+    padding goes from last dim backwards, with the same notation as used in torch.
 
     Parameters
     ----------
-    x: torch.Tensor
-        input data
-    threshold: int, float, torch.Tensor
-        threshold to test against
+    tens : torch.Tensor
+        the tensor to pad
+        must be 2D!
+    n : int, list
+        the amount to pad to the 2D tensor
 
     Returns
     -------
-    torch.Tensor with the soft threshold result
+    padded
+        2D tensor with symmetric padding
     """
-    hld = torch.abs(x) - threshold
-    y = torch.where(hld > 0, hld, torch.tensor(0.0))
-    y = y / (y + threshold) * x
-    return y
+    # img_pad = np.pad(img, ((N, N), (N, N)), 'symmetric')
+    if isinstance(n, int):
+        n = [n] * tens.ndim * 2
+    og_sz = tens.shape
+    # elif isinstance(n)
+    # todo: implement this with one-sided padding (only on top/bottom and only on left/right
+    padded = pad(tens, n, "constant", 0.0)
+    # print(padded[..., 0])
+    if tens.ndim > 2:
+        cycle = list(range(og_sz[2])) + list(range(og_sz[2] - 1, -1, -1))
+        for i in range(n[-6]):  # dim 2, low inds
+            # (reflect the cols first -> taste)
+            ind = cycle[(i + 1) % len(cycle)] - og_sz[1]
+            padded[:, :, i] = padded[:, :, ind]
+            # padded[:, :, 0 + i] = padded[:, :, 2 * n[-6] - i - 1]
+            # n == 4
+            # 0 -> 7, 1 -> 6, 2 -> 5, 3 -> 4, break
+
+        cycle = list(reversed(range(-og_sz[2], 0))) + list(range(-og_sz[2], 0))
+        for i in range(n[-5]):  # dim 2, high inds
+            sind = og_sz[2] - padded.shape[2] + i
+            gind = og_sz[2] - padded.shape[2] + cycle[i % len(cycle)]
+            padded[:, :, sind] = padded[:, :, gind]
+            # padded[:, :, -1 - (0 + i)] = padded[:, :, -2 * n[-5] + i]
+            # n == 4
+            # -1 -> -8, -2 -> -7, -3 -> -6, -4 -> -5, break
+
+    if tens.ndim > 1:
+        cycle = list(range(og_sz[1])) + list(range(og_sz[1] - 1, -1, -1))
+        for i in range(n[-4]):  # dim 1, left side (low inds)
+            ind = cycle[(i + 1) % len(cycle)] - og_sz[1]
+            # (reflect the cols first -> taste)
+            padded[:, 0 + i] = padded[:, ind]
+            # 0 -> 7, 1 -> 6, 2 -> 5, 3 -> 4, break
+
+        cycle = list(reversed(range(-og_sz[1], 0))) + list(range(-og_sz[1], 0))
+        for i in range(n[-3]):  # dim 1, right side (end / high inds))
+            sind = og_sz[1] - padded.shape[1] + i
+            gind = og_sz[1] - padded.shape[1] + cycle[i % len(cycle)]
+            padded[:, sind] = padded[:, gind]
+            # -1 -> -8, -2 -> -7, -3 -> -6, -4 -> -5, break
+
+    cycle = list(range(og_sz[0])) + list(range(og_sz[0] - 1, -1, -1))
+    for i in range(n[-2]):  # dim 0, top, (low inds)
+        ind = cycle[(i + 1) % len(cycle)] - og_sz[0]
+        padded[i] = padded[ind]
+
+    cycle = list(reversed(range(-og_sz[0], 0))) + list(range(-og_sz[0], 0))
+    for i in range(n[-1]):  # dim 0, bottom, (low inds)
+        sind = og_sz[0] - padded.shape[0] + i
+        gind = og_sz[0] - padded.shape[0] + cycle[i % len(cycle)]
+        padded[sind] = padded[gind]
+
+    return padded
