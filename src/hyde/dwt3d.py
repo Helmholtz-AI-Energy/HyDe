@@ -2,7 +2,7 @@ import pytorch_wavelets.dwt.lowlevel as lowlevel
 import pywt
 import torch
 
-__all__ = ["DWTForwardOverwrite"]
+__all__ = ["DWTForwardOverwrite", "DWTInverse"]
 
 
 class DWTForwardOverwrite(torch.nn.Module):
@@ -76,7 +76,7 @@ class DWTForwardOverwrite(torch.nn.Module):
 
         Returns
         -------
-        overwriten_results : torch.Tensor
+        overwritten_results : torch.Tensor
             the 2D torch Tensor which has all of the results in it
         yl : torch.Tensor
             the lowpass coefficients. yl has shape :math:`(N, C_{in}, H_{in}', W_{in}')`.
@@ -94,29 +94,44 @@ class DWTForwardOverwrite(torch.nn.Module):
         yh = []
         ll = x
         padding_method = lowlevel.mode_to_int(self.padding_method)
-        ret = None
-
+        full = None
+        # prev_ll_d0 = None
         # Do a multilevel transform
-        for _ in range(self.decomp_level):
+        for lvl in range(self.decomp_level):
             # Do a level of the transform
             ll, high = lowlevel.AFB2D.apply(
                 ll, self.h0_col, self.h1_col, self.h0_row, self.h1_row, padding_method
             )
 
             s = ll.shape[-2]
-            if ret is None:
-                ret_shape = list(ll.shape)
-                ret_shape[-1] *= 2
-                ret_shape[-2] *= 2
-                ret = torch.zeros(ret_shape, device=ll.device, dtype=ll.dtype)
-            ret[:, :, :s, :s] = ll
-            ret[:, :, :s, s : s * 2] = high[:, :, 0]
-            ret[:, :, s : s * 2, :s] = high[:, :, 1]
-            ret[:, :, s : s * 2, s : s * 2] = high[:, :, 2]
+            if full is None:  # first iteration
+                full_shape = list(ll.shape)
+                full_shape[-1] *= 2
+                full_shape[-2] *= 2
+                full = torch.zeros(full_shape, device=ll.device, dtype=ll.dtype)
+            # elif full.shape[0] != ll.shape[0] * (2 ** (lvl + 1)):
+            #     full_shape = list(ll.shape)
+            #
+            #     full_shape[-1] = ll.shape[-1] * (2 ** (lvl + 1))
+            #     full_shape[-2] = ll.shape[-2] * (2 ** (lvl + 1))
+            #     full2 = torch.zeros(full_shape, device=ll.device, dtype=ll.dtype)
+            #     # dont need do do anything with ll, only need to work with the high filters
+            #     # high[..., 0]
+            #     full2[:, :, :prev_ll_d0, -prev_ll_d0:] = full[:, :, :prev_ll_d0, -prev_ll_d0:]
+            #     # high[..., 1]
+            #     full2[:, :, -prev_ll_d0:, :prev_ll_d0] = full[:, :, -prev_ll_d0:, :prev_ll_d0]
+            #     # high[..., 2]
+            #     full2[:, :, -prev_ll_d0:, -prev_ll_d0:] = full[:, :, -prev_ll_d0:, -prev_ll_d0:]
+            #     full = full2
+            # prev_ll_d0 = ll.shape[0]
+            full[:, :, :s, :s] = ll
+            full[:, :, :s, s : s * 2] = high[:, :, 0]
+            full[:, :, s : s * 2, :s] = high[:, :, 1]
+            full[:, :, s : s * 2, s : s * 2] = high[:, :, 2]
 
             yh.append(high)
 
-        return ret, ll, yh
+        return full, ll, yh
 
 
 class DWTInverse(torch.nn.Module):
@@ -163,17 +178,22 @@ class DWTInverse(torch.nn.Module):
         self.register_buffer("g1_row", filts[3])
         self.padding_method = padding_method
 
-    def forward(self, coeffs):
+    def forward(self, coeffs, coeff_dims=None):
         """
         Do the 2D DWT inverse reconstruction for a set of coefficients
 
         Parameters
         ----------
-        coeffs: tuple
+        coeffs: tuple, torch.Tensor
             tuple of lowpass and bandpass coefficients, where yl is a lowpass tensor of shape
             :math:`(N, C_{in}, H_{in}', W_{in}')` and yh is a list of bandpass tensors of shape
             :math:`list(N, C_{in}, 3, H_{in}'', W_{in}'')`. I.e. should match the format returned
-            by DWTForward
+            by DWTForward.
+            If this input is a torch tensor, then this will assume that `coeffs` is the overwritten
+            results returned by :func:`DWTForwardOverwrite <hyde.dwt3d.DWTForwardOverwrite>`
+        coeff_dims: list, optional
+            the high filter dimensions
+            default: None
 
         Returns
         -------
@@ -187,12 +207,20 @@ class DWTInverse(torch.nn.Module):
         - Can have None for any of the highpass scales and will treat the values as zeros (not
         in an efficient way though).
         """
-        yl, yh = coeffs
+        try:
+            yl, yh = coeffs
+        except ValueError:  # this is the case that coeffs is not 2 elements
+            if coeff_dims is None:
+                raise ValueError(
+                    "either coeffs must have both the highs and lows, or `coeff_dims` must be set."
+                )
+            return self.__inverse_full_mat_helper(coeffs, coeff_dims)
+
         ll = yl
         padding_method = lowlevel.mode_to_int(self.padding_method)
 
         # Do a multilevel inverse transform
-        for h in yh[::-1]:
+        for h in yh[::-1]:  # this is the reversed list
             if h is None:
                 h = torch.zeros(
                     ll.shape[0], ll.shape[1], 3, ll.shape[-2], ll.shape[-1], device=ll.device
@@ -206,4 +234,28 @@ class DWTInverse(torch.nn.Module):
             ll = lowlevel.SFB2D.apply(
                 ll, h, self.g0_col, self.g1_col, self.g0_row, self.g1_row, padding_method
             )
+        return ll
+
+    def __inverse_full_mat_helper(self, matrix, coeff_dims):
+        # coeff_dims are the dimensions IN REVERSED ORDER of the length of one side of the filters
+        padding_method = lowlevel.mode_to_int(self.padding_method)
+
+        for s in coeff_dims:
+            ll = matrix[:, :, :s, :s]
+            # h needs to have the order of top right, bottom left, bottom right
+            h0 = matrix[:, :, :s, s:s * 2].unsqueeze(2)
+            h1 = matrix[:, :, s:s * 2, :s].unsqueeze(2)
+            h2 = matrix[:, :, s:s * 2, s:s * 2].unsqueeze(2)
+            h = [h0, h1, h2]
+            h = torch.cat(h, dim=2)
+            # 'Unpad' added dimensions
+            if ll.shape[-2] > h.shape[-2]:
+                ll = ll[..., :-1, :]
+            if ll.shape[-1] > h.shape[-1]:
+                ll = ll[..., :-1]
+            ll = lowlevel.SFB2D.apply(
+                ll, h, self.g0_col, self.g1_col, self.g0_row, self.g1_row, padding_method
+            )
+            matrix[:, :, :ll.shape[-2], :ll.shape[-1]] = ll
+            # print(coeff_dims, ll.shape)
         return ll

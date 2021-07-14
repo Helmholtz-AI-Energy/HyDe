@@ -8,7 +8,7 @@ __all__ = ["HyMiNoR"]
 
 class HyMiNoR:
     """
-    HyMiNoT -- Hyperspectral Mixed Gaussian and Sparse Noise Reduction
+    HyMiNoR -- Hyperspectral Mixed Gaussian and Sparse Noise Reduction
 
     This is a two step mixed nose removal technique for hypersperctral images which was presented
     in [1] The two steps are:

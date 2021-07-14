@@ -4,6 +4,7 @@ import torch
 from torch.nn.functional import pad
 
 __all__ = [
+    "custom_pca_image",
     "diff",
     "diff_dim0_replace_last_row",
     "estimate_hyperspectral_noise",
@@ -143,6 +144,28 @@ def _est_additive_noise(
     w = w.to(dtype=torch.float)
     ret = ret.to(dtype=torch.float)
     return w, ret
+
+
+def custom_pca_image(img):
+    """
+    MUST BE IN (ROWS, COLS, CHANNELS)
+
+    Parameters
+    ----------
+    img
+
+    Returns
+    -------
+
+    """
+    nr, nc, p = img.shape
+    # y_w -> h x w X c
+    im1 = torch.reshape(img, (nr * nc, p))
+    u, s, v_pca = torch.linalg.svd(im1, full_matrices=False)
+    # need to modify u and s
+    pc = torch.matmul(u, torch.diag(s))
+    pc = pc.reshape((nc, nr, p))
+    return v_pca, pc
 
 
 def soft_threshold(x: torch.Tensor, threshold):
