@@ -8,7 +8,19 @@ __all__ = ["WSRRR"]
 
 
 class WSRRR(torch.nn.Module):
-    """ """
+    """
+    WSRRR - Wavelet-based Sparse Reduced-Rank Regression
+
+    This method is explained in detail in [1].
+
+    The method is based on minimizing a sparse regularization problem subject to an orthogonality constraint. A cyclic descent-type algorithm is derived for solving the minimization problem. For selecting the tuning parameters, we propose a method based on Stein's unbiased risk estimation. It is shown that the hyperspectral image can be restored using a few sparse components. The method is evaluated using signal-to-noise ratio and spectral angle distance for a simulated noisy data set and by classification accuracies for a real data set.
+
+    References
+    ----------
+    [1] B. Rasti, J. R. Sveinsson and M. O. Ulfarsson, "Wavelet-Based Sparse Reduced-Rank
+        Regression for Hyperspectral Image Restoration," in IEEE Transactions on Geoscience and
+        Remote Sensing, vol. 52, no. 10, pp. 6688-6698, Oct. 2014, doi: 10.1109/TGRS.2014.2301415.
+    """
 
     def __init__(self, decomp_level=3, wavelet_level=5, padding_method="symmetric"):
         super(WSRRR, self).__init__()
@@ -28,7 +40,7 @@ class WSRRR(torch.nn.Module):
             wave=self.wavelet_name, padding_method=self.padding_method, device=self.device
         )
 
-    def forward(self, x: torch.Tensor, r):
+    def forward(self, x: torch.Tensor, rank: int):
         """
         Denoise an image `x` using the HyRes algorithm.
 
@@ -36,6 +48,9 @@ class WSRRR(torch.nn.Module):
         ----------
         x: torch.Tensor
             input image
+        rank: int
+            the band rank to cut to. bands less than or equal to this band will be used for
+            denoising. others will be excluded in the threshold calculations
 
         Returns
         -------
@@ -83,8 +98,8 @@ class WSRRR(torch.nn.Module):
 
         # [V,PC]=PCA_image(Omega.^-.5.*Y);
         v, pc = utils.custom_pca_image(inp)
-        v = v[:, : r + 1]
-        thresh = torch.zeros((r + 1, self.decomp_level + 2), dtype=x.dtype, device=x.device)
+        v = v[:, : rank + 1]
+        thresh = torch.zeros((rank + 1, self.decomp_level + 2), dtype=x.dtype, device=x.device)
         wx = torch.zeros((wy_tilda_2d.shape[0], v.shape[1]), dtype=x.dtype, device=x.device)
 
         stop = filter_starts[0] ** 2
@@ -92,8 +107,8 @@ class WSRRR(torch.nn.Module):
         for cc in range(200):
             # W=WY_tilda*V;
             w = wy_tilda_2d @ v
-            for i in range(r + 1):
-                index = (i % (r + 1), i // (r + 1))
+            for i in range(rank + 1):
+                index = (i % (rank + 1), i // (rank + 1))
                 if cc == 0:
                     _, thresh[index], _, _ = utils.sure_soft_modified_lr2(w[:stop, i])
                 if thresh[index] == 0:

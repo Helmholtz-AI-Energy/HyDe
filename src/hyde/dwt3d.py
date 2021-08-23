@@ -100,6 +100,13 @@ class DWTForwardOverwrite(torch.nn.Module):
         ll = x
         padding_method = lowlevel.mode_to_int(self.padding_method)
         full = None
+
+        if x.dtype != self.h0_col.dtype:
+            self.h0_col = self.h0_col.to(x.dtype)
+            self.h1_col = self.h1_col.to(x.dtype)
+            self.h0_row = self.h0_row.to(x.dtype)
+            self.h1_row = self.h1_row.to(x.dtype)
+
         # prev_ll_d0 = None
         # Do a multilevel transform
         for lvl in range(self.decomp_level):
@@ -198,6 +205,12 @@ class DWTInverse(torch.nn.Module):
 
         ll = yl
         padding_method = lowlevel.mode_to_int(self.padding_method)
+
+        if ll.dtype != self.g0_col.dtype:
+            self.g0_col = self.g0_col.to(ll.dtype)
+            self.g1_col = self.g1_col.to(ll.dtype)
+            self.g0_row = self.g0_row.to(ll.dtype)
+            self.g1_row = self.g1_row.to(ll.dtype)
 
         # Do a multilevel inverse transform
         for h in yh[::-1]:  # this is the reversed list
