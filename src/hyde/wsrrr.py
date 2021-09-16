@@ -1,7 +1,4 @@
-import numpy as np
-import pytorch_wavelets as twave
 import torch
-
 from . import dwt3d, utils
 
 __all__ = ["WSRRR"]
@@ -80,9 +77,9 @@ class WSRRR(torch.nn.Module):
         eps = 1e-30
         # this gets the median of the FIRST high level filters
         omega = torch.median(torch.abs(v_dwt_2d[filter_starts[-1] ** 2 :]), dim=0)[0] / 0.6745 + eps
-        # # % Covariance matrix
-        # # Omega_1=permute(sigma(:).^2,[3,2,1]);
-        # # Omega=repmat(Omega_1,[nx1,ny1,1]);
+        # % Covariance matrix
+        # Omega_1=permute(sigma(:).^2,[3,2,1]);
+        # Omega=repmat(Omega_1,[nx1,ny1,1]);
         omega = omega.reshape((1, 1, omega.numel())).repeat(og_rows, og_cols, 1)
 
         inp = torch.pow(omega, -1) * x
