@@ -114,13 +114,15 @@ class HyRes(torch.nn.Module):
         omega1 = omega1.reshape((1, 1, omega1.numel())).repeat(p_rows, p_cols, 1)
         y_w = torch.pow(omega1, -0.5) * x
         # -------- custom PCA_Image stuff ----------------------
-        nr, nc, p = y_w.shape
-        # y_w -> h x w X c
-        im1 = torch.reshape(y_w, (nr * nc, p))
-        u, s, v_pca = torch.linalg.svd(im1, full_matrices=False)
-        # need to modify u and s
-        pc = torch.matmul(u, torch.diag(s))
-        pc = pc.reshape((nc, nr, p))
+        v_pca, pc = utils.custom_pca_image(y_w)
+        # todo: remove this bit
+        # nr, nc, p = y_w.shape
+        # # y_w -> h x w X c
+        # im1 = torch.reshape(y_w, (nr * nc, p))
+        # u, s, v_pca = torch.linalg.svd(im1, full_matrices=False)
+        # # need to modify u and s
+        # pc = torch.matmul(u, torch.diag(s))
+        # pc = pc.reshape((nc, nr, p))
         # -------------------------------------------------------
         # next is twoDWTon3Ddata -> requires permute + unsqueeze
         pc = pc.to(torch.float)  # no-op if already float
@@ -171,27 +173,3 @@ class HyRes(torch.nn.Module):
             padded_shape
         )
         return y_restored[:og_rows, :og_cols, :og_channels]
-
-
-if __name__ == "__main__":
-    import time
-
-    import matplotlib.pyplot as plt
-    import scipy.io as sio
-
-    input = sio.loadmat("/path/git/Codes_4_HyMiNoR/HyRes/Indian.mat")
-    imp = input["Indian"].reshape(input["Indian"].shape, order="C")
-
-    t0 = time.perf_counter()
-    input_tens = torch.tensor(imp, dtype=torch.float32)
-    hyres = HyRes()
-    output = hyres(input_tens)
-    print(time.perf_counter() - t0)
-
-    s = torch.sum(input_tens ** 2.0)
-    d = torch.sum((input_tens - output) ** 2.0)
-    snr = 10 * torch.log10(s / d)
-    print(snr)
-
-    imgplot = plt.imshow(output.numpy()[:, :, 0], cmap="gray")  # , vmin=50., vmax=120.)
-    plt.show()

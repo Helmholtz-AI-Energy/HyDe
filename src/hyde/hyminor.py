@@ -6,9 +6,9 @@ from .hyres import HyRes
 __all__ = ["HyMiNoR"]
 
 
-class HyMiNoR:
+class HyMiNoR(torch.nn.Module):
     """
-    HyMiNoT -- Hyperspectral Mixed Gaussian and Sparse Noise Reduction
+    HyMiNoR -- Hyperspectral Mixed Gaussian and Sparse Noise Reduction
 
     This is a two step mixed nose removal technique for hypersperctral images which was presented
     in [1] The two steps are:
@@ -42,6 +42,7 @@ class HyMiNoR:
     """
 
     def __init__(self, decomp_level=5, wavelet_level=5, padding_method="symmetric"):
+        super(HyMiNoR, self).__init__()
         self.hyres = HyRes(
             decomp_level=decomp_level,
             wavelet_level=wavelet_level,

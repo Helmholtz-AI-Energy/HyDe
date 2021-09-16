@@ -2,7 +2,12 @@ import pytorch_wavelets.dwt.lowlevel as lowlevel
 import pywt
 import torch
 
-__all__ = ["DWTForwardOverwrite"]
+__all__ = [
+    "DWTForwardOverwrite",
+    "DWTInverse",
+    "construct_filters_from_2d",
+    "construct_2d_from_filters",
+]
 
 
 class DWTForwardOverwrite(torch.nn.Module):
@@ -76,7 +81,7 @@ class DWTForwardOverwrite(torch.nn.Module):
 
         Returns
         -------
-        overwriten_results : torch.Tensor
+        overwritten_results : torch.Tensor
             the 2D torch Tensor which has all of the results in it
         yl : torch.Tensor
             the lowpass coefficients. yl has shape :math:`(N, C_{in}, H_{in}', W_{in}')`.
@@ -94,29 +99,36 @@ class DWTForwardOverwrite(torch.nn.Module):
         yh = []
         ll = x
         padding_method = lowlevel.mode_to_int(self.padding_method)
-        ret = None
+        full = None
 
+        if x.dtype != self.h0_col.dtype:
+            self.h0_col = self.h0_col.to(x.dtype)
+            self.h1_col = self.h1_col.to(x.dtype)
+            self.h0_row = self.h0_row.to(x.dtype)
+            self.h1_row = self.h1_row.to(x.dtype)
+
+        # prev_ll_d0 = None
         # Do a multilevel transform
-        for _ in range(self.decomp_level):
+        for lvl in range(self.decomp_level):
             # Do a level of the transform
             ll, high = lowlevel.AFB2D.apply(
                 ll, self.h0_col, self.h1_col, self.h0_row, self.h1_row, padding_method
             )
 
             s = ll.shape[-2]
-            if ret is None:
-                ret_shape = list(ll.shape)
-                ret_shape[-1] *= 2
-                ret_shape[-2] *= 2
-                ret = torch.zeros(ret_shape, device=ll.device, dtype=ll.dtype)
-            ret[:, :, :s, :s] = ll
-            ret[:, :, :s, s : s * 2] = high[:, :, 0]
-            ret[:, :, s : s * 2, :s] = high[:, :, 1]
-            ret[:, :, s : s * 2, s : s * 2] = high[:, :, 2]
+            if full is None:  # first iteration
+                full_shape = list(ll.shape)
+                full_shape[-1] *= 2
+                full_shape[-2] *= 2
+                full = torch.zeros(full_shape, device=ll.device, dtype=ll.dtype)
+            full[:, :, :s, :s] = ll
+            full[:, :, :s, s : s * 2] = high[:, :, 0]
+            full[:, :, s : s * 2, :s] = high[:, :, 1]
+            full[:, :, s : s * 2, s : s * 2] = high[:, :, 2]
 
             yh.append(high)
 
-        return ret, ll, yh
+        return full, ll, yh
 
 
 class DWTInverse(torch.nn.Module):
@@ -163,17 +175,19 @@ class DWTInverse(torch.nn.Module):
         self.register_buffer("g1_row", filts[3])
         self.padding_method = padding_method
 
-    def forward(self, coeffs):
+    def forward(self, coeffs=None):
         """
         Do the 2D DWT inverse reconstruction for a set of coefficients
 
         Parameters
         ----------
-        coeffs: tuple
+        coeffs: tuple, torch.Tensor
             tuple of lowpass and bandpass coefficients, where yl is a lowpass tensor of shape
             :math:`(N, C_{in}, H_{in}', W_{in}')` and yh is a list of bandpass tensors of shape
             :math:`list(N, C_{in}, 3, H_{in}'', W_{in}'')`. I.e. should match the format returned
-            by DWTForward
+            by DWTForward.
+            If this input is a torch tensor, then this will assume that `coeffs` is the overwritten
+            results returned by :func:`DWTForwardOverwrite <hyde.dwt3d.DWTForwardOverwrite>`
 
         Returns
         -------
@@ -188,11 +202,18 @@ class DWTInverse(torch.nn.Module):
         in an efficient way though).
         """
         yl, yh = coeffs
+
         ll = yl
         padding_method = lowlevel.mode_to_int(self.padding_method)
 
+        if ll.dtype != self.g0_col.dtype:
+            self.g0_col = self.g0_col.to(ll.dtype)
+            self.g1_col = self.g1_col.to(ll.dtype)
+            self.g0_row = self.g0_row.to(ll.dtype)
+            self.g1_row = self.g1_row.to(ll.dtype)
+
         # Do a multilevel inverse transform
-        for h in yh[::-1]:
+        for h in yh[::-1]:  # this is the reversed list
             if h is None:
                 h = torch.zeros(
                     ll.shape[0], ll.shape[1], 3, ll.shape[-2], ll.shape[-1], device=ll.device
@@ -207,3 +228,85 @@ class DWTInverse(torch.nn.Module):
                 ll, h, self.g0_col, self.g1_col, self.g0_row, self.g1_row, padding_method
             )
         return ll
+
+
+def construct_2d_from_filters(low, highs):
+    """
+    construct a 2D matrix from the filters out of DWT3D
+
+    this loop builds a list to be cat'ed together
+    once done, it will be in the form of:
+
+        .. code::
+
+            |--------------|
+            |     low      |
+            | ------------ |
+            | last filters |
+            | ------------ |
+            | next last h  |
+            | ------------ |
+            |     ...      |
+
+    this is the same form that the matlab code has it in
+
+    Parameters
+    ----------
+    low
+    highs
+
+    Returns
+    -------
+
+    """
+    hold = low.squeeze().permute((1, 2, 0))
+    ret_2d = [
+        hold.reshape((hold.shape[0] * hold.shape[1], hold.shape[2])),
+    ]
+    filter_starts = []
+
+    for i in reversed(range(len(highs))):
+        filter_starts.append(highs[i][:, :, 0].shape[-1])
+        for j in range(3):
+            hold = highs[i][:, :, j].squeeze().permute((1, 2, 0))
+            ret_2d.append(hold.reshape((hold.shape[0] * hold.shape[1], hold.shape[2])))
+    ret_2d = torch.cat(ret_2d, dim=0)
+    return ret_2d, filter_starts
+
+
+def construct_filters_from_2d(matrix, filter_starts, decomp_level):
+    """
+    construct the filters in the proper shape for the DWT inverse forward step
+
+    Parameters
+    ----------
+    matrix
+    filter_starts
+    decomp_level
+
+    Returns
+    -------
+
+    """
+    exp = filter_starts[0]
+    low = matrix[: exp ** 2].reshape((exp, exp, matrix.shape[-1]))
+    low = low.permute(2, 0, 1).unsqueeze(0)
+    highs = []
+    last_end = exp ** 2
+    for lvl in range(decomp_level):
+        exp = filter_starts[lvl]
+        lp_list = [None, None, None]
+        for i in range(1, 4):
+            next_end = last_end + exp ** 2
+            lp_list[i - 1] = (
+                matrix[last_end:next_end]
+                .reshape((exp, exp, matrix.shape[-1]))
+                .permute(2, 0, 1)
+                .unsqueeze(0)
+                .unsqueeze(2)
+            )
+            last_end = next_end
+        highs.append(torch.cat(lp_list, dim=2))
+
+    highs.reverse()
+    return low, highs
