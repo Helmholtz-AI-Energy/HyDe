@@ -1,4 +1,5 @@
 import torch
+
 from . import dwt3d, utils
 
 __all__ = ["WSRRR"]
@@ -58,6 +59,8 @@ class WSRRR(torch.nn.Module):
         denoised_image : torch.Tensor
             Hyperspectral features extracted (3D matrix)
         """
+        # key: Y -> x (image), r_max -> features, tol -> num_itt
+
         # [nr1, nc1, p1] = size(Y);
         # RY = reshape(Y, nr1 * nc1, p1);
         # % Y = reshape(RY, nr1, nc1, p1); % mean
