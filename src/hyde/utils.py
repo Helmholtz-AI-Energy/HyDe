@@ -23,9 +23,10 @@ def denoise_tv_bregman(
     eps: float = 1e-3,
     isotropic: bool = True,
     channel_axis: Optional[int] = None,
-):
+) -> torch.Tensor:
     """
-    Lifted from scikit learn and adapted for torch
+    Lifted from `scikit learn <https://scikit-image.org/docs/dev/api/skimage.restoration.html#skimage.restoration.denoise_tv_bregman>`_
+    and adapted for torch.
 
     Perform total-variation denoising using split-Bregman optimization.
     Total-variation denoising (also know as total-variation regularization)
@@ -34,7 +35,7 @@ def denoise_tv_bregman(
     regularization parameter ([1]_, [2]_, [3]_, [4]_).
     Parameters
     ----------
-    image : ndarray
+    image : torch.Tensor
         Input data to be denoised (converted using img_as_float`).
     weight : float
         Denoising weight. The smaller the `weight`, the more denoising (at
@@ -52,12 +53,12 @@ def denoise_tv_bregman(
         If None, the image is assumed to be a grayscale (single channel) image.
         Otherwise, this parameter indicates which axis of the array corresponds
         to channels.
-        .. versionadded:: 0.19
-           ``channel_axis`` was added in 0.19.
+
     Returns
     -------
-    u : ndarray
+    torch.Tensor
         Denoised image.
+
     References
     ----------
     .. [1] https://en.wikipedia.org/wiki/Total_variation_denoising
@@ -105,21 +106,45 @@ def _denoise_tv_bregman_work(
     eps: float,
     isotropic: bool,
     out: torch.Tensor = None,
-):
+) -> torch.Tensor:
     """
+    Lifted from scikit learn's cython implementation and adapted for torch
+
+    See :func:`denoise_tv_bregman <hyde.utils.denoise_tv_bregman>` for more information.
+    This function does the actual work of the function.
 
     Parameters
     ----------
-    img
-    weight
-    max_iter
-    esp
-    isotropic
-    out
+    img : torch.Tensor
+        Input data to be denoised (converted using img_as_float`).
+    weight : float
+        Denoising weight. The smaller the `weight`, the more denoising (at
+        the expense of less similarity to the `input`). The regularization
+        parameter `lambda` is chosen as `2 * weight`.
+    eps : float, optional
+        Relative difference of the value of the cost function that determines
+        the stop criterion. The algorithm stops when::
+            SUM((u(n) - u(n-1))**2) < eps
+    max_iter : int, optional
+        Maximal number of iterations used for the optimization.
+    isotropic : boolean, optional
+        Switch between isotropic and anisotropic TV denoising.
 
     Returns
     -------
+    torch.Tensor
+        Denoised image.
 
+    References
+    ----------
+    .. [1] https://en.wikipedia.org/wiki/Total_variation_denoising
+    .. [2] Tom Goldstein and Stanley Osher, "The Split Bregman Method For L1
+           Regularized Problems",
+           ftp://ftp.math.ucla.edu/pub/camreport/cam08-29.pdf
+    .. [3] Pascal Getreuer, "Rudin–Osher–Fatemi Total Variation Denoising
+           using Split Bregman" in Image Processing On Line on 2012–05–19,
+           https://www.ipol.im/pub/art/2012/g-tvd/article_lr.pdf
+    .. [4] https://web.math.ucsb.edu/~cgarcia/UGProjects/BregmanAlgorithms_JacquelineBush.pdf
     """
     rows, cols, dims = img.shape
     total = rows * cols * dims
@@ -159,77 +184,98 @@ def _denoise_tv_bregman_work(
 
         rmse = 0
 
-        for r in range(1, rows + 1):
-            for c in range(1, cols + 1):
-                for k in range(dims):
-
-                    uprev = out[r, c, k]
-
-                    # forward derivatives
-                    ux = out[r, c + 1, k] - uprev
-                    uy = out[r + 1, c, k] - uprev
-
-                    # Gauss-Seidel method
-                    unew = (
-                        lam
-                        * (
-                            +out[r + 1, c, k]
-                            + out[r - 1, c, k]
-                            + out[r, c + 1, k]
-                            + out[r, c - 1, k]
-                            + dx[r, c - 1, k]
-                            - dx[r, c, k]
-                            + dy[r - 1, c, k]
-                            - dy[r, c, k]
-                            - bx[r, c - 1, k]
-                            + bx[r, c, k]
-                            - by[r - 1, c, k]
-                            + by[r, c, k]
-                        )
-                        + weight * img[r - 1, c - 1, k]
-                    ) / norm
-                    out[r, c, k] = unew
-
-                    # update root mean square error
-                    tx = unew - uprev
-                    rmse += tx * tx
-
-                    bxx = bx[r, c, k]
-                    byy = by[r, c, k]
-
-                    # d_subproblem after reference [4]
-                    if isotropic:
-                        tx = ux + bxx
-                        ty = uy + byy
-                        s = torch.sqrt(tx * tx + ty * ty)
-                        dxx = s * lam * tx / (s * lam + 1)
-                        dyy = s * lam * ty / (s * lam + 1)
-
-                    else:
-                        s = ux + bxx
-                        if s > 1 / lam:
-                            dxx = s - 1 / lam
-                        elif s < -1 / lam:
-                            dxx = s + 1 / lam
-                        else:
-                            dxx = 0
-                        s = uy + byy
-                        if s > 1 / lam:
-                            dyy = s - 1 / lam
-                        elif s < -1 / lam:
-                            dyy = s + 1 / lam
-                        else:
-                            dyy = 0
-
-                    dx[r, c, k] = dxx
-                    dy[r, c, k] = dyy
-
-                    bx[r, c, k] += ux - dxx
-                    by[r, c, k] += uy - dyy
+        _split_bregmann_innerloop(
+            out, rows, cols, dims, lam, dx, dy, bx, by, isotropic, rmse, img, weight, norm
+        )
 
         rmse = torch.sqrt(rmse / total)
         i += 1
     return out
+
+
+@torch.jit.script
+def _split_bregmann_innerloop(
+    out: torch.Tensor,
+    rows: int,
+    cols: int,
+    dims: int,
+    lam: float,
+    dx: torch.Tensor,
+    dy: torch.Tensor,
+    bx: torch.Tensor,
+    by: torch.Tensor,
+    isotropic: bool,
+    rmse: float,
+    img: torch.Tensor,
+    weight: float,
+    norm: float,
+):
+    for r in range(1, rows + 1):
+        for c in range(1, cols + 1):
+            for k in range(dims):
+                uprev = out[r, c, k]
+
+                # forward derivatives
+                ux = out[r, c + 1, k] - uprev
+                uy = out[r + 1, c, k] - uprev
+
+                # Gauss-Seidel method
+                unew = (
+                    lam
+                    * (
+                        +out[r + 1, c, k]
+                        + out[r - 1, c, k]
+                        + out[r, c + 1, k]
+                        + out[r, c - 1, k]
+                        + dx[r, c - 1, k]
+                        - dx[r, c, k]
+                        + dy[r - 1, c, k]
+                        - dy[r, c, k]
+                        - bx[r, c - 1, k]
+                        + bx[r, c, k]
+                        - by[r - 1, c, k]
+                        + by[r, c, k]
+                    )
+                    + weight * img[r - 1, c - 1, k]
+                ) / norm
+                out[r, c, k] = unew
+
+                # update root mean square error
+                tx = unew - uprev
+                rmse += tx * tx
+
+                bxx = bx[r, c, k]
+                byy = by[r, c, k]
+
+                # d_subproblem after reference [4]
+                if isotropic:
+                    tx = ux + bxx
+                    ty = uy + byy
+                    s = torch.sqrt(tx * tx + ty * ty)
+                    dxx = s * lam * tx / (s * lam + 1)
+                    dyy = s * lam * ty / (s * lam + 1)
+
+                else:
+                    s = ux + bxx
+                    if s > 1 / lam:
+                        dxx = s - 1 / lam
+                    elif s < -1 / lam:
+                        dxx = s + 1 / lam
+                    else:
+                        dxx = 0
+                    s = uy + byy
+                    if s > 1 / lam:
+                        dyy = s - 1 / lam
+                    elif s < -1 / lam:
+                        dyy = s + 1 / lam
+                    else:
+                        dyy = 0
+
+                dx[r, c, k] = dxx
+                dy[r, c, k] = dyy
+
+                bx[r, c, k] += ux - dxx
+                by[r, c, k] += uy - dyy
 
 
 def diff(x: torch.Tensor, n: int = 1, dim=0):
