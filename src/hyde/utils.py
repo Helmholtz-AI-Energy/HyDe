@@ -17,12 +17,13 @@ __all__ = [
 
 
 def denoise_tv_bregman(
-        img: torch.Tensor,
-        weight: float,
-        max_iter: int,
-        eps: float,
-        isotropic: bool,
-        out: torch.Tensor = None):
+    img: torch.Tensor,
+    weight: float,
+    max_iter: int,
+    eps: float,
+    isotropic: bool,
+    out: torch.Tensor = None,
+):
     """
 
     Parameters
@@ -66,13 +67,13 @@ def denoise_tv_bregman(
 
     # skipping the nogil from cython
     out_rows, out_cols = out.shape[:2]
-    out[1:out_rows - 1, 1:out_cols - 1] = img
+    out[1 : out_rows - 1, 1 : out_cols - 1] = img
 
     # reflect image
-    out[0, 1:out_cols - 1] = img[1, :]
-    out[1:out_rows - 1, 0] = img[:, 1]
-    out[out_rows - 1, 1:out_cols - 1] = img[rows - 1, :]
-    out[1:out_rows - 1, out_cols - 1] = img[:, cols - 1]
+    out[0, 1 : out_cols - 1] = img[1, :]
+    out[1 : out_rows - 1, 0] = img[:, 1]
+    out[out_rows - 1, 1 : out_cols - 1] = img[rows - 1, :]
+    out[1 : out_rows - 1, out_cols - 1] = img[:, cols - 1]
 
     while i < max_iter and rmse > eps:
 
@@ -90,28 +91,28 @@ def denoise_tv_bregman(
 
                     # Gauss-Seidel method
                     unew = (
-                               lam * (
-                               + out[r + 1, c, k]
-                               + out[r - 1, c, k]
-                               + out[r, c + 1, k]
-                               + out[r, c - 1, k]
-
-                               + dx[r, c - 1, k]
-                               - dx[r, c, k]
-                               + dy[r - 1, c, k]
-                               - dy[r, c, k]
-
-                               - bx[r, c - 1, k]
-                               + bx[r, c, k]
-                               - by[r - 1, c, k]
-                               + by[r, c, k]
-                           ) + weight * img[r - 1, c - 1, k]
-                           ) / norm
+                        lam
+                        * (
+                            +out[r + 1, c, k]
+                            + out[r - 1, c, k]
+                            + out[r, c + 1, k]
+                            + out[r, c - 1, k]
+                            + dx[r, c - 1, k]
+                            - dx[r, c, k]
+                            + dy[r - 1, c, k]
+                            - dy[r, c, k]
+                            - bx[r, c - 1, k]
+                            + bx[r, c, k]
+                            - by[r - 1, c, k]
+                            + by[r, c, k]
+                        )
+                        + weight * img[r - 1, c - 1, k]
+                    ) / norm
                     out[r, c, k] = unew
 
                     # update root mean square error
                     tx = unew - uprev
-                    rmse += (tx * tx)
+                    rmse += tx * tx
 
                     bxx = bx[r, c, k]
                     byy = by[r, c, k]
@@ -202,9 +203,9 @@ def diff_dim0_replace_last_row(x: torch.Tensor):
 
 
 def estimate_hyperspectral_noise(
-        data,
-        noise_type="additive",
-        calculation_dtype: torch.dtype = torch.float,
+    data,
+    noise_type="additive",
+    calculation_dtype: torch.dtype = torch.float,
 ):
     """
     Infer teh noise in a hyperspectral dataset. Assumes that the
@@ -249,7 +250,7 @@ def estimate_hyperspectral_noise(
 
 @torch.jit.script
 def _est_additive_noise(
-        subdata: torch.Tensor, calculation_dtype: torch.dtype = torch.float
+    subdata: torch.Tensor, calculation_dtype: torch.dtype = torch.float
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     # estimate the additive noise in the given data with a certain precision
     eps = 1e-6
