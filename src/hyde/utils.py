@@ -5,6 +5,7 @@ from torch.nn.functional import pad
 
 __all__ = [
     "custom_pca_image",
+    "denoise_tv_bregman",
     "diff",
     "diff_dim0_replace_last_row",
     "estimate_hyperspectral_noise",
@@ -13,6 +14,141 @@ __all__ = [
     "sure_soft_modified_lr2",
     "symmetric_pad",
 ]
+
+
+def denoise_tv_bregman(
+        img: torch.Tensor,
+        weight: float,
+        max_iter: int,
+        eps: float,
+        isotropic: bool,
+        out: torch.Tensor = None):
+    """
+
+    Parameters
+    ----------
+    img
+    weight
+    max_iter
+    esp
+    isotropic
+    out
+
+    Returns
+    -------
+
+    """
+    rows, cols, dims = img.shape
+    rows2, cols2 = rows + 2, cols + 2
+    # r, c, k
+    total = rows * cols * dims
+
+    try:
+        rmse = torch.finfo(img.dtype).max
+    except TypeError:
+        # this will fail if the image is ints, but it must be floats anyway, casting
+        img = img.to(torch.float)  # TODO: float32 or 64?
+        rmse = torch.finfo(img.dtype).max
+
+    if out is None:
+        out = torch.zeros_like(img)
+
+    dx = out.clone()
+    dy = out.clone()
+    bx = out.clone()
+    by = out.clone()
+    # float defs
+    # ux, uy, uprev, unew, bxx, byy, dxx, dyy, s, tx, ty
+    i = 0
+    lam = 2 * weight
+    norm = weight + 4 * lam
+    # more defs: out_rows, out_cols (ssize_t)
+
+    # skipping the nogil from cython
+    out_rows, out_cols = out.shape[:2]
+    out[1:out_rows - 1, 1:out_cols - 1] = img
+
+    # reflect image
+    out[0, 1:out_cols - 1] = img[1, :]
+    out[1:out_rows - 1, 0] = img[:, 1]
+    out[out_rows - 1, 1:out_cols - 1] = img[rows - 1, :]
+    out[1:out_rows - 1, out_cols - 1] = img[:, cols - 1]
+
+    while i < max_iter and rmse > eps:
+
+        rmse = 0
+
+        for r in range(1, rows + 1):
+            for c in range(1, cols + 1):
+                for k in range(dims):
+
+                    uprev = out[r, c, k]
+
+                    # forward derivatives
+                    ux = out[r, c + 1, k] - uprev
+                    uy = out[r + 1, c, k] - uprev
+
+                    # Gauss-Seidel method
+                    unew = (
+                               lam * (
+                               + out[r + 1, c, k]
+                               + out[r - 1, c, k]
+                               + out[r, c + 1, k]
+                               + out[r, c - 1, k]
+
+                               + dx[r, c - 1, k]
+                               - dx[r, c, k]
+                               + dy[r - 1, c, k]
+                               - dy[r, c, k]
+
+                               - bx[r, c - 1, k]
+                               + bx[r, c, k]
+                               - by[r - 1, c, k]
+                               + by[r, c, k]
+                           ) + weight * img[r - 1, c - 1, k]
+                           ) / norm
+                    out[r, c, k] = unew
+
+                    # update root mean square error
+                    tx = unew - uprev
+                    rmse += (tx * tx)
+
+                    bxx = bx[r, c, k]
+                    byy = by[r, c, k]
+
+                    # d_subproblem after reference [4]
+                    if isotropic:
+                        tx = ux + bxx
+                        ty = uy + byy
+                        s = torch.sqrt(tx * tx + ty * ty)
+                        dxx = s * lam * tx / (s * lam + 1)
+                        dyy = s * lam * ty / (s * lam + 1)
+
+                    else:
+                        s = ux + bxx
+                        if s > 1 / lam:
+                            dxx = s - 1 / lam
+                        elif s < -1 / lam:
+                            dxx = s + 1 / lam
+                        else:
+                            dxx = 0
+                        s = uy + byy
+                        if s > 1 / lam:
+                            dyy = s - 1 / lam
+                        elif s < -1 / lam:
+                            dyy = s + 1 / lam
+                        else:
+                            dyy = 0
+
+                    dx[r, c, k] = dxx
+                    dy[r, c, k] = dyy
+
+                    bx[r, c, k] += ux - dxx
+                    by[r, c, k] += uy - dyy
+
+        rmse = torch.sqrt(rmse / total)
+        i += 1
+    return out
 
 
 def diff(x: torch.Tensor, n: int = 1, dim=0):
@@ -66,9 +202,9 @@ def diff_dim0_replace_last_row(x: torch.Tensor):
 
 
 def estimate_hyperspectral_noise(
-    data,
-    noise_type="additive",
-    calculation_dtype: torch.dtype = torch.float,
+        data,
+        noise_type="additive",
+        calculation_dtype: torch.dtype = torch.float,
 ):
     """
     Infer teh noise in a hyperspectral dataset. Assumes that the
@@ -113,7 +249,7 @@ def estimate_hyperspectral_noise(
 
 @torch.jit.script
 def _est_additive_noise(
-    subdata: torch.Tensor, calculation_dtype: torch.dtype = torch.float
+        subdata: torch.Tensor, calculation_dtype: torch.dtype = torch.float
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     # estimate the additive noise in the given data with a certain precision
     eps = 1e-6
