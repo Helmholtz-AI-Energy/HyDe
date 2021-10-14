@@ -60,19 +60,26 @@ class WSRRR(torch.nn.Module):
             Hyperspectral features extracted (3D matrix)
         """
         # key: Y -> x (image), r_max -> features, tol -> num_itt
-
         # [nr1, nc1, p1] = size(Y);
+        nr1, nc1, p1 = x.shape
         # RY = reshape(Y, nr1 * nc1, p1);
-        # % Y = reshape(RY, nr1, nc1, p1); % mean
+        x_2d = x.reshape((nr1 * nc1, p1))
         # value
         # recustion
-        # % RY = RY - mean(RY);
         # m = min(Y(:));
+        x_min = x.min()
         # M = max(Y(:));
+        x_max = x.max()
         # NRY = (RY - m) / (M - m);
+        normalized_y = (x_2d - x_min) / (x_max - x_min)
         # [~, ~, V1] = svd(NRY, 'econ');
+        # matlab returns the non-transposed V, torch DOES transpose
+        _, _, vh = torch.linalg.svd(normalized_y)
+        v1 = vh.T
         # V = V1(:, 1: r_max);
+        v = v1[:, :features]
         # FE = zeros(nr1, nc1, r_max);
+        fe = torch.zeros((nr1, nc1, features), device=x.device, dtype=x.device)
         # for fi=1:tol
         #     C1 = NRY * V(:, 1: r_max);
         #     PC = reshape(C1, nr1, nc1, r_max);
@@ -81,12 +88,23 @@ class WSRRR(torch.nn.Module):
         #     end
         #     fprintf('%d\t', fi)
         #     RFE = reshape(FE, nr1 * nc1, r_max);
-        #     M = NRY
-        #     '*RFE;
+        #     M = NRY'*RFE;
         #     [C, ~, G] = svd(M, 'econ');
         #     V = (C * G');
+        for fi in range(num_itt):
+            c1 = normalized_y @ v[:, :features]
+            pc = c1.reshape((nr1, nc1, features))
+            for j in range(features):
+                fe[:, :, j] = utils.denoise_tv_bregman(
+                    image=pc[:nr1, :nc1, j], weight=1 / lam, eps=0.1
+                )
+            fe_reshape = fe.reshape((nr1 * nc1, features))
+            m = normalized_y.T @ fe_reshape
+            c, _, gh = torch.linalg.svd(m)
+            v = c @ gh
         # end
         # Yr=reshape(RFE * V',nr1,nc1,p1);
+        return (fe_reshape @ v.T).reshape((nr1, nc1, p1))
 
 
 if __name__ == "__main__":

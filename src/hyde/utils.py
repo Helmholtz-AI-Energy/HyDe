@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Optional, Tuple
 
 import torch
 from torch.nn.functional import pad
@@ -17,6 +17,88 @@ __all__ = [
 
 
 def denoise_tv_bregman(
+    image: torch.Tensor,
+    weight: float = 5.0,
+    max_iter: int = 100,
+    eps: float = 1e-3,
+    isotropic: bool = True,
+    channel_axis: Optional[int] = None,
+):
+    """
+    Lifted from scikit learn and adapted for torch
+
+    Perform total-variation denoising using split-Bregman optimization.
+    Total-variation denoising (also know as total-variation regularization)
+    tries to find an image with less total-variation under the constraint
+    of being similar to the input image, which is controlled by the
+    regularization parameter ([1]_, [2]_, [3]_, [4]_).
+    Parameters
+    ----------
+    image : ndarray
+        Input data to be denoised (converted using img_as_float`).
+    weight : float
+        Denoising weight. The smaller the `weight`, the more denoising (at
+        the expense of less similarity to the `input`). The regularization
+        parameter `lambda` is chosen as `2 * weight`.
+    eps : float, optional
+        Relative difference of the value of the cost function that determines
+        the stop criterion. The algorithm stops when::
+            SUM((u(n) - u(n-1))**2) < eps
+    max_iter : int, optional
+        Maximal number of iterations used for the optimization.
+    isotropic : boolean, optional
+        Switch between isotropic and anisotropic TV denoising.
+    channel_axis : int or None, optional
+        If None, the image is assumed to be a grayscale (single channel) image.
+        Otherwise, this parameter indicates which axis of the array corresponds
+        to channels.
+        .. versionadded:: 0.19
+           ``channel_axis`` was added in 0.19.
+    Returns
+    -------
+    u : ndarray
+        Denoised image.
+    References
+    ----------
+    .. [1] https://en.wikipedia.org/wiki/Total_variation_denoising
+    .. [2] Tom Goldstein and Stanley Osher, "The Split Bregman Method For L1
+           Regularized Problems",
+           ftp://ftp.math.ucla.edu/pub/camreport/cam08-29.pdf
+    .. [3] Pascal Getreuer, "Rudin–Osher–Fatemi Total Variation Denoising
+           using Split Bregman" in Image Processing On Line on 2012–05–19,
+           https://www.ipol.im/pub/art/2012/g-tvd/article_lr.pdf
+    .. [4] https://web.math.ucsb.edu/~cgarcia/UGProjects/BregmanAlgorithms_JacquelineBush.pdf
+    """
+    rows = image.shape[0]
+    cols = image.shape[1]
+    dims = image.shape[2]
+
+    shape_ext = (rows + 2, cols + 2, dims)
+
+    out = torch.zeros(shape_ext, dtype=image.dtype, device=image.device)
+
+    if channel_axis is not None:
+        channel_out = torch.zeros(shape_ext[:2] + (1,), dtype=image.dtype, device=image.device)
+        for c in range(image.shape[-1]):
+            # the algorithm below expects 3 dimensions to always be present.
+            # slicing the array in this fashion preserves the channel dimension
+            # for us
+            channel_in = image[..., c : c + 1]
+            if not channel_in.is_contiguous():
+                channel_in = channel_in.contiguous()
+            _denoise_tv_bregman_work(
+                channel_in, image.dtype.type(weight), max_iter, eps, isotropic, channel_out
+            )
+            out[..., c] = channel_out[..., 0]
+    else:
+        if not image.is_contigious():
+            image = image.contigious()
+        _denoise_tv_bregman_work(image, image.dtype.type(weight), max_iter, eps, isotropic, out)
+
+    return out[1:-1, 1:-1].squeeze()
+
+
+def _denoise_tv_bregman_work(
     img: torch.Tensor,
     weight: float,
     max_iter: int,
@@ -40,8 +122,6 @@ def denoise_tv_bregman(
 
     """
     rows, cols, dims = img.shape
-    rows2, cols2 = rows + 2, cols + 2
-    # r, c, k
     total = rows * cols * dims
 
     try:
