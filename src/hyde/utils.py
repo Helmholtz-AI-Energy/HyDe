@@ -2,6 +2,7 @@ from typing import Optional, Tuple
 
 import torch
 from torch.nn.functional import pad
+import time
 
 __all__ = [
     "custom_pca_image",
@@ -72,10 +73,14 @@ def denoise_tv_bregman(
     """
     rows = image.shape[0]
     cols = image.shape[1]
-    dims = image.shape[2]
+    try:
+        dims = image.shape[2]
+    except IndexError:
+        dims = 1
+
+    weight = torch.tensor(weight, dtype=image.dtype, device=image.device)
 
     shape_ext = (rows + 2, cols + 2, dims)
-
     out = torch.zeros(shape_ext, dtype=image.dtype, device=image.device)
 
     if channel_axis is not None:
@@ -88,13 +93,13 @@ def denoise_tv_bregman(
             if not channel_in.is_contiguous():
                 channel_in = channel_in.contiguous()
             _denoise_tv_bregman_work(
-                channel_in, image.dtype.type(weight), max_iter, eps, isotropic, channel_out
+                channel_in, weight, max_iter, eps, isotropic, channel_out
             )
             out[..., c] = channel_out[..., 0]
     else:
-        if not image.is_contigious():
-            image = image.contigious()
-        _denoise_tv_bregman_work(image, image.dtype.type(weight), max_iter, eps, isotropic, out)
+        if not image.is_contiguous():
+            image = image.contiguous()
+        _denoise_tv_bregman_work(image, weight, max_iter, eps, isotropic, out)
 
     return out[1:-1, 1:-1].squeeze()
 
@@ -146,7 +151,12 @@ def _denoise_tv_bregman_work(
            https://www.ipol.im/pub/art/2012/g-tvd/article_lr.pdf
     .. [4] https://web.math.ucsb.edu/~cgarcia/UGProjects/BregmanAlgorithms_JacquelineBush.pdf
     """
-    rows, cols, dims = img.shape
+    try:
+        rows, cols, dims = img.shape
+    except ValueError:
+        rows, cols = img.shape
+        dims = 1
+        img = img.unsqueeze(-1)
     total = rows * cols * dims
 
     try:
@@ -172,6 +182,7 @@ def _denoise_tv_bregman_work(
 
     # skipping the nogil from cython
     out_rows, out_cols = out.shape[:2]
+    print(out.shape, img.shape)
     out[1 : out_rows - 1, 1 : out_cols - 1] = img
 
     # reflect image
@@ -188,12 +199,11 @@ def _denoise_tv_bregman_work(
             out, rows, cols, dims, lam, dx, dy, bx, by, isotropic, rmse, img, weight, norm
         )
 
-        rmse = torch.sqrt(rmse / total)
+        rmse = torch.sqrt(torch.tensor(rmse / total, device=img.device))
         i += 1
     return out
 
 
-@torch.jit.script
 def _split_bregmann_innerloop(
     out: torch.Tensor,
     rows: int,
@@ -209,10 +219,18 @@ def _split_bregmann_innerloop(
     img: torch.Tensor,
     weight: float,
     norm: float,
-):
-    for r in range(1, rows + 1):
-        for c in range(1, cols + 1):
-            for k in range(dims):
+) -> None:
+
+    row_range = torch.arange(1, rows + 1)
+    col_range = torch.arange(1, cols + 1)
+    k_range = torch.arange(dims)
+
+    for r in row_range:
+        # rm1_out = out[r - 1]
+        # rp1_out = out[r + 1]
+        # r_out = out[r]
+        for c in col_range:
+            for k in k_range:
                 uprev = out[r, c, k]
 
                 # forward derivatives
@@ -220,24 +238,26 @@ def _split_bregmann_innerloop(
                 uy = out[r + 1, c, k] - uprev
 
                 # Gauss-Seidel method
+                # t0 = time.perf_counter()
                 unew = (
                     lam
                     * (
-                        +out[r + 1, c, k]
-                        + out[r - 1, c, k]
-                        + out[r, c + 1, k]
-                        + out[r, c - 1, k]
-                        + dx[r, c - 1, k]
-                        - dx[r, c, k]
-                        + dy[r - 1, c, k]
-                        - dy[r, c, k]
-                        - bx[r, c - 1, k]
-                        + bx[r, c, k]
-                        - by[r - 1, c, k]
-                        + by[r, c, k]
+                        out[r + 1, c, k] #.item()
+                        + out[r - 1, c, k]#.item()
+                        + out[r, c + 1, k]#.item()
+                        + out[r, c - 1, k]#.item()
+                        + dx[r, c - 1, k]#.item()
+                        - dx[r, c, k]#.item()
+                        + dy[r - 1, c, k]#.item()
+                        - dy[r, c, k]#.item()
+                        - bx[r, c - 1, k]#.item()
+                        + bx[r, c, k]#.item()
+                        - by[r - 1, c, k]#.item()
+                        + by[r, c, k]#.item()
                     )
                     + weight * img[r - 1, c - 1, k]
                 ) / norm
+                # print(r, c, k, "time for unew", time.perf_counter() - t0)
                 out[r, c, k] = unew
 
                 # update root mean square error
@@ -247,14 +267,17 @@ def _split_bregmann_innerloop(
                 bxx = bx[r, c, k]
                 byy = by[r, c, k]
 
+                # dxx = torch.tensor([], device=img.device)
+                # dyy = torch.tensor([], device=img.device)
+
                 # d_subproblem after reference [4]
                 if isotropic:
                     tx = ux + bxx
                     ty = uy + byy
-                    s = torch.sqrt(tx * tx + ty * ty)
+                    # s = torch.sqrt(torch.tensor(tx * tx + ty * ty, device=img.device))
+                    s = (tx * tx + ty * ty) ** 0.5
                     dxx = s * lam * tx / (s * lam + 1)
                     dyy = s * lam * ty / (s * lam + 1)
-
                 else:
                     s = ux + bxx
                     if s > 1 / lam:
@@ -263,6 +286,7 @@ def _split_bregmann_innerloop(
                         dxx = s + 1 / lam
                     else:
                         dxx = 0
+
                     s = uy + byy
                     if s > 1 / lam:
                         dyy = s - 1 / lam

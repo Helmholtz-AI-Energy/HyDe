@@ -31,13 +31,10 @@
  */
 
 #include <math.h>
-// #include "mex.h"
 #include <stdio.h>
 #include <stdlib.h>
 
 #include <torch/extension.h>
-typedef torch::Tensor mat;
-
 
 /*A method for isotropic TV*/
 void rof_iso(torch::Tensor u, torch::Tensor f, torch::Tensor x, torch::Tensor y, torch::Tensor bx, torch::Tensor by ,
@@ -450,5 +447,5 @@ torch::Tensor copy(torch::Tensor source, torch::Tensor dest, int rows, int cols)
 
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  m.def("forward", &SplitBregmanROF, "SplitBregmanROF");
+  m.def("split_bregman_rof", &SplitBregmanROF, "SplitBregmanROF");
 }

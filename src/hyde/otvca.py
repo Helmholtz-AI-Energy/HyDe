@@ -2,10 +2,15 @@ import torch
 
 from . import dwt3d, utils
 
-__all__ = ["WSRRR"]
+from skimage.restoration import denoise_tv_bregman
+
+# import split_bregman
 
 
-class WSRRR(torch.nn.Module):
+__all__ = ["OTVCA"]
+
+
+class OTVCA(torch.nn.Module):
     """
     WSRRR - Wavelet-based Sparse Reduced-Rank Regression
 
@@ -21,7 +26,7 @@ class WSRRR(torch.nn.Module):
     """
 
     def __init__(self, decomp_level=3, wavelet_level=5, padding_method="symmetric"):
-        super(WSRRR, self).__init__()
+        super(OTVCA, self).__init__()
         self.decomp_level = decomp_level  # L
         self.wavelet_name = "db" + str(wavelet_level)
         self.device = "cpu"
@@ -74,12 +79,12 @@ class WSRRR(torch.nn.Module):
         normalized_y = (x_2d - x_min) / (x_max - x_min)
         # [~, ~, V1] = svd(NRY, 'econ');
         # matlab returns the non-transposed V, torch DOES transpose
-        _, _, vh = torch.linalg.svd(normalized_y)
+        _, _, vh = torch.linalg.svd(normalized_y, full_matrices=False)
         v1 = vh.T
         # V = V1(:, 1: r_max);
         v = v1[:, :features]
         # FE = zeros(nr1, nc1, r_max);
-        fe = torch.zeros((nr1, nc1, features), device=x.device, dtype=x.device)
+        fe = torch.zeros((nr1, nc1, features), dtype=x.dtype, device=x.device)
         # for fi=1:tol
         #     C1 = NRY * V(:, 1: r_max);
         #     PC = reshape(C1, nr1, nc1, r_max);
@@ -94,14 +99,21 @@ class WSRRR(torch.nn.Module):
         for fi in range(num_itt):
             c1 = normalized_y @ v[:, :features]
             pc = c1.reshape((nr1, nc1, features))
-            for j in range(features):
-                fe[:, :, j] = utils.denoise_tv_bregman(
-                    image=pc[:nr1, :nc1, j], weight=1 / lam, eps=0.1
-                )
+            print(fe.shape)
+            # for j in range(features):
+            #     print(j)
+            fe[:, :, :] = torch.tensor(denoise_tv_bregman(image=pc[:nr1, :nc1, :].numpy(),
+                weight=1/lam, eps=0.1))
+
+            # fe[:, :, :] = utils.denoise_tv_bregman(
+            #     image=pc[:nr1, :nc1, :], weight=1 / lam, eps=0.1
+            # )
             fe_reshape = fe.reshape((nr1 * nc1, features))
             m = normalized_y.T @ fe_reshape
-            c, _, gh = torch.linalg.svd(m)
+            c, _, gh = torch.linalg.svd(m, full_matrices=False)
+            print(fi, m.shape, c.shape, gh.shape)
             v = c @ gh
+            break
         # end
         # Yr=reshape(RFE * V',nr1,nc1,p1);
         return (fe_reshape @ v.T).reshape((nr1, nc1, p1))
