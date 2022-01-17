@@ -7,8 +7,6 @@
     Learn more under: https://pyscaffold.org/
 """
 import setuptools
-from setuptools import Extension, setup
-from torch.utils import cpp_extension
 
 if __name__ == "__main__":
     with open("README.md", "r", encoding="utf-8") as fh:
