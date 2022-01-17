@@ -1,10 +1,10 @@
-from typing import Optional, Tuple
+from typing import Iterable, Optional, Tuple, Union
 
 import torch
 from torch.nn.functional import pad
-import time
 
 __all__ = [
+    "atleast_3d",
     "custom_pca_image",
     "denoise_tv_bregman",
     "diff",
@@ -17,292 +17,146 @@ __all__ = [
 ]
 
 
-def denoise_tv_bregman(
-    image: torch.Tensor,
-    weight: float = 5.0,
-    max_iter: int = 100,
-    eps: float = 1e-3,
-    isotropic: bool = True,
-    channel_axis: Optional[int] = None,
-) -> torch.Tensor:
+def atleast_3d(image):
     """
-    Lifted from `scikit learn <https://scikit-image.org/docs/dev/api/skimage.restoration.html#skimage.restoration.denoise_tv_bregman>`_
-    and adapted for torch.
+    to ensure the image has at least 3 dimensions
+    if the input image already has at least 3 dimensions, just return the image
+    otherwise, extend the dimensionality of the image to 3 dimensions
 
-    Perform total-variation denoising using split-Bregman optimization.
-    Total-variation denoising (also know as total-variation regularization)
-    tries to find an image with less total-variation under the constraint
-    of being similar to the input image, which is controlled by the
-    regularization parameter ([1]_, [2]_, [3]_, [4]_).
     Parameters
     ----------
     image : torch.Tensor
-        Input data to be denoised (converted using img_as_float`).
-    weight : float
-        Denoising weight. The smaller the `weight`, the more denoising (at
-        the expense of less similarity to the `input`). The regularization
-        parameter `lambda` is chosen as `2 * weight`.
-    eps : float, optional
-        Relative difference of the value of the cost function that determines
-        the stop criterion. The algorithm stops when::
-            SUM((u(n) - u(n-1))**2) < eps
-    max_iter : int, optional
-        Maximal number of iterations used for the optimization.
-    isotropic : boolean, optional
-        Switch between isotropic and anisotropic TV denoising.
-    channel_axis : int or None, optional
-        If None, the image is assumed to be a grayscale (single channel) image.
-        Otherwise, this parameter indicates which axis of the array corresponds
-        to channels.
+        input image
 
-    Returns
-    -------
-    torch.Tensor
-        Denoised image.
-
-    References
-    ----------
-    .. [1] https://en.wikipedia.org/wiki/Total_variation_denoising
-    .. [2] Tom Goldstein and Stanley Osher, "The Split Bregman Method For L1
-           Regularized Problems",
-           ftp://ftp.math.ucla.edu/pub/camreport/cam08-29.pdf
-    .. [3] Pascal Getreuer, "Rudin–Osher–Fatemi Total Variation Denoising
-           using Split Bregman" in Image Processing On Line on 2012–05–19,
-           https://www.ipol.im/pub/art/2012/g-tvd/article_lr.pdf
-    .. [4] https://web.math.ucsb.edu/~cgarcia/UGProjects/BregmanAlgorithms_JacquelineBush.pdf
+    Return
+    ------
+    image : torch.Tensor
+        input image
     """
-    rows = image.shape[0]
-    cols = image.shape[1]
-    try:
-        dims = image.shape[2]
-    except IndexError:
-        dims = 1
+    dim = list(image.shape)
 
-    weight = torch.tensor(weight, dtype=image.dtype, device=image.device)
-
-    shape_ext = (rows + 2, cols + 2, dims)
-    out = torch.zeros(shape_ext, dtype=image.dtype, device=image.device)
-
-    if channel_axis is not None:
-        channel_out = torch.zeros(shape_ext[:2] + (1,), dtype=image.dtype, device=image.device)
-        for c in range(image.shape[-1]):
-            # the algorithm below expects 3 dimensions to always be present.
-            # slicing the array in this fashion preserves the channel dimension
-            # for us
-            channel_in = image[..., c : c + 1]
-            if not channel_in.is_contiguous():
-                channel_in = channel_in.contiguous()
-            _denoise_tv_bregman_work(
-                channel_in, weight, max_iter, eps, isotropic, channel_out
-            )
-            out[..., c] = channel_out[..., 0]
+    if len(dim) >= 3:
+        return image
     else:
-        if not image.is_contiguous():
-            image = image.contiguous()
-        _denoise_tv_bregman_work(image, weight, max_iter, eps, isotropic, out)
-
-    return out[1:-1, 1:-1].squeeze()
+        dim.append(1)
+        return image.view(dim)
 
 
-def _denoise_tv_bregman_work(
-    img: torch.Tensor,
-    weight: float,
-    max_iter: int,
-    eps: float,
-    isotropic: bool,
-    out: torch.Tensor = None,
-) -> torch.Tensor:
+def denoise_tv_bregman(image, weight, max_iter=100, eps=1e-3):
     """
-    Lifted from scikit learn's cython implementation and adapted for torch
-
-    See :func:`denoise_tv_bregman <hyde.utils.denoise_tv_bregman>` for more information.
-    This function does the actual work of the function.
+    Perform total-variation denoising using split-Bregman optimization.
 
     Parameters
     ----------
-    img : torch.Tensor
-        Input data to be denoised (converted using img_as_float`).
+    image : torch.Tensor
+        Input data to be denoised.
     weight : float
-        Denoising weight. The smaller the `weight`, the more denoising (at
-        the expense of less similarity to the `input`). The regularization
-        parameter `lambda` is chosen as `2 * weight`.
-    eps : float, optional
-        Relative difference of the value of the cost function that determines
-        the stop criterion. The algorithm stops when::
-            SUM((u(n) - u(n-1))**2) < eps
+        Denoising weight. The smaller the 'weight', the more denoising (at
+        the expense of less similarity to the 'input').
     max_iter : int, optional
         Maximal number of iterations used for the optimization.
-    isotropic : boolean, optional
-        Switch between isotropic and anisotropic TV denoising.
+    eps : float, optional
+        The threshold of distance between denoised image in iterations
+        The algorithm stops when image distance is smaller than eps
 
     Returns
     -------
-    torch.Tensor
-        Denoised image.
+    denoised_image : torch.Tensor
 
-    References
-    ----------
-    .. [1] https://en.wikipedia.org/wiki/Total_variation_denoising
-    .. [2] Tom Goldstein and Stanley Osher, "The Split Bregman Method For L1
-           Regularized Problems",
-           ftp://ftp.math.ucla.edu/pub/camreport/cam08-29.pdf
-    .. [3] Pascal Getreuer, "Rudin–Osher–Fatemi Total Variation Denoising
-           using Split Bregman" in Image Processing On Line on 2012–05–19,
-           https://www.ipol.im/pub/art/2012/g-tvd/article_lr.pdf
-    .. [4] https://web.math.ucsb.edu/~cgarcia/UGProjects/BregmanAlgorithms_JacquelineBush.pdf
+    Sources
+    -------
+    - https://github.com/shakes76/PatternFlow/blob/master/algorithms/denoise/denoise_tv_bregman/denoise_tv_bregman.py
+    - skimage.restoration.denoise_tv_bregman
+
     """
-    try:
-        rows, cols, dims = img.shape
-    except ValueError:
-        rows, cols = img.shape
-        dims = 1
-        img = img.unsqueeze(-1)
-    total = rows * cols * dims
+    image = atleast_3d(image)
 
-    try:
-        rmse = torch.finfo(img.dtype).max
-    except TypeError:
-        # this will fail if the image is ints, but it must be floats anyway, casting
-        img = img.to(torch.float)  # TODO: float32 or 64?
-        rmse = torch.finfo(img.dtype).max
+    rows, cols, dims = image.shape
+    rows2 = rows + 2
+    cols2 = cols + 2
 
-    if out is None:
-        out = torch.zeros_like(img)
+    shape_extend = (rows2, cols2, dims)
+    # out is firstly created as zeros-like tensor with size as shape_extend
+    out = torch.zeros(shape_extend, dtype=torch.float)
 
-    dx = out.clone()
-    dy = out.clone()
-    bx = out.clone()
-    by = out.clone()
-    # float defs
-    # ux, uy, uprev, unew, bxx, byy, dxx, dyy, s, tx, ty
-    i = 0
+    dx = out.clone().detach()
+    dy = out.clone().detach()
+    bx = out.clone().detach()
+    by = out.clone().detach()
+
+    out = prep_out_bregman(image, out)
+
     lam = 2 * weight
+    rmse = float("inf")
     norm = weight + 4 * lam
-    # more defs: out_rows, out_cols (ssize_t)
 
-    # skipping the nogil from cython
-    out_rows, out_cols = out.shape[:2]
-    print(out.shape, img.shape)
-    out[1 : out_rows - 1, 1 : out_cols - 1] = img
-
-    # reflect image
-    out[0, 1 : out_cols - 1] = img[1, :]
-    out[1 : out_rows - 1, 0] = img[:, 1]
-    out[out_rows - 1, 1 : out_cols - 1] = img[rows - 1, :]
-    out[1 : out_rows - 1, out_cols - 1] = img[:, cols - 1]
-
+    i = 0
+    regularization = torch.mul(image, weight)
+    # iterative optimization method
     while i < max_iter and rmse > eps:
+        uprev = out[1:-1, 1:-1, :]
 
-        rmse = 0
+        ux = out[1:-1, 2:, :] - uprev
+        uy = out[2:, 1:-1, :] - uprev
+        # Gauss-Seidel method
+        unew = torch.div(
+            (
+                torch.mul(
+                    (
+                        out[2:, 1:-1, :]
+                        + out[0:-2, 1:-1, :]
+                        + out[1:-1, 2:, :]
+                        + out[1:-1, 0:-2, :]
+                        + dx[1:-1, 0:-2, :]
+                        - dx[1:-1, 1:-1, :]
+                        + dy[0:-2, 1:-1, :]
+                        - dy[1:-1, 1:-1, :]
+                        - bx[1:-1, 0:-2, :]
+                        + bx[1:-1, 1:-1, :]
+                        - by[0:-2, 1:-1, :]
+                        + by[1:-1, 1:-1, :]
+                    ),
+                    lam,
+                )
+                + regularization
+            ),
+            norm,
+        )
+        out[1:-1, 1:-1, :] = unew.clone().detach()
 
-        _split_bregmann_innerloop(
-            out, rows, cols, dims, lam, dx, dy, bx, by, isotropic, rmse, img, weight, norm
+        rmse = torch.norm(unew - uprev, p=2)
+
+        bxx = bx[1:-1, 1:-1, :].clone().detach()
+        byy = by[1:-1, 1:-1, :].clone().detach()
+
+        tx = ux + bxx
+        ty = uy + byy
+        s = torch.sqrt(torch.pow(tx, 2) + torch.pow(ty, 2))
+        dxx = torch.div(
+            torch.addcmul(
+                input=torch.zeros(s.shape, dtype=torch.float), tensor1=s, tensor2=tx, value=lam
+            ),
+            torch.add(torch.mul(s, lam), 1),
+        )
+        dyy = torch.div(
+            torch.addcmul(
+                input=torch.zeros(s.shape, dtype=torch.float), tensor1=s, tensor2=ty, value=lam
+            ),
+            torch.add(torch.mul(s, lam), 1),
         )
 
-        rmse = torch.sqrt(torch.tensor(rmse / total, device=img.device))
+        dx[1:-1, 1:-1, :] = dxx.clone().detach()
+        dy[1:-1, 1:-1, :] = dyy.clone().detach()
+
+        bx[1:-1, 1:-1, :] += ux - dxx
+        by[1:-1, 1:-1, :] += uy - dyy
+
         i += 1
-    return out
+    # return the denoised image excluding the extended area
+    return out[1:-1, 1:-1]
 
 
-def _split_bregmann_innerloop(
-    out: torch.Tensor,
-    rows: int,
-    cols: int,
-    dims: int,
-    lam: float,
-    dx: torch.Tensor,
-    dy: torch.Tensor,
-    bx: torch.Tensor,
-    by: torch.Tensor,
-    isotropic: bool,
-    rmse: float,
-    img: torch.Tensor,
-    weight: float,
-    norm: float,
-) -> None:
-
-    row_range = torch.arange(1, rows + 1)
-    col_range = torch.arange(1, cols + 1)
-    k_range = torch.arange(dims)
-
-    for r in row_range:
-        # rm1_out = out[r - 1]
-        # rp1_out = out[r + 1]
-        # r_out = out[r]
-        for c in col_range:
-            for k in k_range:
-                uprev = out[r, c, k]
-
-                # forward derivatives
-                ux = out[r, c + 1, k] - uprev
-                uy = out[r + 1, c, k] - uprev
-
-                # Gauss-Seidel method
-                # t0 = time.perf_counter()
-                unew = (
-                    lam
-                    * (
-                        out[r + 1, c, k] #.item()
-                        + out[r - 1, c, k]#.item()
-                        + out[r, c + 1, k]#.item()
-                        + out[r, c - 1, k]#.item()
-                        + dx[r, c - 1, k]#.item()
-                        - dx[r, c, k]#.item()
-                        + dy[r - 1, c, k]#.item()
-                        - dy[r, c, k]#.item()
-                        - bx[r, c - 1, k]#.item()
-                        + bx[r, c, k]#.item()
-                        - by[r - 1, c, k]#.item()
-                        + by[r, c, k]#.item()
-                    )
-                    + weight * img[r - 1, c - 1, k]
-                ) / norm
-                # print(r, c, k, "time for unew", time.perf_counter() - t0)
-                out[r, c, k] = unew
-
-                # update root mean square error
-                tx = unew - uprev
-                rmse += tx * tx
-
-                bxx = bx[r, c, k]
-                byy = by[r, c, k]
-
-                # dxx = torch.tensor([], device=img.device)
-                # dyy = torch.tensor([], device=img.device)
-
-                # d_subproblem after reference [4]
-                if isotropic:
-                    tx = ux + bxx
-                    ty = uy + byy
-                    # s = torch.sqrt(torch.tensor(tx * tx + ty * ty, device=img.device))
-                    s = (tx * tx + ty * ty) ** 0.5
-                    dxx = s * lam * tx / (s * lam + 1)
-                    dyy = s * lam * ty / (s * lam + 1)
-                else:
-                    s = ux + bxx
-                    if s > 1 / lam:
-                        dxx = s - 1 / lam
-                    elif s < -1 / lam:
-                        dxx = s + 1 / lam
-                    else:
-                        dxx = 0
-
-                    s = uy + byy
-                    if s > 1 / lam:
-                        dyy = s - 1 / lam
-                    elif s < -1 / lam:
-                        dyy = s + 1 / lam
-                    else:
-                        dyy = 0
-
-                dx[r, c, k] = dxx
-                dy[r, c, k] = dyy
-
-                bx[r, c, k] += ux - dxx
-                by[r, c, k] += uy - dyy
-
-
-def diff(x: torch.Tensor, n: int = 1, dim=0):
+def diff(x: torch.Tensor, n: int = 1, dim=0) -> torch.Tensor:
     """
     Find the differences in x. This will return a torch.Tensor of the same shape as `x`
     with the requisite number of zeros added to the end (`n`).
@@ -331,7 +185,7 @@ def diff(x: torch.Tensor, n: int = 1, dim=0):
     return y
 
 
-def diff_dim0_replace_last_row(x: torch.Tensor):
+def diff_dim0_replace_last_row(x: torch.Tensor) -> torch.Tensor:
     """
     Find the single row differences in x and then put the second to last row as the last row in
     the result
@@ -342,7 +196,7 @@ def diff_dim0_replace_last_row(x: torch.Tensor):
 
     Returns
     -------
-    diff_0_last_row
+    diff_0_last_row: torch.Tensor
         the single row differences with the second to last row and the last row
     """
     u0 = (-1.0 * x[0]).unsqueeze(0)
@@ -352,11 +206,39 @@ def diff_dim0_replace_last_row(x: torch.Tensor):
     return ret
 
 
+def prep_out_bregman(image: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
+    """
+    sets the values of `out` to be what symmetric padding image with a single row/col would be
+
+    Parameters
+    ----------
+    image: torch.Tensor
+        original image
+    out: torch.Tensor
+        output tensor for denoise TV Bregman
+
+    Returns
+    -------
+    torch.Tensor:
+        out tensor set with values from image
+    """
+    out_rows, out_cols = out.shape[:2]
+    rows, cols = out_rows - 2, out_cols - 2
+
+    out[1 : out_rows - 1, 1 : out_cols - 1] = image
+
+    out[0, 1 : out_cols - 1] = image[1, :]
+    out[1 : out_rows - 1, 0] = image[:, 1]
+    out[out_rows - 1, 1 : out_cols - 1] = image[rows - 1, :]
+    out[1 : out_rows - 1, out_cols - 1] = image[:, cols - 1]
+    return out
+
+
 def estimate_hyperspectral_noise(
-    data,
-    noise_type="additive",
+    data: torch.Tensor,
+    noise_type: torch.Tensor = "additive",
     calculation_dtype: torch.dtype = torch.float,
-):
+) -> torch.Tensor:
     """
     Infer teh noise in a hyperspectral dataset. Assumes that the
     reflectance at a given band is well modelled by a linear regression
@@ -433,7 +315,7 @@ def _est_additive_noise(
     return w, ret
 
 
-def custom_pca_image(img):
+def custom_pca_image(img: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     MUST BE IN (ROWS, COLS, CHANNELS)
 
@@ -443,7 +325,10 @@ def custom_pca_image(img):
 
     Returns
     -------
-
+    v_pca: torch.Tensor
+        the vh from torch.linalg.svd(img, (nr * nc, p), full_matrices=False)
+    pc: torch.Tensor
+        U @ s reshaped into the number of rows and columns of the input img
     """
     nr, nc, p = img.shape
     # y_w -> h x w X c
@@ -455,7 +340,7 @@ def custom_pca_image(img):
     return v_pca, pc
 
 
-def soft_threshold(x: torch.Tensor, threshold):
+def soft_threshold(x: torch.Tensor, threshold: Union[int, float, torch.Tensor]) -> torch.Tensor:
     """
     Calculate the soft threshold of an input
 
@@ -476,7 +361,7 @@ def soft_threshold(x: torch.Tensor, threshold):
     return y
 
 
-def sure_thresh(signal: torch.Tensor):
+def sure_thresh(signal: torch.Tensor) -> torch.Tensor:
     """
     This function find the threshold value adapted to the given signal using a modified rule
     based on SURE for a soft threshold estimator.
@@ -513,7 +398,9 @@ def sure_thresh(signal: torch.Tensor):
     return thr
 
 
-def sure_soft_modified_lr2(x: torch.Tensor, tuning_interval=None):
+def sure_soft_modified_lr2(
+    x: torch.Tensor, tuning_interval: Optional[torch.Tensor] = None
+) -> torch.Tensor:
     """
     This function was adapted from a MATLAB directory, however it is currently unused.
 
@@ -560,7 +447,7 @@ def sure_soft_modified_lr2(x: torch.Tensor, tuning_interval=None):
     return sure1, h_opt, tuning_interval, min_sure
 
 
-def symmetric_pad(tens, n):
+def symmetric_pad(tens: torch.Tensor, n: Union[int, Iterable]) -> torch.Tensor:
     """
     Replacement for symmetric padding in torch (not in function space)
 
@@ -576,7 +463,7 @@ def symmetric_pad(tens, n):
 
     Returns
     -------
-    padded
+    padded: torch.Tensor
         2D tensor with symmetric padding
     """
     # img_pad = np.pad(img, ((N, N), (N, N)), 'symmetric')
