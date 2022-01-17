@@ -43,11 +43,11 @@ class HyRes(torch.nn.Module):
     no. 12, pp. 2335-2339, Dec. 2017, doi: 10.1109/LGRS.2017.2764059.
     """
 
-    def __init__(self, decomp_level=5, wavelet_level=5, padding_method="symmetric"):
+    def __init__(self, decomp_level=5, wavelet_level=5, padding_method="symmetric", device="cpu"):
         super(HyRes, self).__init__()
         self.decomp_level = decomp_level  # L
         self.wavelet_name = "db" + str(wavelet_level)
-        self.device = "cpu"
+        self.device = device
 
         self.padding_method = padding_method
 
