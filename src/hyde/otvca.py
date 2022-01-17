@@ -78,6 +78,6 @@ class OTVCA(torch.nn.Module):
             m = normalized_y.T @ fe_reshape
             c, _, gh = torch.linalg.svd(m, full_matrices=False)
             v = c @ gh
-        # Yr=reshape(RFE * V',nr1,nc1,p1);
+
         yr = (fe_reshape @ v.T).reshape((nr1, nc1, p1))
         return yr, fe
