@@ -3,10 +3,12 @@ import torch
 from . import utils
 from .hyres import HyRes
 
+__all__ = ["HyMiNoR"]
 
-class HyMiNoR:
+
+class HyMiNoR(torch.nn.Module):
     """
-    HyMiNoT -- Hyperspectral Mixed Gaussian and Sparse Noise Reduction
+    HyMiNoR -- Hyperspectral Mixed Gaussian and Sparse Noise Reduction
 
     This is a two step mixed nose removal technique for hypersperctral images which was presented
     in [1] The two steps are:
@@ -15,6 +17,19 @@ class HyMiNoR:
         2. The sparse noised is solved as: :math:`\min\limits_{X} ||H-X||_1+ \lambda ||X*D'||_1` where :math:`D` is the difference matrix.
 
     The data used should be normalized to range from 0 to 1.
+
+    Parameters
+    ----------
+    decomp_level : int, optional
+        the level of the wavelet decomposition to do
+        default: 5
+    wavelet_level : int, optional
+        the integer value indicating which Daubechies wavelet to use. i.e. 5 -> db5
+        default: 5
+    padding_method : str, optional
+        the method used to pad the image during the DWT transform.
+        options: [zero, symmetric, periodization, reflect, periodic]
+        default: "symmetric"
 
     Notes
     -----
@@ -26,10 +41,15 @@ class HyMiNoR:
     [1] B. Rasti, P. Ghamisi and J. A. Benediktsson, "Hyperspectral Mixed Gaussian and Sparse Noise Reduction," in IEEE Geoscience and Remote Sensing Letters, vol. 17, no. 3, pp. 474-478, March 2020, doi: 10.1109/LGRS.2019.2924344.
     """
 
-    def __init__(self):
-        self.hyres = HyRes()
+    def __init__(self, decomp_level=5, wavelet_level=5, padding_method="symmetric"):
+        super(HyMiNoR, self).__init__()
+        self.hyres = HyRes(
+            decomp_level=decomp_level,
+            wavelet_level=wavelet_level,
+            padding_method=padding_method,
+        )
 
-    def forward(self, x: torch.Tensor, lam: int = 10):
+    def forward(self, x: torch.Tensor, lam: float = 10.0, iterations: int = 50):
         """
         Do the HyMiNoR decomposition.
 
@@ -37,22 +57,28 @@ class HyMiNoR:
         ----------
         x : torch.Tensor
             the image/array to be de-noised
-        lam : int, optional
+        lam : float, optional
             the tuning parameter
+            default: 10.
+        iterations : int, optional
+            the number of iterations to do
+            default: 50
 
         Returns
         -------
         denoised image : torch.Tensor
         """
+        base_dtype = x.dtype
         # H_M -> x ; lambda -> lam
-        mu1, mu2, its = 0.5, 0.5, 50
-        hyres_result = self.hyres.forward(x)
+        mu1, mu2, its = 0.5, 0.5, iterations
         # H=HyRes(H_M);
+        hyres_result = self.hyres.forward(x)
+
         m, n, d = hyres_result.shape
-        mn = m * n
         # [m,n,d]=size(H);
-        hyres_reshaped_t = torch.conj(hyres_result.reshape((mn, d))).T
+        mn = m * n
         # Y=reshape(H,mn,d)';
+        hyres_reshaped_t = torch.conj(hyres_result.reshape((mn, d))).T
         l1 = torch.zeros((d, mn), device=x.device, dtype=x.dtype)
         l2 = torch.zeros((d, mn), device=x.device, dtype=x.dtype)
         v1 = torch.zeros((d, mn), device=x.device, dtype=x.dtype)
@@ -60,36 +86,31 @@ class HyMiNoR:
         xx = torch.zeros((d, mn), device=x.device, dtype=x.dtype)
         # X=L1;
         eye_d = torch.eye(d, device=x.device, dtype=x.dtype)
-        hold = utils.vertical_difference_transpose(utils.vertical_difference(eye_d))
+        hold = utils.diff_dim0_replace_last_row(utils.diff(eye_d))
         u, s, v = torch.linalg.svd(hold.to(torch.float64), full_matrices=False)
-        u = u.to(torch.float32)
-        s = s.to(torch.float32)
-        v = torch.conj(v.T).to(torch.float32)
+        v = torch.conj(v.T)
 
         magic = torch.chain_matmul(
             v,
             torch.diag(1.0 / (mu1 + mu2 * s)),
-            u.T,
-        ).to(torch.float32)
-        for _ in range(its):
+            torch.conj(u.T),
+        ).to(base_dtype)
+
+        for i in range(its):
             # subminimization problems
             hold1 = -mu1 * (v1 - hyres_reshaped_t - l1)
-            hold2 = mu2 * utils.vertical_difference_transpose((v2 - l2))
-            xx = magic @ (hold1 + hold2)
+            hold2 = mu2 * utils.diff_dim0_replace_last_row((v2 - l2))
             # X=Majic*(-mu1*(V1-Y-L1)+mu2*Dvt(V2-L2));
-            # % V-Step
+            xx = magic @ (hold1 + hold2)
+
             v1 = utils.soft_threshold(hyres_reshaped_t - xx + l1, 1.0 / mu1)
-            # V1=soft_threshold(Y-X+L1,1/mu1);
-            dv_xx = utils.vertical_difference(xx)
-            v2 = utils.soft_threshold(dv_xx + l2, lam / mu2)
-            # V2=soft_threshold(Dv(X)+L2,lambda/mu2);
+            dv_xx = utils.diff(xx)
+            v2 = utils.soft_threshold(dv_xx + l2, float(lam) / mu2)
             # Updating L1 and L2
-            l1 = l1 + hyres_reshaped_t - xx - v1
-            # L1=L1+Y-X-V1;
-            l2 = l2 + dv_xx - v2
-            # L2=L2+Dv(X)-V2;
-        # H_DN=reshape(X',m,n,d);
-        ret = torch.reshape(torch.conj(xx).T, (m, n, d))
+            l1 += hyres_reshaped_t - xx - v1
+            l2 += dv_xx - v2
+
+        ret = torch.reshape(xx.T, (m, n, d))
         return ret
 
 
