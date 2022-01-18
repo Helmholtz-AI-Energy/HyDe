@@ -72,7 +72,7 @@ class OTVCA(torch.nn.Module):
             c1 = normalized_y @ v[:, :features]
             pc = c1.reshape((nr1, nc1, features))
 
-            fe = utils.denoise_tv_bregman(image=pc, weight=1 / lam)
+            fe = utils.denoise_tv_bregman(image=pc, weight=lam, eps=0.1)
 
             fe_reshape = fe.reshape((nr1 * nc1, features))
             m = normalized_y.T @ fe_reshape
