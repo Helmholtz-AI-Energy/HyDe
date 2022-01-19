@@ -20,5 +20,6 @@ from .dct import *
 from .dwt3d import *
 from .hyminor import *
 from .hyres import *
+from .otvca import *
 from .utils import *
 from .wsrrr import *
