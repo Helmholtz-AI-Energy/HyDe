@@ -11,6 +11,7 @@ __all__ = [
     "diff",
     "diff_dim0_replace_last_row",
     "estimate_hyperspectral_noise",
+    "hysime",
     "peak_snr",
     "soft_threshold",
     "sure_thresh",
@@ -317,6 +318,74 @@ def _est_additive_noise(
     w = w.to(dtype=torch.float)
     ret = ret.to(dtype=torch.float)
     return w, ret
+
+
+def hysime(input, noise, noise_corr):
+    """
+    HySime: Hyperspectral signal subspace estimation, adapted from [1].
+
+    Parameters
+    ----------
+    input : torch.Tensor
+    noise : torch.Tensor
+    noise_corr : torch.Tensor
+
+    Returns
+    -------
+    signal_subspace_dim : torch.Tensor
+    eigs_span_subspace : torch.Tensor
+        matrix which columns are the eigenvalues that span the signal subspace
+
+    References
+    ----------
+    [1] S. Devika and S. M. K. Chaitanya, "Signal estimation of hyperspectral data using HYSIME algorithm," 2016
+        International Conference on Research Advances in Integrated Navigation Systems (RAINS), 2016, pp. 1-3,
+        doi: 10.1109/RAINS.2016.7764372.
+    """
+    # [L N] = size(y);
+    l, n = input.shape
+    # [Ln Nn] = size(n);
+    ln, nn = noise.shape
+    # [d1 d2] = size(Rn);
+    d1, d2 = noise_corr.shape
+    # if Ln~=L | Nn~=N, % n is an empty matrix or with different size
+    #   error('empty noise matrix or its size does not agree with size of y\n'),
+    # end
+    # ## above is just raise statements
+    # if (d1~=d2 | d1~=L)
+    #     fprintf('Bad noise correlation matrix\n'),
+    #     Rn = n * n'/N;
+    # end
+    x = input - noise
+    # Ry = y * y'/N;   % sample correlation matrix
+    ry = input @ input.T / float(n)
+    rx = x @ x.T / float(n)  # signal correlation matrix estimates
+    # Ry = np.dot(y, y.T) / N
+    # Rx = np.dot(x, x.T) / N
+    # E, dx, V = np.linalg.svd(Rx)
+    u, s, vh = torch.linalg.svd(rx)
+    # [E, D] = svd(Rx); % eigen values of Rx in decreasing order, equation(15)
+    # dx = diag(D);
+    #
+    # if verbose, fprintf(1, 'Estimating the number of endmembers\n');end
+    # Rn = Rn + sum(diag(Rx)) / L / 10 ^ 5 * eye(L);
+    noise_corr += (
+        rx.diag().sum() / float(l) / 1.0e5 * torch.eye(l, device=input.device, dtype=input.dtype)
+    )
+    #
+    # Py = diag(E'*Ry*E); %equation (23)
+    py = torch.diag(u.T @ ry @ u)
+    # Pn = diag(E'*Rn*E); %equation (24)
+    pn = torch.diag(u.T @ noise_corr @ u)
+    # cost_F = -Py + 2 * Pn; % equation(22)
+    cost_f = -py + 2 * pn
+    # kf = sum(cost_F < 0);
+    sig_subspace_dim = (cost_f < 0).sum()
+    # [dummy, ind_asc] = sort(cost_F, 'ascend');
+    _, indices = torch.sort(cost_f)
+    # Ek = E(:, ind_asc(1: kf));
+    eigs_span_subspace = u[:, indices[:sig_subspace_dim]]
+    return sig_subspace_dim, eigs_span_subspace
 
 
 def peak_snr(img1, img2):
