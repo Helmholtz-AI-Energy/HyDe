@@ -1,8 +1,8 @@
-from typing import Union
+from typing import Tuple
 
 import torch
 
-from . import dwt3d, utils
+from . import utils
 
 __all__ = ["OTVCA"]
 
@@ -32,8 +32,8 @@ class OTVCA(torch.nn.Module):
         super(OTVCA, self).__init__()
 
     def forward(
-        self, x: torch.Tensor, features: int, num_itt: int = 200, lam: float = 0.05
-    ) -> Union[torch.Tensor, torch.Tensor]:
+        self, x: torch.Tensor, features: int, num_itt: int = 200, lam: float = 0.01
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Denoise an image `x` using the HyRes algorithm.
 
@@ -48,6 +48,7 @@ class OTVCA(torch.nn.Module):
             Number of iterations; 200 iterations are default value
         lam: float
             Tuning parameter; Default is 0.01 for normalized HSI
+            the value passed to the denoising algorithm is 1/lam
 
         Returns
         -------
@@ -56,12 +57,10 @@ class OTVCA(torch.nn.Module):
         fe : torch.Tensor
             Extracted features
         """
-        # key: Y -> x (image), r_max -> features, tol -> num_itt
         nr1, nc1, p1 = x.shape
         x_2d = x.reshape((nr1 * nc1, p1))
         x_min = x.min()
         x_max = x.max()
-        # NRY = (RY - m) / (M - m);
         normalized_y = (x_2d - x_min) / (x_max - x_min)
         _, _, vh = torch.linalg.svd(normalized_y, full_matrices=False)
         v1 = vh.T
@@ -72,12 +71,12 @@ class OTVCA(torch.nn.Module):
             c1 = normalized_y @ v[:, :features]
             pc = c1.reshape((nr1, nc1, features))
 
-            fe = utils.denoise_tv_bregman(image=pc, weight=lam, eps=0.1)
+            fe = utils.denoise_tv_bregman(image=pc, weight=1 / lam, eps=0.1, isotropic=True)
 
             fe_reshape = fe.reshape((nr1 * nc1, features))
             m = normalized_y.T @ fe_reshape
             c, _, gh = torch.linalg.svd(m, full_matrices=False)
             v = c @ gh
 
-        yr = (fe_reshape @ v.T).reshape((nr1, nc1, p1))
-        return yr, fe
+        denoised_image = (fe_reshape @ v.T).reshape((nr1, nc1, p1))
+        return denoised_image, fe
