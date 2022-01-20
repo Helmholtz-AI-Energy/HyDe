@@ -48,6 +48,8 @@ if __name__ == "__main__":
                 "torch>=1.8.0",
                 # "pytorch-wavelets>=1.3.0",
                 "PyWavelets>=1.1.1",
+                "bm3d",
+                # NOTE: need to have openBlas for bm3d
             ],
         )
     except:  # noqa

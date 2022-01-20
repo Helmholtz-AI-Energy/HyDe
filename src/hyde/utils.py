@@ -5,6 +5,7 @@ import torch
 from torch.nn.functional import pad
 
 __all__ = [
+    "add_noise_std",
     "atleast_3d",
     "custom_pca_image",
     "denoise_tv_bregman",
@@ -20,6 +21,86 @@ __all__ = [
     "vertical_difference",
     "vertical_difference_transpose",
 ]
+
+
+def add_noise_std(image, sigma, noise_type, iid=True):
+    # switch which_case
+    if isinstance(sigma, int):
+        sigma = [0.10, 0.08, 0.06, 0.04, 0.02][sigma]
+    if noise_type == "additive" and iid:
+        noise = sigma * torch.randn(image.shape)
+        img_noisy = image + noise
+        # case 'case1'
+        #     %--------------------- Case 1 --------------------------------------
+        #
+        #     % zero-mean Gaussian noise is added to all the bands of the Washington DC Mall
+        #     % and Pavia city center data.
+        #     % The noise standard deviation values are 0.02, 0.04, 0.06, 0.08, and 0.10, respectively.
+        #     noise_type='additive';
+        #     iid = 1; %It is true that noise is i.i.d.
+        #         %generate noisy image
+        #         noise = sigma.*randn(size(img_clean));
+        #         img_noisy=img_clean+noise;
+    elif noise_type == "additive" and not iid:
+        sigma = torch.rand(image.shape[-1]) * 0.1
+        noise = torch.randn(image.shape)
+        for band in range(image.shape[-1]):
+            noise[:, :, band] *= sigma[band]
+        img_noisy = image + noise
+
+        # case 'case2'
+        #     %---------------------  Case 2 ---------------------
+        #
+        #     % Different variance zero-mean Gaussian noise is added to
+        #     % each band of the two HSI datasets.
+        #     % The std values are randomly selected from 0 to 0.1.
+        #     noise_type='additive';
+        #     iid = 0; %noise is not i.i.d.
+        #     rand('seed',0);
+        #     sigma = rand(1,band)*0.1;
+        #     randn('seed',0);
+        #     noise= randn(size(img_clean));
+        #     for cb=1:band
+        #         noise(:,:,cb) = sigma(cb)*noise(:,:,cb);
+        #
+        #     end
+        #     img_noisy=img_clean+noise;
+    elif noise_type == "poisson":
+        img_wN = image
+        snr_db = 15
+        snr_set = torch.exp(
+            snr_db * torch.log(torch.tensor(10, device=image.device, dtype=image.dtype)) / 10
+        )
+        # case 'case3'
+        #     %  ---------------------  Case 3: Poisson Noise ---------------------
+        #     noise_type='poisson';
+        #      iid = NaN; % noise_type is set to 'poisson',
+        #     img_wN = img_clean;
+        #
+        #     snr_db = 15;
+        #     snr_set = exp(snr_db*log(10)/10);
+
+        rc = image.shape[0] * image.shape[1]
+        bands = image.shape[-1]
+        img_wn_noisy = torch.zeros((bands, rc), dtype=image.dtype, device=image.device)
+        for i in range(bands):
+            img_wntmp = img_wN[:, :, i].unsqueeze(0)
+            # reshape(img_wN(:,:,i),[1,N]);
+            # img_wNtmp = max(img_wNtmp,0)
+            # todo: check to make sure that the max above just takes the stuff above 0
+            img_wntmp[img_wntmp <= 0] = 0
+            # factor = snr_set/( sum(img_wNtmp.^2)/sum(img_wNtmp) );
+            factor = snr_set / ((img_wntmp ** 2).sum() / img_wntmp.sum())
+            # img_wN_scale(i,1:N) = factor*img_wNtmp;
+            # img_wN_scale[i] = factor * img_wNtmp
+            # % Generates Poisson random samples
+            # img_wN_noisy(i,1:N) = poissrnd(factor*img_wNtmp);
+            img_wn_noisy[i] = torch.poisson(factor * img_wntmp)
+        #         img_noisy = reshape(img_wN_noisy', [row, column band]);
+        img_noisy = img_wn_noisy.T.reshape(image.shape)
+    else:
+        raise ValueError(f"noise type must be one of [poissson, additive], currently: {noise_type}")
+    return img_noisy
 
 
 def atleast_3d(image):
@@ -388,7 +469,22 @@ def hysime(input, noise, noise_corr):
     return sig_subspace_dim, eigs_span_subspace
 
 
-def peak_snr(img1, img2):
+def normalize(image: torch.Tensor, by_band=False) -> torch.Tensor:
+    if by_band:
+        out = torch.zeros_like(image)
+        for b in range(image.shape[-1]):
+            max_y = image[:, :, b].max()[0]
+            min_y = image[:, :, b].min()[0]
+            out[:, :, b] = (image[:, :, b] - min_y) / (max_y - min_y)
+    else:
+        # normalize the entire image, not based on the band
+        max_y = image.max()
+        min_y = image.min()
+        out = (image - min_y) / (max_y - min_y)
+    return out
+
+
+def peak_snr(img1: torch.Tensor, img2: torch.Tensor) -> float:
     """
     Compute the peak signal to noise ratio between two images
 
@@ -403,10 +499,10 @@ def peak_snr(img1, img2):
         peak signal to noise ration
     """
     img1 = img1.to(torch.float32) / 255.0
-    img2 = img2.to(torch.float32) / 255.0
+    img2 = img2.to(dtype=torch.float32, device=img1.device) / 255.0
     mse = torch.mean((img1 - img2) ** 2)
     if mse == 0:
-        return "Same Image"
+        return 0.0
     return 10 * math.log10(1.0 / mse)
 
 

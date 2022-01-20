@@ -107,6 +107,11 @@ class DWTForwardOverwrite(torch.nn.Module):
             self.h0_row = self.h0_row.to(x.dtype)
             self.h1_row = self.h1_row.to(x.dtype)
 
+        self.h0_col = self.h0_col.to(x.device)
+        self.h1_col = self.h1_col.to(x.device)
+        self.h0_row = self.h0_row.to(x.device)
+        self.h1_row = self.h1_row.to(x.device)
+
         # prev_ll_d0 = None
         # Do a multilevel transform
         for lvl in range(self.decomp_level):
@@ -129,6 +134,79 @@ class DWTForwardOverwrite(torch.nn.Module):
             yh.append(high)
 
         return full, ll, yh
+
+
+class DWTForward(torch.nn.Module):
+    """Performs a 2d DWT Forward decomposition of an image
+    Args:
+        J (int): Number of levels of decomposition
+        wave (str or pywt.Wavelet or tuple(ndarray)): Which wavelet to use.
+            Can be:
+            1) a string to pass to pywt.Wavelet constructor
+            2) a pywt.Wavelet class
+            3) a tuple of numpy arrays, either (h0, h1) or (h0_col, h1_col, h0_row, h1_row)
+        padding_method (str): 'zero', 'symmetric', 'reflect' or 'periodization'. The
+            padding scheme
+    """
+
+    def __init__(self, J=1, wave="db1", padding_method="zero"):
+        super().__init__()
+        if isinstance(wave, str):
+            wave = pywt.Wavelet(wave)
+        if isinstance(wave, pywt.Wavelet):
+            h0_col, h1_col = wave.dec_lo, wave.dec_hi
+            h0_row, h1_row = h0_col, h1_col
+        else:
+            if len(wave) == 2:
+                h0_col, h1_col = wave[0], wave[1]
+                h0_row, h1_row = h0_col, h1_col
+            elif len(wave) == 4:
+                h0_col, h1_col = wave[0], wave[1]
+                h0_row, h1_row = wave[2], wave[3]
+
+        # Prepare the filters
+        filts = lowlevel.prep_filt_afb2d(h0_col, h1_col, h0_row, h1_row)
+        self.register_buffer("h0_col", filts[0])
+        self.register_buffer("h1_col", filts[1])
+        self.register_buffer("h0_row", filts[2])
+        self.register_buffer("h1_row", filts[3])
+        self.J = J
+        self.mode_str = padding_method
+        self.mode = lowlevel.mode_to_int(self.mode_str)
+
+    def forward(self, x):
+        """Forward pass of the DWT.
+        Args:
+            x (tensor): Input of shape :math:`(N, C_{in}, H_{in}, W_{in})`
+        Returns:
+            (yl, yh)
+                tuple of lowpass (yl) and bandpass (yh) coefficients.
+                yh is a list of length J with the first entry
+                being the finest scale coefficients. yl has shape
+                :math:`(N, C_{in}, H_{in}', W_{in}')` and yh has shape
+                :math:`list(N, C_{in}, 3, H_{in}'', W_{in}'')`. The new
+                dimension in yh iterates over the LH, HL and HH coefficients.
+        Note:
+            :math:`H_{in}', W_{in}', H_{in}'', W_{in}''` denote the correctly
+            downsampled shapes of the DWT pyramid.
+        """
+        yh = []
+        ll = x
+
+        self.h0_col = self.h0_col.to(dtype=x.dtype, device=x.device)
+        self.h1_col = self.h1_col.to(dtype=x.dtype, device=x.device)
+        self.h0_row = self.h0_row.to(dtype=x.dtype, device=x.device)
+        self.h1_row = self.h1_row.to(dtype=x.dtype, device=x.device)
+
+        # Do a multilevel transform
+        for j in range(self.J):
+            # Do 1 level of the transform
+            ll, high = lowlevel.AFB2D.apply(
+                ll, self.h0_col, self.h1_col, self.h0_row, self.h1_row, self.mode
+            )
+            yh.append(high)
+
+        return ll, yh
 
 
 class DWTInverse(torch.nn.Module):
@@ -206,11 +284,10 @@ class DWTInverse(torch.nn.Module):
         ll = yl
         padding_method = lowlevel.mode_to_int(self.padding_method)
 
-        if ll.dtype != self.g0_col.dtype:
-            self.g0_col = self.g0_col.to(ll.dtype)
-            self.g1_col = self.g1_col.to(ll.dtype)
-            self.g0_row = self.g0_row.to(ll.dtype)
-            self.g1_row = self.g1_row.to(ll.dtype)
+        self.g0_col = self.g0_col.to(dtype=ll.dtype, device=ll.device)
+        self.g1_col = self.g1_col.to(dtype=ll.dtype, device=ll.device)
+        self.g0_row = self.g0_row.to(dtype=ll.dtype, device=ll.device)
+        self.g1_row = self.g1_row.to(dtype=ll.dtype, device=ll.device)
 
         # Do a multilevel inverse transform
         for h in yh[::-1]:  # this is the reversed list

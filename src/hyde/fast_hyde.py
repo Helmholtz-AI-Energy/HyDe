@@ -1,6 +1,8 @@
+import bm3d
+import numpy as np
 import torch
 
-from . import bm3d, dwt3d, utils
+from . import utils
 
 __all__ = ["FastHyDe"]
 
@@ -56,24 +58,31 @@ class FastHyDe(torch.nn.Module):
         # [w Rw] = estNoise(Y,'additive');
         w, r_w = utils.estimate_hyperspectral_noise(y)
         # [~, E]=hysime(Y,w,Rw);
-        _, e = utils.hysime(data=y, noise_mat=w, noise_corr_mat=r_w)
+        _, e = utils.hysime(input=y, noise=w, noise_corr=r_w)
         # %[E,~,~]= svd(Y,'econ');
         #
         # E=E(:,1:k_subspace);
-        e = e[:, : k_subspace + 1]  # todo: + 1???
+        e = e[:, :k_subspace]  # todo: + 1???
         #
         # eigen_Y = E'*Y;
         eigen_y = e.T @ y
         #
         # %% --------------------------Eigen-image denoising ------------------------------------
-
+        # todo: send slices of the image to the GPU if that is the case,
         # eigen_Y_bm3d=[];
-        # eigen_y_bm3d = torch.empty((k_subspace, n))
+        # eigen_y = eigen_y.cpu().numpy()
+        # nxt_eigen = eigen_y[1].to()
+        np_dtype = np.float32 if img.dtype is torch.float32 else np.float64
+        eigen_y_bm3d = np.empty((k_subspace, n), dtype=np_dtype)
         # for i=1:k_subspace
+        nxt_eigen = eigen_y[0].cpu()
         for i in range(k_subspace):
+            lp_eigen = nxt_eigen.numpy()
+            if i < k_subspace - 1:
+                nxt_eigen = eigen_y[i + 1].to(device="cpu", non_blocking=True)
             # produce eigen-image
             #     eigen_im = eigen_Y(i,:);
-            eigen_im = eigen_y[i]
+            eigen_im = lp_eigen
             #     min_x = min(eigen_im);
             min_x = torch.min(eigen_im)  # dim?
             # max_x = max(eigen_im);
@@ -89,24 +98,30 @@ class FastHyDe(torch.nn.Module):
             #
             # %estimate noise from Rw
             # sigma = sqrt(E(:,i)'*Rw*E(:,i))/scale;
-            # sigma = torch.sqrt(e[:, i].T @ r_w @ e[:, i]) / scale
+            sigma = torch.sqrt(e[:, i].T @ r_w @ e[:, i]) / scale
             #
             # [~, filt_eigen_im] = BM3D(1,eigen_im, sigma*255);
-            # _, filt_eigen_im = bm3d.bm3d() ???
+            # torch.tensor(bm3d.bm3d(noisy_im.cpu().numpy(), sigma))
+            filt_eigen_im = bm3d.bm3d(eigen_im, sigma * 255)
             #
             # eigen_Y_bm3d(i,:) = reshape(filt_eigen_im*scale + min_x, 1,N);
-            pass
+            eigen_y_bm3d[i, :] = (filt_eigen_im * scale + min_x).unsqueeze(0)
 
-        #
-        #
         # end
+        eigen_y_bm3d = torch.tensor(eigen_y_bm3d, dtype=img.dtype, device=img.device)
         #
         # % reconstruct data using denoising engin images
+        y_reconst = e @ eigen_y_bm3d
         # Y_reconst = E*eigen_Y_bm3d;
         #
         # %% ----------------- Re-transform ------------------------------
         #
-        #
+        if noise_type == "additive":
+            if not iid:
+                y_reconst = torch.sqrt(r_w_og @ y_reconst)
+        elif noise_type == "poisson":
+            y_reconst = (y_reconst / 2) ** 2 - 3 / 8
+        image_fasthyde = y_reconst.T.reshape((rows, cols, b))
         # switch noise_type
         #     case 'additive'
         #         if iid==0
@@ -115,12 +130,7 @@ class FastHyDe(torch.nn.Module):
         #
         #     case 'poisson'
         #         Y_reconst =(Y_reconst/2).^2-3/8;
-        # end
-        #
-        # image_fasthyde=[];
-        #
-        # image_fasthyde = reshape(Y_reconst',rows,cols,B);
-        pass
+        return image_fasthyde
 
 
 if __name__ == "__main__":
