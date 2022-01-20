@@ -13,6 +13,7 @@ __all__ = [
     "diff_dim0_replace_last_row",
     "estimate_hyperspectral_noise",
     "hysime",
+    "normalize",
     "peak_snr",
     "soft_threshold",
     "sure_thresh",
