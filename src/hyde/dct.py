@@ -120,8 +120,8 @@ def idct(x: torch.Tensor, norm: str = "None"):
     #     v = torch.irfft(V, 1, onesided=False)
 
     x = v.new_zeros(v.shape)
-    x[:, ::2] += v[:, : N - (N // 2)]
-    x[:, 1::2] += v.flip([1])[:, : N // 2]
+    x[:, ::2] += v[:, : N - torch.div(N, 2, rounding_mode="floor")]
+    x[:, 1::2] += v.flip([1])[:, : torch.div(N, 2, rounding_mode="floor")]
 
     return x.view(x_shape)
 

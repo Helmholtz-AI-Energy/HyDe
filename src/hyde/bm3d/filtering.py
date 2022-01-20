@@ -11,7 +11,7 @@ from .utils import hadamard
 __all__ = ["hadamard_transform", "ht_filtering_hadamard", "wiener_filtering_hadamard"]
 
 
-def hadamard_transform(vec):
+def hadamard_transform(vec: torch.Tensor) -> torch.Tensor:
     """
     Perform a hadamard transform on a vector
 
@@ -24,7 +24,7 @@ def hadamard_transform(vec):
     transformed vector
     """
     n = vec.shape[-1]
-    h_mat = hadamard(n)
+    h_mat = hadamard(n, dev=vec.device)
     v_h = vec @ h_mat
     return v_h
 
@@ -55,6 +55,7 @@ def ht_filtering_hadamard(
     """
     one = torch.tensor(1.0, dtype=group_3d.dtype, device=group_3d.device)
     zed = torch.tensor(0.0, dtype=group_3d.dtype, device=group_3d.device)
+    weight = torch.tensor(0.0, dtype=group_3d.dtype, device=group_3d.device)
 
     nsx_r = group_3d.shape[-1]
     coef_norm = math.sqrt(nsx_r)
@@ -65,7 +66,7 @@ def ht_filtering_hadamard(
     # hard threshold filtering in this block
     th = lambda_hard * sigma * coef_norm
     th_3d = torch.where(torch.abs(group_3d_h) > th, 1, 0)
-    weight = torch.sum(th_3d)
+    weight += torch.sum(th_3d)
 
     group_3d_h = torch.where(torch.abs(group_3d_h) > th, group_3d_h, zed)
 
@@ -78,7 +79,6 @@ def ht_filtering_hadamard(
     return group_3d, weight
 
 
-@torch.jit.script
 def wiener_filtering_hadamard(
     group_3d_img: torch.Tensor,
     group_3d_est: torch.Tensor,

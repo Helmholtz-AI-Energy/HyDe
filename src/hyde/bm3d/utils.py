@@ -1,12 +1,13 @@
 import math
+from typing import Union
 
 import pytorch_wavelets as twave
-import pywt
 import torch
 
 # from scipy.fftpack import dct, idct
 from torch.nn.functional import pad
 
+from .. import dwt3d
 from ..dct import dct, idct
 
 # todo: either make my own dct package from the github or use this one:
@@ -83,7 +84,7 @@ def bior_2d_forward(img: torch.Tensor, wavelet_name: str = "bior1.1"):
 
     # in the source code, this uses 1.5 but ive found that 1.1 behaves better for the test
     # images. cause is unclear
-    bior_fwd = twave.DWTForward(J=iter_max, wave=wavelet_name, mode="periodization")
+    bior_fwd = dwt3d.DWTForward(J=iter_max, wave=wavelet_name, padding_method="periodization")
     coeffs = bior_fwd(img.to(torch.float32))
 
     wave_im = torch.zeros_like(img)
@@ -128,7 +129,7 @@ def bior_2d_reverse(bior_img: torch.Tensor, wavelet_name: str = "bior1.1"):
     assert bior_img.shape[-1] == bior_img.shape[-2]
     iter_max = int(math.log2(bior_img.shape[-1]))
 
-    bior_inv = twave.DWTInverse(wave=wavelet_name, mode="periodization")
+    bior_inv = dwt3d.DWTInverse(wave=wavelet_name, padding_method="periodization")
 
     N = 1
     rec_coeffs = [bior_img[..., 0:1, 0:1].unsqueeze(1), []]
@@ -147,7 +148,7 @@ def bior_2d_reverse(bior_img: torch.Tensor, wavelet_name: str = "bior1.1"):
     return rec_im
 
 
-@torch.jit.script
+# @torch.jit.script
 def build_3d_group(
     fre_all_patches: torch.Tensor, sim_patch_pos: torch.Tensor, nsx_r: int
 ) -> torch.Tensor:
@@ -170,16 +171,13 @@ def build_3d_group(
     """
     _, _, k, k_ = fre_all_patches.shape
     assert k == k_
-    group_3D = torch.zeros((nsx_r, k, k), device=fre_all_patches.device)
-    for n in range(nsx_r):
-        ni = sim_patch_pos[n][0]
-        nj = sim_patch_pos[n][1]
-        group_3D[n] = fre_all_patches[ni, nj]
-    group_3D = group_3D.permute((1, 2, 0))
+    group_3D = fre_all_patches[sim_patch_pos[:nsx_r, 0], sim_patch_pos[:nsx_r, 1]].permute(
+        (1, 2, 0)
+    )
     return group_3D  # shape=(k, k, nSx_r)
 
 
-def closest_power_of_2(m, max_):
+def closest_power_of_2(m: torch.Tensor, max_: int):
     """
     Determine the closest power of 2 for all elements in a Tensor which are less than max_
 
@@ -197,15 +195,22 @@ def closest_power_of_2(m, max_):
     m = torch.where(max_ < m, max_, m)
     while max_ > 1:
         m = torch.where((max_ // 2 < m) * (m < max_), max_ // 2, m)
-        max_ //= 2
+        max_ = max_ // 2
     return m
 
 
 # TODO: add RGB support: need to have the estimate sigma function for the multiple dims
 #       if the image is greyscale, then it is just the float value
 
-
-def __get_add_patch_matrix(h, w, boundary_sz, patch_sz, device="cpu", dtype=torch.float):
+# @torch.jit.script
+def __get_add_patch_matrix(
+    h: int,
+    w: int,
+    boundary_sz: int,
+    patch_sz: int,
+    device: torch.device = torch.device("cpu"),
+    dtype: torch.dtype = torch.float,
+):
     # helper function to abstract the creation of the adding row and column matrices?
     row_add = torch.eye(h - 2 * boundary_sz, device=device, dtype=dtype)
     # row_add = np.pad(row_add, nHW, 'constant')
@@ -224,7 +229,7 @@ def __get_add_patch_matrix(h, w, boundary_sz, patch_sz, device="cpu", dtype=torc
     return row_add_mat, column_add_mat
 
 
-def get_kaiser_window(pts: int):
+def get_kaiser_window(pts: int, dev: Union[torch.device, str]):
     """
     Get a 2D Kaiser window. This will generate a 1D, pts-point Kaiser window first, then it will
     perform an outer product to make it 2D.
@@ -241,16 +246,16 @@ def get_kaiser_window(pts: int):
 
     """
     # k = np.kaiser(kHW, 2)
-    k = torch.kaiser_window(pts, False, beta=2)
+    k = torch.kaiser_window(pts, False, beta=2, device=dev)
     k_2d = torch.outer(k, k)  # k[:, np.newaxis] @ k[np.newaxis, :]
     return k_2d
 
 
-def hadamard(n: int, dtype: torch.dtype = torch.float):
+def hadamard(n: int, dtype: torch.dtype = torch.float, dev: torch.device = torch.device("cpu")):
     """
     Lifted directly from scipy and adapted for torch
 
-    Construct an Hadamard matrix.
+    Construct a Hadamard matrix.
     Constructs an n-by-n Hadamard matrix, using Sylvester's
     construction. `n` must be a power of 2.
 
@@ -273,7 +278,7 @@ def hadamard(n: int, dtype: torch.dtype = torch.float):
     if 2 ** lg2 != n:
         raise ValueError("n must be an positive integer, and n must be " "a power of 2")
 
-    H = torch.tensor([[1]], dtype=dtype)
+    H = torch.tensor([[1]], dtype=dtype, device=dev)
 
     # Sylvester's construction
     for i in range(0, lg2):
@@ -340,7 +345,10 @@ def indices_initialize(max_size, N, step, device):
     return ind
 
 
-def precompute_block_matching(img, patch_size, npatches, boundary_sz, tau_match):
+# @torch.jit.script
+def precompute_block_matching(
+    img: torch.Tensor, patch_size: int, npatches: int, boundary_sz: int, tau_match: float
+):
     """
     precompute similar blocks using threshold distances
 
@@ -367,29 +375,57 @@ def precompute_block_matching(img, patch_size, npatches, boundary_sz, tau_match)
     # img = img.astype(np.float64)
     height, width = img.shape
     Ns = 2 * boundary_sz + 1
+    dev = img.device
     threshold = tau_match * patch_size * patch_size
     sum_table = (
-        torch.ones((Ns, Ns, height, width), dtype=img.dtype) * 2 * threshold
+        torch.ones((Ns, Ns, height, width), dtype=img.dtype, device=dev) * 2 * threshold
     )  # di, dj, ph, pw
-    row_add_mat, column_add_mat = __get_add_patch_matrix(
-        height, width, boundary_sz, patch_size, dtype=img.dtype, device=img.device
-    )
+
+    # ---------------------------------------------------------------------------------
+    row_add = torch.eye(height - 2 * boundary_sz, dtype=img.dtype, device=dev)
+    # row_add = np.pad(row_add, nHW, 'constant')
+    row_add = pad(row_add, (boundary_sz, boundary_sz, boundary_sz, boundary_sz), "constant")
+    row_add_mat = row_add.clone()
+    for k in range(1, patch_size):
+        row_add_mat += torch.roll(row_add, k, dims=1)
+        # mat = torch.roll(mat, 0, dims=0)
+        # row_add_mat += __translation_2d_mat(row_add, right=k, down=0)
+
+    column_add = torch.eye(width - 2 * boundary_sz, dtype=img.dtype, device=dev)
+    # column_add = np.pad(column_add, nHW, 'constant')
+    column_add = pad(column_add, (boundary_sz, boundary_sz, boundary_sz, boundary_sz), "constant")
+    column_add_mat = column_add.clone()
+    for k in range(1, patch_size):
+        column_add_mat += torch.roll(column_add, k, dims=0)
+        # column_add_mat += __translation_2d_mat(column_add, right=0, down=k)
+    # ---------------------------------------------------------------------------------
+
+    # row_add_mat, column_add_mat = __get_add_patch_matrix(
+    #     height, width, boundary_sz, patch_size, dtype=img.dtype, device=dev
+    # )
 
     # diff_margin = \
     #   np.pad(np.ones((height - 2 * nHW, width - 2 * nHW)), nHW, 'constant', constant_values=0.)
-    hold = torch.ones((height - 2 * boundary_sz, width - 2 * boundary_sz), dtype=img.dtype)
+    hold = torch.ones(
+        (height - 2 * boundary_sz, width - 2 * boundary_sz), dtype=img.dtype, device=dev
+    )
     diff_margin = pad(hold, (boundary_sz, boundary_sz, boundary_sz, boundary_sz), "constant", 0.0)
 
     sum_margin = (1 - diff_margin) * 2 * threshold
 
     for di in range(-boundary_sz, boundary_sz + 1):
         for dj in range(-boundary_sz, boundary_sz + 1):
-            t_img = __translation_2d_mat(img, right=-dj, down=-di)
-            diff_table_2 = (img - t_img) * (img - t_img) * diff_margin
-
-            sum_diff_2 = row_add_mat @ diff_table_2 @ column_add_mat
-            # todo: check maximum behavior v numpy
-            sum_table[di + boundary_sz, dj + boundary_sz] = torch.maximum(sum_diff_2, sum_margin)
+            _block_matching_helper(
+                img,
+                dj,
+                di,
+                diff_margin,
+                row_add_mat,
+                column_add_mat,
+                sum_table,
+                boundary_sz,
+                sum_margin,
+            )
             # sum_table (2n+1, 2n+1, height, width) (from repo)
 
     sum_table = sum_table.reshape((Ns * Ns, height * width))  # di_dj, ph_pw
@@ -399,16 +435,18 @@ def precompute_block_matching(img, patch_size, npatches, boundary_sz, tau_match)
     # the above argpartition is essentially a torch.topk.indices with largest=False
     bottomk = torch.topk(sum_table_T, npatches, largest=False).indices
     bottomk[:, 0] = (Ns * Ns - 1) // 2
-    bottomk_di = bottomk // Ns - boundary_sz
+    # bottomk[:, 0] = torch.div(Ns * Ns - 1, 2, rounding_mode="floor")
+    bottomk_di = torch.div(bottomk, Ns, rounding_mode="floor") - boundary_sz
     bottomk_dj = bottomk % Ns - boundary_sz
-    hold = torch.arange(height).unsqueeze(-1).unsqueeze(-1)
+    hold = torch.arange(height, device=dev).unsqueeze(-1).unsqueeze(-1)
     near_pi = bottomk_di.reshape((height, width, -1)) + hold
-    hold = torch.arange(width).unsqueeze(0).unsqueeze(-1)
+    hold = torch.arange(width, device=dev).unsqueeze(0).unsqueeze(-1)
     near_pj = bottomk_dj.reshape((height, width, -1)) + hold
     ri_rj_N__ni_nj = torch.cat((near_pi.unsqueeze(-1), near_pj.unsqueeze(-1)), dim=-1)
 
     sum_filter = torch.where(sum_table_T < threshold, 1, 0)
-    threshold_count = torch.sum(sum_filter, axis=1)
+    # threshold_count = torch.sum(sum_filter, axis=1)
+    threshold_count = sum_filter.sum(1)
     threshold_count = closest_power_of_2(threshold_count, max_=npatches)
     threshold_count = threshold_count.reshape((height, width))
 
@@ -416,6 +454,28 @@ def precompute_block_matching(img, patch_size, npatches, boundary_sz, tau_match)
 
 
 @torch.jit.script
+def _block_matching_helper(
+    img: torch.Tensor,
+    dj: int,
+    di: int,
+    diff_margin: torch.Tensor,
+    row_add_mat: torch.Tensor,
+    column_add_mat: torch.Tensor,
+    sum_table: torch.Tensor,
+    boundary_sz: int,
+    sum_margin: torch.Tensor,
+):
+    t_img = torch.roll(img, -dj, dims=1)
+    t_img = torch.roll(t_img, -di, dims=0)
+    # t_img = __translation_2d_mat(img, right=-dj, down=-di)
+    diff_table_2 = (img - t_img) * (img - t_img) * diff_margin
+
+    sum_diff_2 = row_add_mat @ diff_table_2 @ column_add_mat
+    # todo: check maximum behavior v numpy
+    sum_table[di + boundary_sz, dj + boundary_sz] = torch.maximum(sum_diff_2, sum_margin)
+
+
+# @torch.jit.script
 def sd_weighting(group_3D: torch.Tensor) -> torch.Tensor:
     """
     Calculate the standard deviation weighting
