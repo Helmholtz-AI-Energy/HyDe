@@ -6,21 +6,23 @@ from torch.nn.functional import pad
 
 __all__ = [
     "add_noise_std",
+    "add_noise_db",
     "atleast_3d",
     "custom_pca_image",
-    "denoise_tv_bregman",
     "diff",
     "diff_dim0_replace_last_row",
     "estimate_hyperspectral_noise",
     "hysime",
     "normalize",
     "peak_snr",
+    "snr",
     "soft_threshold",
     "sure_thresh",
     "sure_soft_modified_lr2",
     "symmetric_pad",
     "vertical_difference",
     "vertical_difference_transpose",
+    "undo_normalize",
 ]
 
 
@@ -104,6 +106,28 @@ def add_noise_std(image, sigma, noise_type, iid=True):
     return img_noisy
 
 
+def add_noise_db(signal: torch.Tensor, noise_pow: Union[int, float]) -> torch.Tensor:
+    """
+    Add Gaussian white noise to a torch.Tensor. The *power* of the noise is controlled
+    by the `noise_pow` parameter. This value is in dB
+
+    Parameters
+    ----------
+    signal: torch.Tensor
+    noise_pow: int, float
+
+    Returns
+    -------
+    noisy_signal: torch.Tensor
+    """
+    noise_to_add = 10 ** (noise_pow / 20)
+    # snr = 10 * torch.log10(torch.mean(image ** 2) / torch.mean(noise_tensor ** 2))
+    # sig = 10 * torch.log10(torch.mean(image ** 2))
+    noise = torch.zeros_like(signal).normal_(std=noise_to_add)
+    print(f"Added Noise [dB]: {10 * torch.log10(torch.mean(torch.pow(noise, 2)))}")
+    return noise + signal
+
+
 def atleast_3d(image):
     """
     to ensure the image has at least 3 dimensions
@@ -127,120 +151,6 @@ def atleast_3d(image):
     else:
         dim.append(1)
         return image.view(dim)
-
-
-def denoise_tv_bregman(image, weight, max_iter=100, eps=1e-3):
-    """
-    Perform total-variation denoising using split-Bregman optimization.
-
-    Parameters
-    ----------
-    image : torch.Tensor
-        Input data to be denoised.
-    weight : float
-        Denoising weight. The smaller the 'weight', the more denoising (at
-        the expense of less similarity to the 'input').
-    max_iter : int, optional
-        Maximal number of iterations used for the optimization.
-    eps : float, optional
-        The threshold of distance between denoised image in iterations
-        The algorithm stops when image distance is smaller than eps
-
-    Returns
-    -------
-    denoised_image : torch.Tensor
-
-    Sources
-    -------
-    - https://github.com/shakes76/PatternFlow/blob/master/algorithms/denoise/denoise_tv_bregman/denoise_tv_bregman.py
-    - skimage.restoration.denoise_tv_bregman
-
-    """
-    image = atleast_3d(image)
-
-    rows, cols, dims = image.shape
-    rows2 = rows + 2
-    cols2 = cols + 2
-
-    shape_extend = (rows2, cols2, dims)
-    # out is firstly created as zeros-like tensor with size as shape_extend
-    out = torch.zeros(shape_extend, dtype=torch.float)
-
-    dx = out.clone().detach()
-    dy = out.clone().detach()
-    bx = out.clone().detach()
-    by = out.clone().detach()
-
-    out = prep_out_bregman(image, out)
-
-    lam = 2 * weight
-    rmse = float("inf")
-    norm = weight + 4 * lam
-
-    i = 0
-    regularization = torch.mul(image, weight)
-    # iterative optimization method
-    while i < max_iter and rmse > eps:
-        uprev = out[1:-1, 1:-1, :]
-
-        ux = out[1:-1, 2:, :] - uprev
-        uy = out[2:, 1:-1, :] - uprev
-        # Gauss-Seidel method
-        unew = torch.div(
-            (
-                torch.mul(
-                    (
-                        out[2:, 1:-1, :]
-                        + out[0:-2, 1:-1, :]
-                        + out[1:-1, 2:, :]
-                        + out[1:-1, 0:-2, :]
-                        + dx[1:-1, 0:-2, :]
-                        - dx[1:-1, 1:-1, :]
-                        + dy[0:-2, 1:-1, :]
-                        - dy[1:-1, 1:-1, :]
-                        - bx[1:-1, 0:-2, :]
-                        + bx[1:-1, 1:-1, :]
-                        - by[0:-2, 1:-1, :]
-                        + by[1:-1, 1:-1, :]
-                    ),
-                    lam,
-                )
-                + regularization
-            ),
-            norm,
-        )
-        out[1:-1, 1:-1, :] = unew.clone().detach()
-
-        rmse = torch.norm(unew - uprev, p=2)
-
-        bxx = bx[1:-1, 1:-1, :].clone().detach()
-        byy = by[1:-1, 1:-1, :].clone().detach()
-
-        tx = ux + bxx
-        ty = uy + byy
-        s = torch.sqrt(torch.pow(tx, 2) + torch.pow(ty, 2))
-        dxx = torch.div(
-            torch.addcmul(
-                input=torch.zeros(s.shape, dtype=torch.float), tensor1=s, tensor2=tx, value=lam
-            ),
-            torch.add(torch.mul(s, lam), 1),
-        )
-        dyy = torch.div(
-            torch.addcmul(
-                input=torch.zeros(s.shape, dtype=torch.float), tensor1=s, tensor2=ty, value=lam
-            ),
-            torch.add(torch.mul(s, lam), 1),
-        )
-
-        dx[1:-1, 1:-1, :] = dxx.clone().detach()
-        dy[1:-1, 1:-1, :] = dyy.clone().detach()
-
-        bx[1:-1, 1:-1, :] += ux - dxx
-        by[1:-1, 1:-1, :] += uy - dyy
-
-        i += 1
-    # return the denoised image excluding the extended area
-    return out[1:-1, 1:-1]
 
 
 def diff(x: torch.Tensor, n: int = 1, dim=0) -> torch.Tensor:
@@ -327,7 +237,7 @@ def estimate_hyperspectral_noise(
     calculation_dtype: torch.dtype = torch.float,
 ) -> torch.Tensor:
     """
-    Infer teh noise in a hyperspectral dataset. Assumes that the
+    Infer the noise in a hyperspectral dataset. Assumes that the
     reflectance at a given band is well modelled by a linear regression
     on the remaining bands
 
@@ -470,21 +380,6 @@ def hysime(input, noise, noise_corr):
     return sig_subspace_dim, eigs_span_subspace
 
 
-def normalize(image: torch.Tensor, by_band=False) -> torch.Tensor:
-    if by_band:
-        out = torch.zeros_like(image)
-        for b in range(image.shape[-1]):
-            max_y = image[:, :, b].max()[0]
-            min_y = image[:, :, b].min()[0]
-            out[:, :, b] = (image[:, :, b] - min_y) / (max_y - min_y)
-    else:
-        # normalize the entire image, not based on the band
-        max_y = image.max()
-        min_y = image.min()
-        out = (image - min_y) / (max_y - min_y)
-    return out
-
-
 def peak_snr(img1: torch.Tensor, img2: torch.Tensor) -> float:
     """
     Compute the peak signal to noise ratio between two images
@@ -530,6 +425,56 @@ def custom_pca_image(img: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     pc = torch.matmul(u, torch.diag(s))
     pc = pc.reshape((nc, nr, p))
     return v_pca, pc
+
+
+def normalize(image: torch.Tensor, by_band=False) -> Tuple[torch.Tensor, dict]:
+    """
+    Normalize an input between 0 and 1. If `by_band` is True, the normalization will
+    be done for each band of the image (assumes [h, w, band] shape).
+    Normalization constants are returned in a dictionary.
+    These normalization constants can be used with the :func:`undo_normalize` function
+    like this: `hyde.utils.undo_normalize(normalized_image, **constants, by_band=by_band)`
+
+    Parameters
+    ----------
+    image: torch.Tensor
+    by_band: bool, optional
+        if True, normalize each band individually.
+
+    Returns
+    -------
+    normalized_input: torch.Tensor
+    constants: dict
+        normalization constants
+        keys: mins, maxs
+    """
+    if by_band:
+        out = torch.zeros_like(image)
+        for b in range(image.shape[-1]):
+            # print(image[:, :, b].max())
+            max_y = image[:, :, b].max()  # [0]
+            min_y = image[:, :, b].min()  # [0]
+            out[:, :, b] = (image[:, :, b] - min_y) / (max_y - min_y)
+    else:
+        # normalize the entire image, not based on the band
+        max_y = image.max()
+        min_y = image.min()
+        out = (image - min_y) / (max_y - min_y)
+    return out, {"mins": min_y, "maxs": max_y}
+
+
+def snr(noisy, ref_signal):
+    err = torch.sum(torch.pow(noisy - ref_signal, 2)) / noisy.numel()
+    snr = 10 * torch.log10(torch.mean(torch.pow(ref_signal, 2)) / err)
+
+    mse = ((noisy - ref_signal) ** 2).mean()
+    if mse == 0:  # MSE is zero means no noise is present in the signal .
+        # Therefore PSNR have no importance.
+        psnr = 0
+    else:
+        max_pixel = 255
+        psnr = 20 * torch.log10(max_pixel / mse.sqrt())
+    return snr, psnr
 
 
 def soft_threshold(x: torch.Tensor, threshold: Union[int, float, torch.Tensor]) -> torch.Tensor:
@@ -759,3 +704,31 @@ def vertical_difference_transpose(x: torch.Tensor):
     u2 = (x[-2]).unsqueeze(0)
     ret = torch.cat([u0, u1, u2], dim=0)
     return ret
+
+
+def undo_normalize(
+    image: torch.Tensor, mins: torch.Tensor, maxs: torch.Tensor, by_band=False
+) -> torch.Tensor:
+    """
+    Undo the normalization to the original scale defined by the mins/maxs paraeters.
+    See the :func:`normalize` function for more details
+
+    Parameters
+    ----------
+    image: torch.Tensor
+    mins: torch.Tensor
+    maxs: torch.Tensor
+    by_band: bool, optional
+
+    Returns
+    -------
+    rescaled_tensor: torch.Tensor
+    """
+    if by_band:
+        out = torch.zeros_like(image)
+        for b in range(image.shape[-1]):
+            out[:, :, b] = image * (maxs[b] - mins[b]) + mins[b]
+    else:
+        # normalize the entire image, not based on the band
+        out = image * (maxs - mins) + mins
+    return out

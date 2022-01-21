@@ -1,8 +1,9 @@
-from typing import Union
+from typing import Tuple
 
 import torch
+from skimage.restoration import denoise_tv_bregman
 
-from . import dwt3d, utils
+from . import utils
 
 __all__ = ["OTVCA"]
 
@@ -32,8 +33,13 @@ class OTVCA(torch.nn.Module):
         super(OTVCA, self).__init__()
 
     def forward(
-        self, x: torch.Tensor, features: int, num_itt: int = 200, lam: float = 0.05
-    ) -> Union[torch.Tensor, torch.Tensor]:
+        self,
+        x: torch.Tensor,
+        features: int,
+        num_itt: int = 200,
+        lam: float = 0.01,
+        rescale: bool = True,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Denoise an image `x` using the HyRes algorithm.
 
@@ -44,10 +50,14 @@ class OTVCA(torch.nn.Module):
         features: int
             Number of features to extract, this could be selected equal to the
             number of classes of interests in the scene
-        num_itt: int
+        num_itt: int, optional
             Number of iterations; 200 iterations are default value
-        lam: float
+        lam: float, optional
             Tuning parameter; Default is 0.01 for normalized HSI
+            the value passed to the denoising algorithm is 1/lam
+        rescale: bool, optional
+            if true: rescale the image to the original scale. Otherwise, the output will
+            be between 0 and 1.
 
         Returns
         -------
@@ -56,28 +66,30 @@ class OTVCA(torch.nn.Module):
         fe : torch.Tensor
             Extracted features
         """
-        # key: Y -> x (image), r_max -> features, tol -> num_itt
         nr1, nc1, p1 = x.shape
-        x_2d = x.reshape((nr1 * nc1, p1))
-        x_min = x.min()
-        x_max = x.max()
-        # NRY = (RY - m) / (M - m);
-        normalized_y = (x_2d - x_min) / (x_max - x_min)
-        _, _, vh = torch.linalg.svd(normalized_y, full_matrices=False)
+
+        xn, consts = utils.normalize(x, by_band=False)
+        x_2d = xn.reshape((nr1 * nc1, p1))
+        # x_min = x.min()
+        # x_max = x.max()
+        # normalized_y = (x_2d - x_min) / (x_max - x_min)
+        _, _, vh = torch.linalg.svd(x_2d, full_matrices=False)
         v1 = vh.T
         v = v1[:, :features]
         fe = torch.zeros((nr1, nc1, features), dtype=x.dtype, device=x.device)
 
         for fi in range(num_itt):
-            c1 = normalized_y @ v[:, :features]
+            c1 = x_2d @ v[:, :features]
             pc = c1.reshape((nr1, nc1, features))
 
-            fe = utils.denoise_tv_bregman(image=pc, weight=1 / lam)
+            fe = denoise_tv_bregman(image=pc.cpu().numpy(), weight=1 / lam, eps=0.1, isotropic=True)
+            fe = torch.tensor(fe, dtype=x.dtype, device=x.device)
 
             fe_reshape = fe.reshape((nr1 * nc1, features))
-            m = normalized_y.T @ fe_reshape
+            m = x_2d.T @ fe_reshape
             c, _, gh = torch.linalg.svd(m, full_matrices=False)
             v = c @ gh
 
-        yr = (fe_reshape @ v.T).reshape((nr1, nc1, p1))
-        return yr, fe
+        denoised_image = (fe_reshape @ v.T).reshape((nr1, nc1, p1))
+        denoised_image = utils.undo_normalize(denoised_image, **consts, by_band=False)
+        return denoised_image, fe
