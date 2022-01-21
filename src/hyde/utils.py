@@ -4,13 +4,16 @@ import torch
 from torch.nn.functional import pad
 
 __all__ = [
-    "add_noise",
+    "add_noise_db",
     "atleast_3d",
     "custom_pca_image",
     "denoise_tv_bregman",
     "diff",
     "diff_dim0_replace_last_row",
     "estimate_hyperspectral_noise",
+    "normalize",
+    "un_normalize",
+    "snr",
     "soft_threshold",
     "sure_thresh",
     "sure_soft_modified_lr2",
@@ -18,36 +21,13 @@ __all__ = [
 ]
 
 
-def add_noise(image: torch.Tensor, snr_db: float) -> torch.Tensor:
-    """
-    Add gaussian noise to a torch.Tensor
-
-    image: torch.Tensor
-        image to which noise is added
-    snr_db: float
-        the amount of gaussian noise to add in units of dB
-
-    Returns
-    -------
-    noisy_image : torch.Tensor
-    """
-    snr = 10.0 ** (snr_db / 10.0)
-    # normalize signal between 0 and 1
-    image_min = image.min()
-    image_max = image.max()
-    normalized_y = (image - image_min) / (image_max - image_min)
-
-    # Generate the noise as you did
-    noise = torch.zeros_like(image).normal_()
-    # For the record I think np.random.random does exactly the same thing
-
-    # work out the current SNR
-    current_snr = normalized_y.mean() / torch.std(normalized_y)
-
-    # scale the noise by the snr ratios (smaller noise <=> larger snr)
-    noise *= current_snr / snr
-    # return the new signal with noise
-    return normalized_y + noise
+def add_noise_db(image, snr_db):
+    noise_to_add = 10 ** (snr_db / 20)
+    # snr = 10 * torch.log10(torch.mean(image ** 2) / torch.mean(noise_tensor ** 2))
+    # sig = 10 * torch.log10(torch.mean(image ** 2))
+    noise = torch.zeros_like(image).normal_(std=noise_to_add)
+    print(f"Added Noise [dB]: {10 * torch.log10(torch.mean(torch.pow(noise, 2)))}")
+    return noise + image
 
 
 def atleast_3d(image):
@@ -427,6 +407,47 @@ def custom_pca_image(img: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     pc = torch.matmul(u, torch.diag(s))
     pc = pc.reshape((nc, nr, p))
     return v_pca, pc
+
+
+def normalize(image: torch.Tensor, by_band=False) -> Tuple[torch.Tensor, dict]:
+    if by_band:
+        out = torch.zeros_like(image)
+        for b in range(image.shape[-1]):
+            # print(image[:, :, b].max())
+            max_y = image[:, :, b].max()  # [0]
+            min_y = image[:, :, b].min()  # [0]
+            out[:, :, b] = (image[:, :, b] - min_y) / (max_y - min_y)
+    else:
+        # normalize the entire image, not based on the band
+        max_y = image.max()
+        min_y = image.min()
+        out = (image - min_y) / (max_y - min_y)
+    return out, {"mins": min_y, "maxs": max_y}
+
+
+def un_normalize(image: torch.Tensor, mins, maxs, by_band=False) -> torch.Tensor:
+    if by_band:
+        out = torch.zeros_like(image)
+        for b in range(image.shape[-1]):
+            out[:, :, b] = image * (maxs[b] - mins[b]) + mins[b]
+    else:
+        # normalize the entire image, not based on the band
+        out = image * (maxs - mins) + mins
+    return out
+
+
+def snr(noisy, ref_signal):
+    err = torch.sum(torch.pow(noisy - ref_signal, 2)) / noisy.numel()
+    snr = 10 * torch.log10(torch.mean(torch.pow(ref_signal, 2)) / err)
+
+    mse = ((noisy - ref_signal) ** 2).mean()
+    if mse == 0:  # MSE is zero means no noise is present in the signal .
+        # Therefore PSNR have no importance.
+        psnr = 0
+    else:
+        max_pixel = 255
+        psnr = 20 * torch.log10(max_pixel / mse.sqrt())
+    return snr, psnr
 
 
 def soft_threshold(x: torch.Tensor, threshold: Union[int, float, torch.Tensor]) -> torch.Tensor:
