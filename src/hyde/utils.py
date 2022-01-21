@@ -7,27 +7,39 @@ __all__ = [
     "add_noise_db",
     "atleast_3d",
     "custom_pca_image",
-    "denoise_tv_bregman",
     "diff",
     "diff_dim0_replace_last_row",
     "estimate_hyperspectral_noise",
     "normalize",
-    "un_normalize",
     "snr",
     "soft_threshold",
     "sure_thresh",
     "sure_soft_modified_lr2",
     "symmetric_pad",
+    "undo_normalize",
 ]
 
 
-def add_noise_db(image, snr_db):
-    noise_to_add = 10 ** (snr_db / 20)
+def add_noise_db(signal: torch.Tensor, noise_pow: Union[int, float]) -> torch.Tensor:
+    """
+    Add Gaussian white noise to a torch.Tensor. The *power* of the noise is controlled
+    by the `noise_pow` parameter. This value is in dB
+
+    Parameters
+    ----------
+    signal: torch.Tensor
+    noise_pow: int, float
+
+    Returns
+    -------
+    noisy_signal: torch.Tensor
+    """
+    noise_to_add = 10 ** (noise_pow / 20)
     # snr = 10 * torch.log10(torch.mean(image ** 2) / torch.mean(noise_tensor ** 2))
     # sig = 10 * torch.log10(torch.mean(image ** 2))
-    noise = torch.zeros_like(image).normal_(std=noise_to_add)
+    noise = torch.zeros_like(signal).normal_(std=noise_to_add)
     print(f"Added Noise [dB]: {10 * torch.log10(torch.mean(torch.pow(noise, 2)))}")
-    return noise + image
+    return noise + signal
 
 
 def atleast_3d(image):
@@ -53,176 +65,6 @@ def atleast_3d(image):
     else:
         dim.append(1)
         return image.view(dim)
-
-
-def denoise_tv_bregman(
-    image: torch.Tensor,
-    weight: float,
-    max_iter: int = 100,
-    eps: float = 1e-3,
-    isotropic: bool = True,
-) -> torch.Tensor:
-    """
-    Perform total-variation denoising using split-Bregman optimization.
-
-    Parameters
-    ----------
-    image : torch.Tensor
-        Input data to be denoised.
-    weight : float
-        Denoising weight. The smaller the 'weight', the more denoising (at
-        the expense of less similarity to the 'input').
-    max_iter : int, optional
-        Maximal number of iterations used for the optimization.
-    eps : float, optional
-        The threshold of distance between denoised image in iterations
-        The algorithm stops when image distance is smaller than eps
-    isotropic : bool, optional
-        Switch between isotropic and anisotropic TV denoising.
-
-    Returns
-    -------
-    denoised_image : torch.Tensor
-
-    Sources
-    -------
-    - https://github.com/shakes76/PatternFlow/blob/master/algorithms/denoise/denoise_tv_bregman/denoise_tv_bregman.py
-    - skimage.restoration.denoise_tv_bregman
-
-    """
-    image = atleast_3d(image)
-
-    rows, cols, dims = image.shape
-    rows2 = rows + 2
-    cols2 = cols + 2
-
-    shape_extend = (rows2, cols2, dims)
-    # out is firstly created as zeros-like tensor with size as shape_extend
-    out = torch.zeros(shape_extend, dtype=image.dtype, device=image.device)
-
-    dx = out.clone().detach()
-    dy = out.clone().detach()
-    bx = out.clone().detach()
-    by = out.clone().detach()
-
-    # out = prep_out_bregman(image, out)
-    out_rows, out_cols = out.shape[:2]
-    rows, cols = out_rows - 2, out_cols - 2
-
-    out[1 : out_rows - 1, 1 : out_cols - 1] = image
-
-    out[0, 1 : out_cols - 1] = image[1, :]
-    out[1 : out_rows - 1, 0] = image[:, 1]
-    out[out_rows - 1, 1 : out_cols - 1] = image[rows - 1, :]
-    out[1 : out_rows - 1, out_cols - 1] = image[:, cols - 1]
-
-    weight = torch.tensor(weight, device=image.device)
-    lam = 2 * weight
-    rmse = float("inf")
-    norm = weight + 4 * lam
-
-    # iterative optimization method
-    uprev_c = out[1:-1, 1:-1, :].clone()
-    _denoise_inner_loop(
-        uprev_c, max_iter, eps, out, weight, lam, image, norm, rmse, bx, by, dx, dy, isotropic
-    )
-
-    # return the denoised image excluding the extended area
-    return out[1:-1, 1:-1]
-
-
-@torch.jit.script
-def _denoise_inner_loop(
-    uprev_c: torch.Tensor,
-    max_iter: int,
-    eps: float,
-    out: torch.Tensor,
-    weight: torch.Tensor,
-    lam: torch.Tensor,
-    image: torch.Tensor,
-    norm: torch.Tensor,
-    rmse: float,
-    bx: torch.Tensor,
-    by: torch.Tensor,
-    dx: torch.Tensor,
-    dy: torch.Tensor,
-    isotropic: bool,
-):
-    i = 0
-    rows = image.shape[0]
-    cols = image.shape[1]
-    while i < max_iter and rmse > eps:
-        rmse = torch.tensor(0.0, device=image.device)
-        for r in range(1, rows + 1):
-            for c in range(1, cols + 1):
-                uprev = uprev_c[r - 1, c - 1]
-
-                # forward derivatives
-                ux = out[r, c + 1] - uprev
-                uy = out[r + 1, c] - uprev
-
-                # Gauss-Seidel method
-                unew = (
-                    lam
-                    * (
-                        out[r + 1, c]
-                        + out[r - 1, c]
-                        + out[r, c + 1]
-                        + out[r, c - 1]
-                        + dx[r, c - 1]
-                        - dx[r, c]
-                        + dy[r - 1, c]
-                        - dy[r, c]
-                        - bx[r, c - 1]
-                        + bx[r, c]
-                        - by[r - 1, c]
-                        + by[r, c]
-                    )
-                    + weight * image[r - 1, c - 1]
-                ) / norm
-                out[r, c] = unew
-
-                # update root mean square error
-                tx = unew - uprev
-                rmse += (tx * tx).sum()
-
-                bxx = bx[r, c]
-                byy = by[r, c]
-
-                # d_subproblem after reference [4]
-                dxx = dx[r, c] * 0
-                dyy = dy[r, c] * 0
-                if isotropic:
-                    tx = ux + bxx
-                    ty = uy + byy
-                    s = torch.sqrt(tx * tx + ty * ty)
-                    dxx = s * lam * tx / (s * lam + 1)
-                    dyy = s * lam * ty / (s * lam + 1)
-                else:
-                    s = ux + bxx
-                    whgt = torch.nonzero(s > 1 / lam)
-                    if len(whgt) > 0:
-                        dxx[whgt] = s[whgt] - 1 / lam
-                    whls = torch.nonzero(s < -1 / lam)
-                    if len(whls) > 0:
-                        dxx[whls] = s[whls] + 1 / lam
-
-                    s = uy + byy
-                    whgt = torch.nonzero(s > 1 / lam)
-                    if len(whgt) > 0:
-                        dyy[whgt] = s[whgt] - 1 / lam
-                    whls = torch.nonzero(s < -1 / lam)
-                    if len(whls) > 0:
-                        dyy[whls] = s[whls] + 1 / lam
-
-                dx[r, c] = dxx
-                dy[r, c] = dyy
-
-                bx[r, c] += ux - dxx
-                by[r, c] += uy - dyy
-        rmse = torch.sqrt(rmse / float(image.numel()))
-        print(i, rmse)
-        i += 1
 
 
 def diff(x: torch.Tensor, n: int = 1, dim=0) -> torch.Tensor:
@@ -410,6 +252,26 @@ def custom_pca_image(img: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
 
 
 def normalize(image: torch.Tensor, by_band=False) -> Tuple[torch.Tensor, dict]:
+    """
+    Normalize an input between 0 and 1. If `by_band` is True, the normalization will
+    be done for each band of the image (assumes [h, w, band] shape).
+    Normalization constants are returned in a dictionary.
+    These normalization constants can be used with the :func:`undo_normalize` function
+    like this: `hyde.utils.undo_normalize(normalized_image, **constants, by_band=by_band)`
+
+    Parameters
+    ----------
+    image: torch.Tensor
+    by_band: bool, optional
+        if True, normalize each band individually.
+
+    Returns
+    -------
+    normalized_input: torch.Tensor
+    constants: dict
+        normalization constants
+        keys: mins, maxs
+    """
     if by_band:
         out = torch.zeros_like(image)
         for b in range(image.shape[-1]):
@@ -423,17 +285,6 @@ def normalize(image: torch.Tensor, by_band=False) -> Tuple[torch.Tensor, dict]:
         min_y = image.min()
         out = (image - min_y) / (max_y - min_y)
     return out, {"mins": min_y, "maxs": max_y}
-
-
-def un_normalize(image: torch.Tensor, mins, maxs, by_band=False) -> torch.Tensor:
-    if by_band:
-        out = torch.zeros_like(image)
-        for b in range(image.shape[-1]):
-            out[:, :, b] = image * (maxs[b] - mins[b]) + mins[b]
-    else:
-        # normalize the entire image, not based on the band
-        out = image * (maxs - mins) + mins
-    return out
 
 
 def snr(noisy, ref_signal):
@@ -630,3 +481,31 @@ def symmetric_pad(tens: torch.Tensor, n: Union[int, Iterable]) -> torch.Tensor:
         padded[sind] = padded[gind]
 
     return padded
+
+
+def undo_normalize(
+    image: torch.Tensor, mins: torch.Tensor, maxs: torch.Tensor, by_band=False
+) -> torch.Tensor:
+    """
+    Undo the normalization to the original scale defined by the mins/maxs paraeters.
+    See the :func:`normalize` function for more details
+
+    Parameters
+    ----------
+    image: torch.Tensor
+    mins: torch.Tensor
+    maxs: torch.Tensor
+    by_band: bool, optional
+
+    Returns
+    -------
+    rescaled_tensor: torch.Tensor
+    """
+    if by_band:
+        out = torch.zeros_like(image)
+        for b in range(image.shape[-1]):
+            out[:, :, b] = image * (maxs[b] - mins[b]) + mins[b]
+    else:
+        # normalize the entire image, not based on the band
+        out = image * (maxs - mins) + mins
+    return out

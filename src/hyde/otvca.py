@@ -50,11 +50,14 @@ class OTVCA(torch.nn.Module):
         features: int
             Number of features to extract, this could be selected equal to the
             number of classes of interests in the scene
-        num_itt: int
+        num_itt: int, optional
             Number of iterations; 200 iterations are default value
-        lam: float
+        lam: float, optional
             Tuning parameter; Default is 0.01 for normalized HSI
             the value passed to the denoising algorithm is 1/lam
+        rescale: bool, optional
+            if true: rescale the image to the original scale. Otherwise, the output will
+            be between 0 and 1.
 
         Returns
         -------
@@ -88,5 +91,5 @@ class OTVCA(torch.nn.Module):
             v = c @ gh
 
         denoised_image = (fe_reshape @ v.T).reshape((nr1, nc1, p1))
-        denoised_image = utils.un_normalize(denoised_image, **consts, by_band=False)
+        denoised_image = utils.undo_normalize(denoised_image, **consts, by_band=False)
         return denoised_image, fe
