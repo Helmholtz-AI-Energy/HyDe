@@ -7,6 +7,7 @@ from torch.nn.functional import pad
 __all__ = [
     "add_noise_std",
     "add_noise_db",
+    "add_simulated_lines",
     "atleast_3d",
     "custom_pca_image",
     "diff",
@@ -130,6 +131,53 @@ def add_noise_db(signal: torch.Tensor, noise_pow: Union[int, float]) -> torch.Te
     # ret = noise + norm_sig
     # ret = undo_normalize(ret, **consts, by_band=False)
     return noise + signal
+
+
+def add_simulated_lines(
+    signal: torch.Tensor, noise_type="additive", iid=1
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    # todo: test with random erasing
+    # M=ones(size(img_noisy));
+    mask = torch.ones_like(signal)
+    # img_noisy_nan=img_noisy;
+    # bands_strp=60:63;
+    bands_strp = list(range(9, 15))
+    # for ib =  bands_strp
+    dtp, dev = signal.dtype, signal.device
+    first = True
+    for ib in bands_strp:
+        if first:
+            loc_strp = torch.ceil(torch.rand(20, dtype=dtp, device=dev) * signal.shape[1])
+            if noise_type == "additive" and iid == 1:
+                loc_strp = torch.cat([loc_strp, torch.arange(40, 51, dtype=dtp, device=dev)], dim=0)
+                loc_strp = torch.cat([loc_strp, torch.arange(10, 41, dtype=dtp, device=dev)], dim=0)
+            elif noise_type == "additive" and iid == 0:
+                loc_strp = torch.cat([loc_strp, torch.arange(20, 41, dtype=dtp, device=dev)], dim=0)
+                loc_strp = torch.cat([loc_strp, torch.arange(60, 76, dtype=dtp, device=dev)], dim=0)
+            elif noise_type == "poisson":
+                loc_strp = torch.cat([loc_strp, torch.arange(70, 91, dtype=dtp, device=dev)], dim=0)
+                loc_strp = torch.cat([loc_strp, torch.arange(50, 61, dtype=dtp, device=dev)], dim=0)
+            loc_strp = loc_strp.to(torch.long)
+            first = False
+            # loc_strp = ceil(rand(1,20)*column);
+            # switch which_case
+            #     case 'case1'
+            #
+            #         loc_strp = [loc_strp, 180:190];%loc_strp = [loc_strp, 200:210];
+            #         loc_strp = [loc_strp, 120:140]; %simulate a hole
+            #     case 'case2'
+            #         loc_strp = [loc_strp, 20:40];
+            #         loc_strp = [loc_strp, 160:175]; %simulate a hole
+            #     case 'case3'
+            #         loc_strp = [loc_strp, 70:90];
+            #         loc_strp = [loc_strp, 150:160]; %simulate a hole
+            # end
+        # img_noisy(:,loc_strp,ib)=zeros(row,size(loc_strp,2));
+        # print(ib)
+        signal[:, loc_strp, ib] = 0
+        mask[:, loc_strp, ib] = 0
+
+    return signal, mask
 
 
 def atleast_3d(image):
@@ -281,7 +329,7 @@ def estimate_hyperspectral_noise(
     return w, r_w
 
 
-# @torch.jit.script
+@torch.jit.script
 def _est_additive_noise(
     subdata: torch.Tensor, calculation_dtype: torch.dtype = torch.float
 ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -353,22 +401,20 @@ def hysime(input, noise, noise_corr):
 
     x = input - noise
     # signal correlation matrix estimates
-    ry = input @ input.T / float(n)
-    rx = x @ x.T / float(n)
+    ry = (input @ input.T) / float(n)
+    rx = (x @ x.T) / float(n)
     # eigen values of Rx in decreasing order, equation(15)
-    u, s, vh = torch.linalg.svd(rx)
+    u, s, vh = torch.linalg.svd(rx, full_matrices=False)
     # dx = diag(D);
-
     # Rn = Rn + sum(diag(Rx)) / L / 10 ^ 5 * eye(L);
-    noise_corr += (
-        rx.diag().sum() / float(l) / 1e5 * torch.eye(l, device=input.device, dtype=input.dtype)
-    )
+    noise_corr += rx.sum() / l / 100000 * torch.eye(l, device=input.device, dtype=input.dtype)
     # Py = diag(E'*Ry*E); %equation (23)
     py = torch.diag(u.T @ ry @ u)
     # Pn = diag(E'*Rn*E); %equation (24)
     pn = torch.diag(u.T @ noise_corr @ u)
     # cost_F = -Py + 2 * Pn; % equation(22)
     cost_f = -py + 2 * pn
+    # print(cost_f)
     # kf = sum(cost_F < 0);
     sig_subspace_dim = (cost_f < 0).sum()
     # [dummy, ind_asc] = sort(cost_F, 'ascend');
@@ -425,7 +471,7 @@ def custom_pca_image(img: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     return v_pca, pc
 
 
-def normalize(image: torch.Tensor, by_band=False) -> Tuple[torch.Tensor, dict]:
+def normalize(image: torch.Tensor, by_band=False, ignore_zeros=False) -> Tuple[torch.Tensor, dict]:
     """
     Normalize an input between 0 and 1. If `by_band` is True, the normalization will
     be done for each band of the image (assumes [h, w, band] shape).
@@ -446,23 +492,37 @@ def normalize(image: torch.Tensor, by_band=False) -> Tuple[torch.Tensor, dict]:
         normalization constants
         keys: mins, maxs
     """
+    out = torch.zeros_like(image)
     if by_band:
-        out = torch.zeros_like(image)
         mins, maxs = [], []
         for b in range(image.shape[-1]):
             # print(image[:, :, b].max())
-            max_y = image[:, :, b].max()  # [0]
+            sl = [slice(None), slice(None), b]
+            if ignore_zeros:
+                inds = torch.nonzero(image[sl] == 0, as_tuple=True)
+                sl[0] = inds[0] if len(inds[0]) > 0 else slice(None)
+                sl[1] = inds[1] if len(inds[1]) > 0 else slice(None)
+            sl = tuple(sl)
+            # print(sl)
+            max_y = image[sl].max()  # [0]
             maxs.append(max_y)
-            min_y = image[:, :, b].min()  # [0]
+            min_y = image[sl].min()  # [0]
             mins.append(min_y)
-            out[:, :, b] = (image[:, :, b] - min_y) / (max_y - min_y)
+            out[sl] = (image[sl] - min_y) / (max_y - min_y)
         min_y = tuple(mins)
         max_y = tuple(maxs)
     else:
         # normalize the entire image, not based on the band
-        max_y = image.max()
-        min_y = image.min()
-        out = (image - min_y) / (max_y - min_y)
+        sl = [slice(None), slice(None), slice(None)]
+        if ignore_zeros:
+            inds = torch.nonzero(image[sl] == 0, as_tuple=True)
+            sl[0] = inds[0] if len(inds[0]) > 0 else slice(None)
+            sl[1] = inds[1] if len(inds[1]) > 0 else slice(None)
+        sl = tuple(sl)
+        max_y = image[sl].max()
+        min_y = image[sl].min()
+
+        out[sl] = (image[sl] - min_y) / (max_y - min_y)
     return out, {"mins": min_y, "maxs": max_y}
 
 
