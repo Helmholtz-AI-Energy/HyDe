@@ -341,9 +341,7 @@ def _est_additive_noise(
     w = torch.zeros(subdata.shape, dtype=calculation_dtype, device=subdata.device)
     ddp = subdata @ torch.conj(subdata).T
     hld = (ddp + eps) @ torch.eye(int(dim0data), dtype=calculation_dtype, device=subdata.device)
-    ddpi = torch.eye(
-        hld.shape[0], hld.shape[1], dtype=calculation_dtype, device=subdata.device
-    ) @ torch.inverse(hld)
+    ddpi = torch.inverse(hld)
     for i in range(dim0data):
         xx = ddpi - (torch.outer(ddpi[:, i], ddpi[i, :]) / ddpi[i, i])
         # XX = RRi - (RRi(:,i)*RRi(i,:))/RRi(i,i);
