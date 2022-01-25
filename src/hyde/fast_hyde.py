@@ -130,36 +130,8 @@ class FastHyDe(torch.nn.Module):
         # eigen_Y = E'*Y;
         eigen_y = e.T @ y
         # %% --------------------------Eigen-image denoising ------------------------------------
-        # send slices of the image to the GPU if that is the case,
-        np_dtype = np.float32 if img.dtype is torch.float32 else np.float64
-        eigen_y_bm3d = np.empty((k_subspace, n), dtype=np_dtype)
-        ecpu = e.to(device="cpu", non_blocking=True)
-        r_w = r_w.to(device="cpu", non_blocking=True)
-
-        nxt_eigen = eigen_y[0].cpu()
-        for i in range(k_subspace):
-            lp_eigen = nxt_eigen.numpy()
-            if i < k_subspace - 1:
-                nxt_eigen = eigen_y[i + 1].to(device="cpu", non_blocking=True)
-            # produce eigen-image
-            eigen_im = lp_eigen
-            min_x = np.min(eigen_im)
-            max_x = np.max(eigen_im)
-            eigen_im -= min_x
-            scale = max_x - min_x
-            # normalize eigen_im
-            eigen_im = np.reshape(eigen_im, (rows, cols)) / scale
-            if i == 0:
-                ecpu = ecpu.numpy()
-                r_w = r_w.numpy()
-            sigma = np.sqrt(ecpu[:, i].T @ r_w @ ecpu[:, i]) / scale
-
-            filt_eigen_im = bm3d.bm3d(eigen_im, sigma)
-
-            eigen_y_bm3d[i, :] = (filt_eigen_im * scale + min_x).reshape(eigen_y_bm3d[i, :].shape)
-
+        eigen_y_bm3d = fast_hyde_eigen_image_denoising(img, k_subspace, r_w, e, eigen_y, n)
         eigen_y_bm3d = torch.tensor(eigen_y_bm3d, dtype=img.dtype, device=img.device)
-
         # % reconstruct data using denoising engin images
         y_reconst = e @ eigen_y_bm3d
         # %% ----------------- Re-transform ------------------------------
@@ -172,3 +144,37 @@ class FastHyDe(torch.nn.Module):
         if normalize:
             image_fasthyde = utils.undo_normalize(image_fasthyde, **consts, by_band=True)
         return image_fasthyde
+
+
+def fast_hyde_eigen_image_denoising(img, k_subspace, r_w, e, eigen_y, n) -> np.ndarray:
+    # %% --------------------------Eigen-image denoising ------------------------------------
+    # send slices of the image to the GPU if that is the case,
+    rows, cols, b = img.shape
+    np_dtype = np.float32 if img.dtype is torch.float32 else np.float64
+    eigen_y_bm3d = np.empty((k_subspace, n), dtype=np_dtype)
+    ecpu = e.to(device="cpu", non_blocking=True)
+    r_w = r_w.to(device="cpu", non_blocking=True)
+
+    nxt_eigen = eigen_y[0].cpu()
+    for i in range(k_subspace):
+        lp_eigen = nxt_eigen.numpy()
+        if i < k_subspace - 1:
+            nxt_eigen = eigen_y[i + 1].to(device="cpu", non_blocking=True)
+        # produce eigen-image
+        eigen_im = lp_eigen
+        min_x = np.min(eigen_im)
+        max_x = np.max(eigen_im)
+        eigen_im -= min_x
+        scale = max_x - min_x
+        # normalize eigen_im
+        eigen_im = np.reshape(eigen_im, (rows, cols)) / scale
+        if i == 0:
+            ecpu = ecpu.numpy()
+            r_w = r_w.numpy()
+        sigma = np.sqrt(ecpu[:, i].T @ r_w @ ecpu[:, i]) / scale
+
+        filt_eigen_im = bm3d.bm3d(eigen_im, sigma)
+
+        eigen_y_bm3d[i, :] = (filt_eigen_im * scale + min_x).reshape(eigen_y_bm3d[i, :].shape)
+
+    return eigen_y_bm3d

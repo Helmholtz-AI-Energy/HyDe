@@ -2,9 +2,10 @@ import math
 from typing import Iterable, Optional, Tuple, Union
 
 import torch
-from torch.nn.functional import pad
+from torch.nn.functional import max_pool2d, pad
 
 __all__ = [
+    "adaptive_median_filtering",
     "add_noise_std",
     "add_noise_db",
     "add_simulated_lines",
@@ -25,6 +26,76 @@ __all__ = [
     "vertical_difference_transpose",
     "undo_normalize",
 ]
+
+
+def adaptive_median_filtering(image: torch.Tensor, max_size: int) -> torch.Tensor:
+    """
+    Perform adaptive median filtering on `image`. The median filter starts at size 3-by-3 and iterates up
+    to size `max_size` x `max_size`.
+
+    This will use pooling from torch to parallelize this function. However, at time of writing (25.01.2022)
+    there does not exist a memory efficient way to do median pooling. This results in a larger memory
+    footprint than may be expected.
+
+    Parameters
+    ----------
+    image: torch.Tensor
+        image to do adaptive median filtering on
+    max_size: int
+        MUST BE ODD AND > 3
+        the kernel size to use in the filters
+
+    Returns
+    -------
+    adaptive_median: torch.Tensor
+
+    Original Lisense
+    ----------------
+    (From MATLAB code)
+    Copyright 2002-2004 R. C. Gonzalez, R. E. Woods, & S. L. Eddins
+    Digital Image Processing Using MATLAB, Prentice-Hall, 2004
+    $Revision: 1.5 $  $Date: 2003/11/21 14:19:05 $
+
+    """
+    # NOTE: image must be 2D here
+
+    # max_size must be an odd, positive integer greater than 1.
+    if max_size <= 1 or max_size % 2 == 0:
+        raise ValueError(f"max_size must be an odd integer > 1, currently: {max_size}")
+    # % Initial setup.
+    f = torch.zeros_like(image)
+
+    already_procd = torch.zeros_like(image).to(dtype=torch.bool)
+    # % Begin filtering.
+    for k in range(3, max_size + 1, 2):
+        imagep = symmetric_pad(image, k).unsqueeze(0).unsqueeze(0)
+        # ordfilt2 -> can use pooling from torch
+        kernel = k, k
+        stride = 1, 1
+        sl = (slice(k, k + image.shape[0]), slice(k, k + image.shape[1]))
+        zmin = -max_pool2d(imagep, kernel, stride=stride)
+        zmin = zmin.squeeze()[sl]
+
+        zmax = max_pool2d(imagep, kernel, stride=stride)
+        zmax = zmax.squeeze()[sl]
+
+        zmed = imagep.unfold(2, kernel[0], stride[0]).unfold(3, kernel[1], stride[1])
+        zmed = zmed.contiguous().view(zmed.size()[:4] + (-1,)).median(dim=-1)[0].squeeze()
+        zmed = zmed[sl]
+
+        process_using_level_b = (zmed > zmin) & (zmax > zmed) & ~already_procd
+        zB = (image > zmin) & (zmax > image)
+
+        output_zxy = process_using_level_b & zB
+        output_zmed = process_using_level_b & ~zB
+        f[output_zxy] = image[output_zxy]
+        f[output_zmed] = zmed[output_zmed]
+
+        already_procd = already_procd | process_using_level_b
+        if torch.all(already_procd):
+            break
+
+    return zmed
 
 
 def add_noise_std(image, sigma, noise_type, iid=True):
@@ -664,55 +735,30 @@ def symmetric_pad(tens: torch.Tensor, n: Union[int, Iterable]) -> torch.Tensor:
     # img_pad = np.pad(img, ((N, N), (N, N)), 'symmetric')
     if isinstance(n, int):
         n = [n] * tens.ndim * 2
-    og_sz = tens.shape
-    # elif isinstance(n)
     # todo: implement this with one-sided padding (only on top/bottom and only on left/right
     padded = pad(tens, n, "constant", 0.0)
-    # print(padded[..., 0])
     if tens.ndim > 2:
-        cycle = list(range(og_sz[2])) + list(range(og_sz[2] - 1, -1, -1))
-        for i in range(n[-6]):  # dim 2, low inds
-            # (reflect the cols first -> taste)
-            ind = cycle[(i + 1) % len(cycle)] - og_sz[1]
-            padded[:, :, i] = padded[:, :, ind]
-            # padded[:, :, 0 + i] = padded[:, :, 2 * n[-6] - i - 1]
-            # n == 4
-            # 0 -> 7, 1 -> 6, 2 -> 5, 3 -> 4, break
-
-        cycle = list(reversed(range(-og_sz[2], 0))) + list(range(-og_sz[2], 0))
-        for i in range(n[-5]):  # dim 2, high inds
-            sind = og_sz[2] - padded.shape[2] + i
-            gind = og_sz[2] - padded.shape[2] + cycle[i % len(cycle)]
-            padded[:, :, sind] = padded[:, :, gind]
-            # padded[:, :, -1 - (0 + i)] = padded[:, :, -2 * n[-5] + i]
-            # n == 4
-            # -1 -> -8, -2 -> -7, -3 -> -6, -4 -> -5, break
+        # get edge of left side
+        og_edge_flp = padded[:, :, n[-6] + 1 : n[-6] * 2 + 1].flip(dims=[1])
+        padded[:, : n[-6]] = og_edge_flp
+        # right side
+        og_edge_flp = padded[:, -n[-5] * 2 - 1 : -n[-5] - 1].flip(dims=[1])
+        padded[:, -n[-5] :] = og_edge_flp
 
     if tens.ndim > 1:
-        cycle = list(range(og_sz[1])) + list(range(og_sz[1] - 1, -1, -1))
-        for i in range(n[-4]):  # dim 1, left side (low inds)
-            ind = cycle[(i + 1) % len(cycle)] - og_sz[1]
-            # (reflect the cols first -> taste)
-            padded[:, 0 + i] = padded[:, ind]
-            # 0 -> 7, 1 -> 6, 2 -> 5, 3 -> 4, break
+        # get edge of left side
+        og_edge_flp = padded[:, n[-4] + 1 : n[-4] * 2 + 1].flip(dims=[1])
+        padded[:, : n[-4]] = og_edge_flp
+        # right side
+        og_edge_flp = padded[:, -n[-3] * 2 - 1 : -n[-3] - 1].flip(dims=[1])
+        padded[:, -n[-3] :] = og_edge_flp
 
-        cycle = list(reversed(range(-og_sz[1], 0))) + list(range(-og_sz[1], 0))
-        for i in range(n[-3]):  # dim 1, right side (end / high inds))
-            sind = og_sz[1] - padded.shape[1] + i
-            gind = og_sz[1] - padded.shape[1] + cycle[i % len(cycle)]
-            padded[:, sind] = padded[:, gind]
-            # -1 -> -8, -2 -> -7, -3 -> -6, -4 -> -5, break
-
-    cycle = list(range(og_sz[0])) + list(range(og_sz[0] - 1, -1, -1))
-    for i in range(n[-2]):  # dim 0, top, (low inds)
-        ind = cycle[(i + 1) % len(cycle)] - og_sz[0]
-        padded[i] = padded[ind]
-
-    cycle = list(reversed(range(-og_sz[0], 0))) + list(range(-og_sz[0], 0))
-    for i in range(n[-1]):  # dim 0, bottom, (low inds)
-        sind = og_sz[0] - padded.shape[0] + i
-        gind = og_sz[0] - padded.shape[0] + cycle[i % len(cycle)]
-        padded[sind] = padded[gind]
+    og_edge_flp = padded[n[-2] + 1 : n[-2] * 2 + 1].flip(dims=[0])
+    padded[: n[-2]] = og_edge_flp
+    # top
+    og_edge_flp = padded[-n[-1] * 2 - 1 : -n[-1] - 1].flip(dims=[0])
+    padded[-n[-1] :] = og_edge_flp
+    # bottom
 
     return padded
 
