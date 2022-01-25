@@ -131,7 +131,7 @@ class FastHyDe(torch.nn.Module):
         eigen_y = e.T @ y
         # %% --------------------------Eigen-image denoising ------------------------------------
         eigen_y_bm3d = fast_hyde_eigen_image_denoising(img, k_subspace, r_w, e, eigen_y, n)
-
+        eigen_y_bm3d = torch.tensor(eigen_y_bm3d, dtype=img.dtype, device=img.device)
         # % reconstruct data using denoising engin images
         y_reconst = e @ eigen_y_bm3d
         # %% ----------------- Re-transform ------------------------------
@@ -146,7 +146,7 @@ class FastHyDe(torch.nn.Module):
         return image_fasthyde
 
 
-def fast_hyde_eigen_image_denoising(img, k_subspace, r_w, e, eigen_y, n):
+def fast_hyde_eigen_image_denoising(img, k_subspace, r_w, e, eigen_y, n) -> np.ndarray:
     # %% --------------------------Eigen-image denoising ------------------------------------
     # send slices of the image to the GPU if that is the case,
     rows, cols, b = img.shape
@@ -177,4 +177,4 @@ def fast_hyde_eigen_image_denoising(img, k_subspace, r_w, e, eigen_y, n):
 
         eigen_y_bm3d[i, :] = (filt_eigen_im * scale + min_x).reshape(eigen_y_bm3d[i, :].shape)
 
-    return torch.tensor(eigen_y_bm3d, dtype=img.dtype, device=img.device)
+    return eigen_y_bm3d

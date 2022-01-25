@@ -34,34 +34,27 @@ def adaptive_median_filtering(image: torch.Tensor, max_size: int):
     # max_size must be an odd, positive integer greater than 1.
     if max_size <= 1 or max_size % 2 == 0:
         raise ValueError(f"max_size must be an odd integer > 1, currently: {max_size}")
-    # [M, N] = size(image);
-    # m, n = image.shape
     # % Initial setup.
-    # f = image;
-    # f(:) = 0;
     f = torch.zeros_like(image)
-    # dev = image.device
-    # dtp = image.dtype
 
-    # alreadyProcessed = false(size(image));  creates a boolean array of the size of image
-    already_procd = torch.zeros_like(image).to(dtyle=torch.bool)
+    already_procd = torch.zeros_like(image).to(dtype=torch.bool)
     # % Begin filtering.
-    imagep = symmetric_pad(image, 2).unsqueeze(0).unsqueeze(0)
     for k in range(3, max_size + 1, 2):
-        # ordfilt2 -> filters, order, domain, padding_method
-        kernel = k.k
+        imagep = symmetric_pad(image, k).unsqueeze(0).unsqueeze(0)
+        # ordfilt2 -> can use pooling from torch
+        kernel = k, k
         stride = 1, 1
-        # zmin = ordfilt2(image, 1, (k, k), 'symmetric')
+        sl = (slice(k, k + image.shape[0]), slice(k, k + image.shape[1]))
         zmin = -max_pool2d(imagep, kernel, stride=stride)
-        zmin = zmin.squeeze()[kernel[0] : -(kernel[0] - 1), kernel[1] : -(kernel[1] - 1)]
+        zmin = zmin.squeeze()[sl]
 
         zmax = max_pool2d(imagep, kernel, stride=stride)
-        zmax = zmax.squeeze()[kernel[0] : -(kernel[0] - 1), kernel[1] : -(kernel[1] - 1)]
+        zmax = zmax.squeeze()[sl]
 
         zmed = imagep.unfold(2, kernel[0], stride[0]).unfold(3, kernel[1], stride[1])
-        zmed = zmed.contiguous().view(zmed.size()[:4] + (-1,)).median(dim=-1)[0]
+        zmed = zmed.contiguous().view(zmed.size()[:4] + (-1,)).median(dim=-1)[0].squeeze()
+        zmed = zmed[sl]
 
-        # todo: test me
         process_using_level_b = (zmed > zmin) & (zmax > zmed) & ~already_procd
         zB = (image > zmin) & (zmax > image)
 
@@ -73,54 +66,8 @@ def adaptive_median_filtering(image: torch.Tensor, max_size: int):
         already_procd = already_procd | process_using_level_b
         if torch.all(already_procd):
             break
-    # for k = 3:2:max_size
-    #    zmin = ordfilt2(image, 1, ones(k, k), 'symmetric');
-    #    zmax = ordfilt2(image, k * k, ones(k, k), 'symmetric');
-    #    zmed = medfilt2(image, [k k], 'symmetric');
-    #
-    #    processUsingLevelB = (zmed > zmin) & (zmax > zmed) & ...
-    #        ~alreadyProcessed;
-    #    zB = (image > zmin) & (zmax > image);
-    #    outputZxy  = processUsingLevelB & zB;
-    #    outputZmed = processUsingLevelB & ~zB;
-    #    f(outputZxy) = image(outputZxy);
-    #    f(outputZmed) = zmed(outputZmed);
-    #
-    #    alreadyProcessed = alreadyProcessed | processUsingLevelB;
-    #    if all(alreadyProcessed(:))
-    #       break;
-    #    end
-    # end
 
-    # % Output zmed for any remaining unprocessed pixels. Note that this
-    # % zmed was computed using a window of size max_size-by-max_size, which is
-    # % the final value of k in the loop.
-    # f(~alreadyProcessed) = zmed(~alreadyProcessed);
-    # todo: make sure that this is correct (shape)
     return zmed
-
-
-def ordfilt2(image, order, domain, padding):
-    # assume that image is 2D
-    # ordfilt2 can be viewed as pooling layers
-    if padding == "symmetric":
-        work = symmetric_pad(image, n=domain.shape[0])
-    else:
-        work = image
-        # todo: only slice the end if this works
-    dm_sz = domain[0] * domain[1]
-    if order == 1:  # this is a min pooling
-        # min pooling is x = -max_pool(-x)
-        work = -work
-        ret = -max_pool2d(work.unsqueeze(0).unsqueeze(0), (2, 2), stride=(1, 1))
-        ret = ret.squeeze()[domain[0] : -(domain[0] - 1), domain[1] : -(domain[1] - 1)]
-        return ret
-    elif order == dm_sz:  # max pooling
-        ret = max_pool2d(work.unsqueeze(0).unsqueeze(0), (2, 2), stride=(1, 1))
-        ret = ret.squeeze()[domain[0] : -(domain[0] - 1), domain[1] : -(domain[1] - 1)]
-        return ret
-    else:
-        raise NotImplementedError("other non-min/max filters are not enabled")
 
 
 def add_noise_std(image, sigma, noise_type, iid=True):
