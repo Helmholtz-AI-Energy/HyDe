@@ -28,7 +28,35 @@ __all__ = [
 ]
 
 
-def adaptive_median_filtering(image: torch.Tensor, max_size: int):
+def adaptive_median_filtering(image: torch.Tensor, max_size: int) -> torch.Tensor:
+    """
+    Perform adaptive median filtering on `image`. The median filter starts at size 3-by-3 and iterates up
+    to size `max_size` x `max_size`.
+
+    This will use pooling from torch to parallelize this function. However, at time of writing (25.01.2022)
+    there does not exist a memory efficient way to do median pooling. This results in a larger memory
+    footprint than may be expected.
+
+    Parameters
+    ----------
+    image: torch.Tensor
+        image to do adaptive median filtering on
+    max_size: int
+        MUST BE ODD AND > 3
+        the kernel size to use in the filters
+
+    Returns
+    -------
+    adaptive_median: torch.Tensor
+
+    Original Lisense
+    ----------------
+    (From MATLAB code)
+    Copyright 2002-2004 R. C. Gonzalez, R. E. Woods, & S. L. Eddins
+    Digital Image Processing Using MATLAB, Prentice-Hall, 2004
+    $Revision: 1.5 $  $Date: 2003/11/21 14:19:05 $
+
+    """
     # NOTE: image must be 2D here
 
     # max_size must be an odd, positive integer greater than 1.

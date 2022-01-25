@@ -6,10 +6,54 @@ __all__ = ["L1HyMixDe"]
 
 
 class L1HyMixDe(torch.nn.Module):
+    """
+    Implementation of the L1HyMixDe method [1] for improving on the FastHyDe method.
+    This method will show less speed-up than others because it relies upon the BM3D
+    software package which only utilizes CPUs.
+
+    References
+    ----------
+    [1] L. Zhuang and M. K. Ng, "Hyperspectral Mixed Noise Removal By $\ell _1$-Norm-Based Subspace Representation,"
+        in IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing, vol. 13, pp. 1143-1157,
+        2020, doi: 10.1109/JSTARS.2020.2979801.
+
+    """
+
     def __init__(self):
         super(L1HyMixDe, self).__init__()
 
-    def forward(self, img: torch.Tensor, k_subspace, p, max_iter=40, normalize=True):
+    def forward(
+        self,
+        img: torch.Tensor,
+        k_subspace: int = 10,
+        p: float = 0.05,
+        max_iter: int = 10,
+        normalize: bool = True,
+    ) -> torch.Tensor:
+        """
+        Run the L1HyMixDe method on an image. The loop will break if there is no more progress made even if
+        `max_iter` is not reached.
+
+        Parameters
+        ----------
+        img: torch.Tensor
+            image to de-noise
+        k_subspace: int
+            The number of signal subspaces to scan.
+            default: 10
+        p: float
+            the percentage of elements corrupted by impulse noise and stripes
+            default: 0.05
+        max_iter: int
+            number of iterations to run the denoising method.
+        normalize: bool
+            if true, normalize the data (by band) before the algorithm.
+            default: True.
+
+        Returns
+        -------
+        denoised_image: torch.Tensor
+        """
         if normalize:
             img, consts = utils.normalize(img, by_band=True, ignore_zeros=False)
         row, col, band = img.shape
@@ -53,7 +97,7 @@ class L1HyMixDe(torch.nn.Module):
         rw_fasthyde = torch.eye(band, dtype=img.dtype, device="cpu")
         zold = None
         crits = []
-        for it in range(max_iter):  # range limit??
+        for it in range(max_iter):
             # %% Updating Z: Z_{k+1} = argmin_Z lambda*phi(Z) + mu/2 || Y-EZ-V_k-D_k||_F^2
             # %Equivlance: Z_{k+1} = argmin_Z lambda/mu*phi(Z) +  1/2 || Y-EZ-V_k-D_k||_F^2
             y_aux = y_og - v + d
@@ -79,7 +123,7 @@ class L1HyMixDe(torch.nn.Module):
             d += yez - v
             if it > 0:
                 crits.append(torch.norm(z - zold) / torch.norm(zold))
-                print(it, crits[-1], sum(crits[-5:]) / len(crits[-5:]) - crits[-1])
+                # print(it, crits[-1], sum(crits[-5:]) / len(crits[-5:]) - crits[-1])
             if it > 1 and (
                 crits[-1] < 0.001 or sum(crits[-5:]) / len(crits[-5:]) - crits[-1] < 1e-4
             ):
