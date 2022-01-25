@@ -9,8 +9,43 @@ __all__ = ["FastHyIe"]
 
 class FastHyIe(torch.nn.Module):
     """
-    TODO: fix the license thing
-    TODO: docs
+    The FastHyIe method is detailed in [1] and [2]. It is designed to use BM3D and eigenvalue decompositions
+    to remove Gaussian and Poissonian noise as well as fill in missing data (in-painting).
+
+    For more details about how to run the algorithm, see the :func:`forward` function.
+
+    References
+    ----------
+    [1] L. Zhuang and J. M. Bioucas-Dias,
+        "Fast hyperspectral image denoising based on low rank and sparse
+        representations, in 2016 IEEE International Geoscience and Remote
+        Sensing Symposium (IGARSS 2016), 2016.
+    [2] L. Zhuang and J. M. Bioucas-Dias,
+        "Fast hyperspectral image denoising and inpainting based on low rank
+        and sparse representations, Submitted to IEEE Journal of Selected
+        Topics in Applied Earth Observations and Remote Sensing, 2017.
+        URL: http://www.lx.it.pt/~bioucas/files/submitted_ieee_jstars_2017.pdf
+
+
+    Original Copyright
+    ------------------
+    Copyright (July, 2017):
+                Lina Zhuang (lina.zhuang@lx.it.pt)
+                &
+                José Bioucas-Dias (bioucas@lx.it.pt)
+
+    FastHyDe is distributed under the terms of
+    the GNU General Public License 2.0.
+
+    Permission to use, copy, modify, and distribute this software for
+    any purpose without fee is hereby granted, provided that this entire
+    notice is included in all copies of any software which is or includes
+    a copy or modification of this software and in all copies of the
+    supporting documentation for such software.
+    This software is being provided "as is", without any express or
+    implied warranty.  In particular, the authors do not make any
+    representation or warranty of any kind concerning the merchantability
+    of this software or its fitness for any particular purpose."
     """
 
     def __init__(
@@ -21,12 +56,40 @@ class FastHyIe(torch.nn.Module):
     def forward(
         self,
         img: torch.Tensor,
-        mask=torch.Tensor,
+        mask: torch.Tensor,
         noise_type="additive",
         iid=True,
         k_subspace=10,
         normalize=True,
     ):
+        """
+        Run the FastHyDe denoising algorithm.
+
+        Parameters
+        ----------
+        img: torch.Tensor
+            hyperspectral dataset. The format is assumed to be [rows, cols, bands].
+        mask: torch.Tensor
+            mask matrix of the same size as img.
+            values of 1 in the mask indicate that there is viable data  for that element
+            values of 0 in the mask indicate that there is no viable data for that element
+        noise_type: str
+            What type of noise is expected in the image
+            must be one of [additive, poisson], default: additive
+        iid: bool
+            If gaussian (additive noise) is i.i.d. or not. This is not used for poissonian noise.
+            default: True
+        k_subspace: int
+            The number of signal subspaces to scan.
+            default: 10
+        normalize: bool
+            if true, normalize the data (by band) before the algorithm.
+            default: True.
+
+        Returns
+        -------
+        denoised image: torch.Tensor
+        """
         rows, cols, b = img.shape
         n = rows * cols
         m2d = mask.reshape((n, b)).T
