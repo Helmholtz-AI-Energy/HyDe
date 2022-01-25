@@ -1,23 +1,110 @@
+import math
 from typing import Iterable, Optional, Tuple, Union
 
 import torch
 from torch.nn.functional import pad
 
 __all__ = [
+    "add_noise_std",
     "add_noise_db",
+    "add_simulated_lines",
     "atleast_3d",
     "custom_pca_image",
     "diff",
     "diff_dim0_replace_last_row",
     "estimate_hyperspectral_noise",
+    "hysime",
     "normalize",
+    "peak_snr",
     "snr",
     "soft_threshold",
     "sure_thresh",
     "sure_soft_modified_lr2",
     "symmetric_pad",
+    "vertical_difference",
+    "vertical_difference_transpose",
     "undo_normalize",
 ]
+
+
+def add_noise_std(image, sigma, noise_type, iid=True):
+    # switch which_case
+    if isinstance(sigma, int):
+        sigma = [0.10, 0.08, 0.06, 0.04, 0.02][sigma]
+    if noise_type == "additive" and iid:
+        noise = sigma * torch.randn_like(image)
+        img_noisy = image + noise
+        # case 'case1'
+        #     %--------------------- Case 1 --------------------------------------
+        #
+        #     % zero-mean Gaussian noise is added to all the bands of the Washington DC Mall
+        #     % and Pavia city center data.
+        #     % The noise standard deviation values are 0.02, 0.04, 0.06, 0.08, and 0.10, respectively.
+        #     noise_type='additive';
+        #     iid = 1; %It is true that noise is i.i.d.
+        #         %generate noisy image
+        #         noise = sigma.*randn(size(img_clean));
+        #         img_noisy=img_clean+noise;
+    elif noise_type == "additive" and not iid:
+        sigma = torch.rand(image.shape[-1], dtype=image.dtype, device=image.device) * 0.1
+        noise = torch.randn_like(image)
+        for band in range(image.shape[-1]):
+            noise[:, :, band] *= sigma[band]
+        img_noisy = image + noise
+
+        # case 'case2'
+        #     %---------------------  Case 2 ---------------------
+        #
+        #     % Different variance zero-mean Gaussian noise is added to
+        #     % each band of the two HSI datasets.
+        #     % The std values are randomly selected from 0 to 0.1.
+        #     noise_type='additive';
+        #     iid = 0; %noise is not i.i.d.
+        #     rand('seed',0);
+        #     sigma = rand(1,band)*0.1;
+        #     randn('seed',0);
+        #     noise= randn(size(img_clean));
+        #     for cb=1:band
+        #         noise(:,:,cb) = sigma(cb)*noise(:,:,cb);
+        #
+        #     end
+        #     img_noisy=img_clean+noise;
+    elif noise_type == "poisson":
+        img_wN = image
+        snr_db = 15
+        snr_set = torch.exp(
+            snr_db * torch.log(torch.tensor(10, device=image.device, dtype=image.dtype)) / 10
+        )
+        # case 'case3'
+        #     %  ---------------------  Case 3: Poisson Noise ---------------------
+        #     noise_type='poisson';
+        #      iid = NaN; % noise_type is set to 'poisson',
+        #     img_wN = img_clean;
+        #
+        #     snr_db = 15;
+        #     snr_set = exp(snr_db*log(10)/10);
+
+        rc = image.shape[0] * image.shape[1]
+        bands = image.shape[-1]
+        img_wn_noisy = torch.zeros((bands, rc), dtype=image.dtype, device=image.device)
+        for i in range(bands):
+            img_wntmp = img_wN[:, :, i].unsqueeze(0)
+            # reshape(img_wN(:,:,i),[1,N]);
+            # img_wNtmp = max(img_wNtmp,0)
+            # todo: check to make sure that the max above just takes the stuff above 0
+            img_wntmp[img_wntmp <= 0] = 0
+            # factor = snr_set/( sum(img_wNtmp.^2)/sum(img_wNtmp) );
+            factor = snr_set / ((img_wntmp ** 2).sum() / img_wntmp.sum())
+            # img_wN_scale(i,1:N) = factor*img_wNtmp;
+            # img_wN_scale[i] = factor * img_wNtmp
+            # % Generates Poisson random samples
+            # img_wN_noisy(i,1:N) = poissrnd(factor*img_wNtmp);
+            img_wn_noisy[i] = torch.poisson(factor * img_wntmp)
+        #         img_noisy = reshape(img_wN_noisy', [row, column band]);
+        img_noisy = img_wn_noisy.T.reshape(image.shape)
+    else:
+        raise ValueError(f"noise type must be one of [poissson, additive], currently: {noise_type}")
+    return img_noisy
 
 
 def add_noise_db(signal: torch.Tensor, noise_pow: Union[int, float]) -> torch.Tensor:
@@ -39,7 +126,58 @@ def add_noise_db(signal: torch.Tensor, noise_pow: Union[int, float]) -> torch.Te
     # sig = 10 * torch.log10(torch.mean(image ** 2))
     noise = torch.zeros_like(signal).normal_(std=noise_to_add)
     print(f"Added Noise [dB]: {10 * torch.log10(torch.mean(torch.pow(noise, 2)))}")
+    # todo: scale the noise to be on the same scale as the image?
+    # norm_sig, consts = normalize(signal)
+    # ret = noise + norm_sig
+    # ret = undo_normalize(ret, **consts, by_band=False)
     return noise + signal
+
+
+def add_simulated_lines(
+    signal: torch.Tensor, noise_type="additive", iid=1
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    # todo: test with random erasing
+    # M=ones(size(img_noisy));
+    mask = torch.ones_like(signal)
+    # img_noisy_nan=img_noisy;
+    # bands_strp=60:63;
+    bands_strp = list(range(9, 15))
+    # for ib =  bands_strp
+    dtp, dev = signal.dtype, signal.device
+    first = True
+    for ib in bands_strp:
+        if first:
+            loc_strp = torch.ceil(torch.rand(20, dtype=dtp, device=dev) * signal.shape[1])
+            if noise_type == "additive" and iid == 1:
+                loc_strp = torch.cat([loc_strp, torch.arange(40, 51, dtype=dtp, device=dev)], dim=0)
+                loc_strp = torch.cat([loc_strp, torch.arange(10, 41, dtype=dtp, device=dev)], dim=0)
+            elif noise_type == "additive" and iid == 0:
+                loc_strp = torch.cat([loc_strp, torch.arange(20, 41, dtype=dtp, device=dev)], dim=0)
+                loc_strp = torch.cat([loc_strp, torch.arange(60, 76, dtype=dtp, device=dev)], dim=0)
+            elif noise_type == "poisson":
+                loc_strp = torch.cat([loc_strp, torch.arange(70, 91, dtype=dtp, device=dev)], dim=0)
+                loc_strp = torch.cat([loc_strp, torch.arange(50, 61, dtype=dtp, device=dev)], dim=0)
+            loc_strp = loc_strp.to(torch.long)
+            first = False
+            # loc_strp = ceil(rand(1,20)*column);
+            # switch which_case
+            #     case 'case1'
+            #
+            #         loc_strp = [loc_strp, 180:190];%loc_strp = [loc_strp, 200:210];
+            #         loc_strp = [loc_strp, 120:140]; %simulate a hole
+            #     case 'case2'
+            #         loc_strp = [loc_strp, 20:40];
+            #         loc_strp = [loc_strp, 160:175]; %simulate a hole
+            #     case 'case3'
+            #         loc_strp = [loc_strp, 70:90];
+            #         loc_strp = [loc_strp, 150:160]; %simulate a hole
+            # end
+        # img_noisy(:,loc_strp,ib)=zeros(row,size(loc_strp,2));
+        # print(ib)
+        signal[:, loc_strp, ib] = 0
+        mask[:, loc_strp, ib] = 0
+
+    return signal, mask
 
 
 def atleast_3d(image):
@@ -147,9 +285,9 @@ def prep_out_bregman(image: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
 
 def estimate_hyperspectral_noise(
     data: torch.Tensor,
-    noise_type: torch.Tensor = "additive",
+    noise_type: str = "additive",
     calculation_dtype: torch.dtype = torch.float,
-) -> torch.Tensor:
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Infer the noise in a hyperspectral dataset. Assumes that the
     reflectance at a given band is well modelled by a linear regression
@@ -198,13 +336,12 @@ def _est_additive_noise(
     # estimate the additive noise in the given data with a certain precision
     eps = 1e-6
     dim0data, dim1data = subdata.shape
+    dtp = subdata.dtype
     subdata = subdata.to(dtype=calculation_dtype)
     w = torch.zeros(subdata.shape, dtype=calculation_dtype, device=subdata.device)
     ddp = subdata @ torch.conj(subdata).T
     hld = (ddp + eps) @ torch.eye(int(dim0data), dtype=calculation_dtype, device=subdata.device)
-    ddpi = torch.eye(
-        hld.shape[0], hld.shape[1], dtype=calculation_dtype, device=subdata.device
-    ) @ torch.inverse(hld)
+    ddpi = torch.inverse(hld)
     for i in range(dim0data):
         xx = ddpi - (torch.outer(ddpi[:, i], ddpi[i, :]) / ddpi[i, i])
         # XX = RRi - (RRi(:,i)*RRi(i,:))/RRi(i,i);
@@ -219,11 +356,92 @@ def _est_additive_noise(
         w[i, :] = subdata[i, :] - (beta.T @ subdata)
     # ret = torch.diag(torch.diag(ddp / dim1data))
     # Rw=diag(diag(w*w'/N));
-    hold2 = torch.matmul(w, w.conj().t())
+    hold2 = torch.matmul(w, w.T) / float(subdata.shape[1])
     ret = torch.diag(torch.diagonal(hold2))
-    w = w.to(dtype=torch.float)
-    ret = ret.to(dtype=torch.float)
+    w = w.to(dtype=dtp)
+    ret = ret.to(dtype=dtp)
     return w, ret
+
+
+def hysime(input, noise, noise_corr):
+    """
+    HySime: Hyperspectral signal subspace estimation, adapted from [1].
+
+    Parameters
+    ----------
+    input : torch.Tensor
+    noise : torch.Tensor
+    noise_corr : torch.Tensor
+
+    Returns
+    -------
+    signal_subspace_dim : torch.Tensor
+    eigs_span_subspace : torch.Tensor
+        matrix which columns are the eigenvalues that span the signal subspace
+
+    References
+    ----------
+    [1] S. Devika and S. M. K. Chaitanya, "Signal estimation of hyperspectral data using HYSIME algorithm," 2016
+        International Conference on Research Advances in Integrated Navigation Systems (RAINS), 2016, pp. 1-3,
+        doi: 10.1109/RAINS.2016.7764372.
+    """
+    # [L N] = size(y);
+    l, n = input.shape
+    # [Ln Nn] = size(n);
+    ln, nn = noise.shape
+    # [d1 d2] = size(Rn);
+    d1, d2 = noise_corr.shape
+    if ln != l or nn != n:
+        raise RuntimeError("incompatible sizes for noise and input")
+    if d1 != d2 or d1 != l:
+        print("Bad noise correlation matrix")
+        noise_corr = noise @ noise.T / float(n)
+
+    x = input - noise
+    # signal correlation matrix estimates
+    ry = (input @ input.T) / float(n)
+    rx = (x @ x.T) / float(n)
+    # eigen values of Rx in decreasing order, equation(15)
+    u, s, vh = torch.linalg.svd(rx, full_matrices=False)
+    # dx = diag(D);
+    # Rn = Rn + sum(diag(Rx)) / L / 10 ^ 5 * eye(L);
+    noise_corr += rx.sum() / l / 100000 * torch.eye(l, device=input.device, dtype=input.dtype)
+    # Py = diag(E'*Ry*E); %equation (23)
+    py = torch.diag(u.T @ ry @ u)
+    # Pn = diag(E'*Rn*E); %equation (24)
+    pn = torch.diag(u.T @ noise_corr @ u)
+    # cost_F = -Py + 2 * Pn; % equation(22)
+    cost_f = -py + 2 * pn
+    # print(cost_f)
+    # kf = sum(cost_F < 0);
+    sig_subspace_dim = (cost_f < 0).sum()
+    # [dummy, ind_asc] = sort(cost_F, 'ascend');
+    _, indices = torch.sort(cost_f)
+    # Ek = E(:, ind_asc(1: kf));
+    eigs_span_subspace = u[:, indices[:sig_subspace_dim]]
+    return sig_subspace_dim, eigs_span_subspace
+
+
+def peak_snr(img1: torch.Tensor, img2: torch.Tensor) -> float:
+    """
+    Compute the peak signal to noise ratio between two images
+
+    Parameters
+    ----------
+    img1 : torch.Tensor
+    img2 : torch.Tensor
+
+    Returns
+    -------
+    snr : float
+        peak signal to noise ration
+    """
+    img1 = img1.to(torch.float32) / 255.0
+    img2 = img2.to(dtype=torch.float32, device=img1.device) / 255.0
+    mse = torch.mean((img1 - img2) ** 2)
+    if mse == 0:
+        return 0.0
+    return 10 * math.log10(1.0 / mse)
 
 
 def custom_pca_image(img: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -251,7 +469,7 @@ def custom_pca_image(img: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     return v_pca, pc
 
 
-def normalize(image: torch.Tensor, by_band=False) -> Tuple[torch.Tensor, dict]:
+def normalize(image: torch.Tensor, by_band=False, ignore_zeros=False) -> Tuple[torch.Tensor, dict]:
     """
     Normalize an input between 0 and 1. If `by_band` is True, the normalization will
     be done for each band of the image (assumes [h, w, band] shape).
@@ -272,18 +490,37 @@ def normalize(image: torch.Tensor, by_band=False) -> Tuple[torch.Tensor, dict]:
         normalization constants
         keys: mins, maxs
     """
+    out = torch.zeros_like(image)
     if by_band:
-        out = torch.zeros_like(image)
+        mins, maxs = [], []
         for b in range(image.shape[-1]):
             # print(image[:, :, b].max())
-            max_y = image[:, :, b].max()  # [0]
-            min_y = image[:, :, b].min()  # [0]
-            out[:, :, b] = (image[:, :, b] - min_y) / (max_y - min_y)
+            sl = [slice(None), slice(None), b]
+            if ignore_zeros:
+                inds = torch.nonzero(image[sl] == 0, as_tuple=True)
+                sl[0] = inds[0] if len(inds[0]) > 0 else slice(None)
+                sl[1] = inds[1] if len(inds[1]) > 0 else slice(None)
+            sl = tuple(sl)
+            # print(sl)
+            max_y = image[sl].max()  # [0]
+            maxs.append(max_y)
+            min_y = image[sl].min()  # [0]
+            mins.append(min_y)
+            out[sl] = (image[sl] - min_y) / (max_y - min_y)
+        min_y = tuple(mins)
+        max_y = tuple(maxs)
     else:
         # normalize the entire image, not based on the band
-        max_y = image.max()
-        min_y = image.min()
-        out = (image - min_y) / (max_y - min_y)
+        sl = [slice(None), slice(None), slice(None)]
+        if ignore_zeros:
+            inds = torch.nonzero(image[sl] == 0, as_tuple=True)
+            sl[0] = inds[0] if len(inds[0]) > 0 else slice(None)
+            sl[1] = inds[1] if len(inds[1]) > 0 else slice(None)
+        sl = tuple(sl)
+        max_y = image[sl].max()
+        min_y = image[sl].min()
+
+        out[sl] = (image[sl] - min_y) / (max_y - min_y)
     return out, {"mins": min_y, "maxs": max_y}
 
 
@@ -317,7 +554,7 @@ def soft_threshold(x: torch.Tensor, threshold: Union[int, float, torch.Tensor]) 
     torch.Tensor with the soft threshold result
     """
     hld = torch.abs(x) - threshold
-    y = torch.where(hld > 0, hld, torch.tensor(0.0, dtype=x.dtype))
+    y = torch.where(hld > 0, hld, torch.tensor(0.0, dtype=x.dtype, device=x.device))
     y = y / (y + threshold) * x
     return y
 
@@ -390,7 +627,7 @@ def sure_soft_modified_lr2(
     if tuning_interval is None:
         n = 15
         t_max = torch.sqrt(torch.log(torch.tensor(n, device=x.device)))
-        tuning_interval = torch.linspace(0, t_max.item(), n)
+        tuning_interval = torch.linspace(0, t_max.item(), n, device=x.device)
 
     n = len(tuning_interval)
     x = x.clone()
@@ -411,9 +648,7 @@ def sure_soft_modified_lr2(
 def symmetric_pad(tens: torch.Tensor, n: Union[int, Iterable]) -> torch.Tensor:
     """
     Replacement for symmetric padding in torch (not in function space)
-
     padding goes from last dim backwards, with the same notation as used in torch.
-
     Parameters
     ----------
     tens : torch.Tensor
@@ -421,7 +656,6 @@ def symmetric_pad(tens: torch.Tensor, n: Union[int, Iterable]) -> torch.Tensor:
         must be 2D!
     n : int, list
         the amount to pad to the 2D tensor
-
     Returns
     -------
     padded: torch.Tensor
@@ -483,6 +717,56 @@ def symmetric_pad(tens: torch.Tensor, n: Union[int, Iterable]) -> torch.Tensor:
     return padded
 
 
+def vertical_difference(x: torch.Tensor, n: int = 1):
+    """
+    Find the row differences in x. This will return a torch.Tensor of the same shape as `x`
+    with the requisite number of zeros added to the end (`n`).
+
+    Parameters
+    ----------
+    x: torch.Tensor
+        input tensor
+    n: int
+        the number of rows between each row for which to calculate the diff
+
+    Returns
+    -------
+    torch.Tensor with the column differences. This result is the same size as `x`.
+    """
+    y = torch.zeros_like(x)
+    ret = x
+    for _ in range(n):
+        # torch.diff does the *last* axis but matlab diff
+        #       does it on the *first* non-1 dimension
+        ret = torch.diff(ret, dim=0)
+    y[: ret.shape[0]] = ret
+    return y
+
+
+def vertical_difference_transpose(x: torch.Tensor):
+    """
+    Find the row differences in x for a vector, with extra flavor.
+
+    Parameters
+    ----------
+    tens : torch.Tensor
+        the tensor to pad
+        must be 2D!
+    n : int, list
+        the amount to pad to the 2D tensor
+
+    Returns
+    -------
+
+    """
+    # TODO: examples and characterize output of this function, also more specific up top
+    u0 = (-1.0 * x[0]).unsqueeze(0)
+    u1 = (-1.0 * torch.diff(x, dim=0))[:-1]
+    u2 = (x[-2]).unsqueeze(0)
+    ret = torch.cat([u0, u1, u2], dim=0)
+    return ret
+
+
 def undo_normalize(
     image: torch.Tensor, mins: torch.Tensor, maxs: torch.Tensor, by_band=False
 ) -> torch.Tensor:
@@ -504,7 +788,7 @@ def undo_normalize(
     if by_band:
         out = torch.zeros_like(image)
         for b in range(image.shape[-1]):
-            out[:, :, b] = image * (maxs[b] - mins[b]) + mins[b]
+            out[:, :, b] = image[:, :, b] * (maxs[b] - mins[b]) + mins[b]
     else:
         # normalize the entire image, not based on the band
         out = image * (maxs - mins) + mins
