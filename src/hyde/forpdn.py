@@ -116,6 +116,7 @@ class FORPDN_SURE(torch.nn.Module):
         if scale:
             img, consts = utils.scale_wo_shift(img, factor=scale_const)
 
+        # put all of the sure interval tensors on the same sevice
         s_int_st = s_int_st.to(device=img.device, non_blocking=True)
         s_int_step = s_int_step.to(device=img.device, non_blocking=True)
         s_int_end = s_int_end.to(device=img.device, non_blocking=True)
@@ -125,15 +126,17 @@ class FORPDN_SURE(torch.nn.Module):
         # from matlab docs: lengths -> "For arrays with more dimensions, the length is max(size(X))"
         self.decomp_level = max(tuple(s_int_st.shape)) - 1  # TODO: minus 1 needed
 
-        self.dwt_forward = dwt3d.DWTForwardOverwrite(
-            self.decomp_level,
-            self.wavelet_name,
-            self.padding_method,
-            device=img.device,
-        )
-        self.dwt_inverse = dwt3d.DWTInverse(
-            wave=self.wavelet_name, padding_method=self.padding_method, device=img.device
-        )
+        # set up the DWT transforms to be used later
+        if domain == "wavelet":
+            self.dwt_forward = dwt3d.DWTForwardOverwrite(
+                self.decomp_level,
+                self.wavelet_name,
+                self.padding_method,
+                device=img.device,
+            )
+            self.dwt_inverse = dwt3d.DWTInverse(
+                wave=self.wavelet_name, padding_method=self.padding_method, device=img.device
+            )
 
         # Symmetric extension
         if rows % (2 ** self.decomp_level) != 0:
@@ -148,13 +151,14 @@ class FORPDN_SURE(torch.nn.Module):
         rowsp, colsp, bandsp = img.shape
         yp_m = torch.reshape(img.permute((1, 0, 2)), (rowsp * colsp, bandsp))
         xp2 = yp_m.clone()
-        # % Noise estimation using HH and median
+        # Noise estimation
         w, r_w = utils.estimate_hyperspectral_noise(
             yp_m.T,
             calculation_dtype=torch.float64,
         )
         sigma = torch.sqrt(torch.var(w.T, dim=0).T)
 
+        # get the eigenvalues to be used in the domains later
         c12 = torch.diag(sigma)
         u, s, vh = torch.linalg.svd(c12 @ utils.diff_dim0_replace_last_row(utils.diff(c12)))
         c1 = torch.pow(c12, 2)
@@ -162,8 +166,7 @@ class FORPDN_SURE(torch.nn.Module):
         c12v = vh @ c12  # vh is already trandposed (matlab doesnt do that)
 
         if s_int_step[0] == 0:
-            # todo: fix me!
-            t = 0
+            t = torch.zeros(3, device=img.device, dtype=torch.long)
         else:
             t = torch.arange(s_int_st[0], s_int_end[0] + s_int_step[0], s_int_step[0])
 
@@ -188,6 +191,7 @@ class FORPDN_SURE(torch.nn.Module):
 
     @staticmethod
     def _forpdns(img, t: torch.Tensor, rowsp, colsp, bandsp, sigma, diag_s, c1, c12u, c12v, yp_m):
+        # signal based decomposition
         x1 = img.reshape((rowsp * colsp, bandsp))
         x1 = x1.repeat(torch.pow(sigma, 2), (rowsp * colsp, 1)) * x1
         sure = torch.zeros((t.shape[0], 2), dtype=img.dtype, device=img.device)
@@ -204,26 +208,30 @@ class FORPDN_SURE(torch.nn.Module):
         return xp, sigma, opt_params, sure
 
     def _forpdnt(self, img, t, sigma, c1, c12u, c12v, diag_s, s_int_st, s_int_end, s_int_step, xp2):
+        # wavelet based decomposition
         opt_params = torch.zeros((self.decomp_level + 1, 1), dtype=img.dtype, device=img.device)
+        # do wavelet transform
         ax1_dwt_full_over, img_dwt_lows, img_dwt_highs = self.dwt_forward.forward(
             img.permute((2, 0, 1)).unsqueeze(0)
         )
-
         ax1_dwt_full, ax1_filter_starts = dwt3d.construct_2d_from_filters(
             low=img_dwt_lows, highs=img_dwt_highs
         )
 
         ax = torch.pow(sigma.T, -2) * ax1_dwt_full
         sure = torch.zeros((t.shape[0], 2), dtype=img.dtype, device=img.device)
+        # xp2 is the output after the transforms
         xp2 = torch.zeros_like(ax1_dwt_full)
         c_break = 0
         st = 0
         sp = ax1_filter_starts[0] ** 2
         idx = slice(st, sp)
-        # NOTE: this works on the `low` filters from dwt
+        # operate on the `low` filters from dwt
         for i, lam in enumerate(t):
             sig_lam_eye = torch.diag(1.0 / (1.0 / (lam * diag_s) + 1.0))
             majc = c1 - c12u @ (sig_lam_eye @ c12v)
+            # this will set the output based on the low filters from the DWT transform
+            #   and the eigenvectors/values from earlier
             xp0 = (majc @ ax[idx].T).T
             norm1 = torch.linalg.norm(ax1_dwt_full[idx] - xp0, ord=2) ** 2
             sure[i, 0] = norm1 / float(sp - st) + 2 * torch.trace(majc)
@@ -251,10 +259,11 @@ class FORPDN_SURE(torch.nn.Module):
             )
 
         for j in range(self.decomp_level):
-            c_break = 0  # should i be 1 or 0???
+            # need to iterate over the levels.
+            # the number high filters from DWT are equal to the decomp level
+            c_break = 0
             try:
-                t = torch.arange(  # todo: with or without the extra step??
-                    # s_int_st[j + 1], s_int_end[j + 1], s_int_step[j + 1], device=img.device, dtype=img.dtype
+                t = torch.arange(
                     s_int_st[j + 1],
                     s_int_end[j + 1],
                     s_int_step[j + 1],
@@ -276,16 +285,18 @@ class FORPDN_SURE(torch.nn.Module):
                 )
 
             sure *= 0
+            # ax1_filter_starts has the filter sizes, since they are square, we know where they start in the 2D matrix.
             st = ax1_filter_starts[j] ** 2
             try:
                 sp = ax1_filter_starts[j + 1] ** 2
             except IndexError:
                 sp = ax1_dwt_full.shape[0]
             idx = slice(st, sp)
-
             for i, lam in enumerate(t):
                 sig_lam_eye = torch.diag(1.0 / (1.0 / (lam * diag_s) + 1.0))
                 majc = c1 - c12u @ (sig_lam_eye @ c12v)
+                # this will set the output based on the high filters from the DWT transform
+                #   and the eigenvectors/values from earlier
                 xp0 = (majc @ ax[idx].T).T
                 norm1 = torch.linalg.norm(ax1_dwt_full[idx] - xp0, ord=2) ** 2
                 sure[i, 0] = norm1 / ((sp - st) + 2 * torch.trace(majc))
