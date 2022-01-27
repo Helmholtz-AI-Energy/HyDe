@@ -612,6 +612,32 @@ def rescale_wo_shift(
     return y1
 
 
+def sam(noise: torch.Tensor, reference: torch.Tensor) -> torch.Tensor:
+    """
+    Measure spectral similarity using spectral angle mapper. Result is in radians.
+
+    Parameters
+    ----------
+    noise: torch.Tensor
+    reference: torch.Tensor
+
+    Returns
+    -------
+    SAM: torch.Tensor
+        spectral similarity in radians. If inputs are matrices, matrices are returned.
+        i.e. a MxN is returned if a MxNxC is given
+    """
+    if len(noise.shape) == 1:
+        # case 1: vectors -> easy
+        numer = torch.dot(noise, reference)
+        denom = torch.linalg.norm(noise) * torch.linalg.norm(reference)
+    else:
+        # case 2: matrices -> return a MxN if MxNxC is given
+        numer = torch.sum(noise * reference, dim=-1)
+        denom = torch.linalg.norm(noise, dim=-1) * torch.linalg.norm(reference, dim=-1)
+    return torch.arccos(numer / denom)
+
+
 def scale_wo_shift(
     x1: torch.Tensor, factor: Union[int, float], eps: float = 1e-7
 ) -> Tuple[torch.Tensor, dict]:
