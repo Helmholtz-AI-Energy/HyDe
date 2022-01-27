@@ -1,6 +1,7 @@
 import torch
 
-from . import utils
+from hyde.lowlevel import utils
+
 from .hyres import HyRes
 
 __all__ = ["HyMiNoR"]
