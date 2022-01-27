@@ -20,6 +20,7 @@ from .dct import *
 from .dwt3d import *
 from .fast_hyde import *
 from .fast_hyin import *
+from .forpdn import *
 from .hyminor import *
 from .hyres import *
 from .l1hymixde import *

@@ -17,6 +17,8 @@ __all__ = [
     "hysime",
     "normalize",
     "peak_snr",
+    "rescale_wo_shift",
+    "scale_wo_shift",
     "snr",
     "soft_threshold",
     "sure_thresh",
@@ -98,71 +100,54 @@ def adaptive_median_filtering(image: torch.Tensor, max_size: int) -> torch.Tenso
     return zmed
 
 
-def add_noise_std(image, sigma, noise_type, iid=True):
-    # switch which_case
-    if isinstance(sigma, int):
-        sigma = [0.10, 0.08, 0.06, 0.04, 0.02][sigma]
+def add_noise_std(
+    image: torch.Tensor, sigma: float, noise_type: str = "additive", iid: bool = True
+) -> torch.Tensor:
+    """
+    Add noise based on a standard deviation. Options for noise include additive (gaussian) noise with
+    or without i.i.d. and poisson.
+    Poisson will add a standard 15 dB noise to the data and ignores the sigma value.
+
+    Parameters
+    ----------
+    image: torch.Tensor
+        signal on which to add noise
+    sigma: float
+        standard deviation of the noise distribution to be added to the signal
+        NOTE: the 'standard' values of these are [0.10, 0.08, 0.06, 0.04, 0.02]
+    noise_type: str
+        options: [additive, poisson]
+        toggle between noise types
+        default: additive
+    iid: bool
+        if the noise added should be i.i.d. or not.
+        default: True
+
+    Returns
+    -------
+    noisy_image: torch.Tensor
+    """
     if noise_type == "additive" and iid:
         noise = sigma * torch.randn_like(image)
         img_noisy = image + noise
-        # case 'case1'
-        #     %--------------------- Case 1 --------------------------------------
-        #
-        #     % zero-mean Gaussian noise is added to all the bands of the Washington DC Mall
-        #     % and Pavia city center data.
-        #     % The noise standard deviation values are 0.02, 0.04, 0.06, 0.08, and 0.10, respectively.
-        #     noise_type='additive';
-        #     iid = 1; %It is true that noise is i.i.d.
-        #         %generate noisy image
-        #         noise = sigma.*randn(size(img_clean));
-        #         img_noisy=img_clean+noise;
     elif noise_type == "additive" and not iid:
         sigma = torch.rand(image.shape[-1], dtype=image.dtype, device=image.device) * 0.1
         noise = torch.randn_like(image)
         for band in range(image.shape[-1]):
             noise[:, :, band] *= sigma[band]
         img_noisy = image + noise
-
-        # case 'case2'
-        #     %---------------------  Case 2 ---------------------
-        #
-        #     % Different variance zero-mean Gaussian noise is added to
-        #     % each band of the two HSI datasets.
-        #     % The std values are randomly selected from 0 to 0.1.
-        #     noise_type='additive';
-        #     iid = 0; %noise is not i.i.d.
-        #     rand('seed',0);
-        #     sigma = rand(1,band)*0.1;
-        #     randn('seed',0);
-        #     noise= randn(size(img_clean));
-        #     for cb=1:band
-        #         noise(:,:,cb) = sigma(cb)*noise(:,:,cb);
-        #
-        #     end
-        #     img_noisy=img_clean+noise;
     elif noise_type == "poisson":
         img_wN = image
         snr_db = 15
         snr_set = torch.exp(
             snr_db * torch.log(torch.tensor(10, device=image.device, dtype=image.dtype)) / 10
         )
-        # case 'case3'
-        #     %  ---------------------  Case 3: Poisson Noise ---------------------
-        #     noise_type='poisson';
-        #      iid = NaN; % noise_type is set to 'poisson',
-        #     img_wN = img_clean;
-        #
-        #     snr_db = 15;
-        #     snr_set = exp(snr_db*log(10)/10);
 
         rc = image.shape[0] * image.shape[1]
         bands = image.shape[-1]
         img_wn_noisy = torch.zeros((bands, rc), dtype=image.dtype, device=image.device)
         for i in range(bands):
             img_wntmp = img_wN[:, :, i].unsqueeze(0)
-            # reshape(img_wN(:,:,i),[1,N]);
-            # img_wNtmp = max(img_wNtmp,0)
-            # todo: check to make sure that the max above just takes the stuff above 0
             img_wntmp[img_wntmp <= 0] = 0
             # factor = snr_set/( sum(img_wNtmp.^2)/sum(img_wNtmp) );
             factor = snr_set / ((img_wntmp ** 2).sum() / img_wntmp.sum())
@@ -171,7 +156,6 @@ def add_noise_std(image, sigma, noise_type, iid=True):
             # % Generates Poisson random samples
             # img_wN_noisy(i,1:N) = poissrnd(factor*img_wNtmp);
             img_wn_noisy[i] = torch.poisson(factor * img_wntmp)
-        #         img_noisy = reshape(img_wN_noisy', [row, column band]);
         img_noisy = img_wn_noisy.T.reshape(image.shape)
     else:
         raise ValueError(f"noise type must be one of [poissson, additive], currently: {noise_type}")
@@ -204,47 +188,35 @@ def add_noise_db(signal: torch.Tensor, noise_pow: Union[int, float]) -> torch.Te
     return noise + signal
 
 
-def add_simulated_lines(
-    signal: torch.Tensor, noise_type="additive", iid=1
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    # todo: test with random erasing
-    # M=ones(size(img_noisy));
+def add_simulated_lines(signal: torch.Tensor, bands=(9, 15)) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Remove random(-ish) veritical sections from specified bands
+
+    Parameters
+    ----------
+    signal: torch.Tensor
+    bands: tuple
+        bands to put stripe into
+        must be 3 dimensions!
+
+    Returns
+    -------
+    signal_with_lines: torch.Tensor
+        input signal with the simulated lines
+    mask: torch.Tensor
+        mask indicates where there is data. i.e. 1 -> good data, 0 -> no data
+    """
     mask = torch.ones_like(signal)
-    # img_noisy_nan=img_noisy;
-    # bands_strp=60:63;
-    bands_strp = list(range(9, 15))
-    # for ib =  bands_strp
+    bands_strp = list(range(*bands))
     dtp, dev = signal.dtype, signal.device
     first = True
     for ib in bands_strp:
         if first:
             loc_strp = torch.ceil(torch.rand(20, dtype=dtp, device=dev) * signal.shape[1])
-            if noise_type == "additive" and iid == 1:
-                loc_strp = torch.cat([loc_strp, torch.arange(40, 51, dtype=dtp, device=dev)], dim=0)
-                loc_strp = torch.cat([loc_strp, torch.arange(10, 41, dtype=dtp, device=dev)], dim=0)
-            elif noise_type == "additive" and iid == 0:
-                loc_strp = torch.cat([loc_strp, torch.arange(20, 41, dtype=dtp, device=dev)], dim=0)
-                loc_strp = torch.cat([loc_strp, torch.arange(60, 76, dtype=dtp, device=dev)], dim=0)
-            elif noise_type == "poisson":
-                loc_strp = torch.cat([loc_strp, torch.arange(70, 91, dtype=dtp, device=dev)], dim=0)
-                loc_strp = torch.cat([loc_strp, torch.arange(50, 61, dtype=dtp, device=dev)], dim=0)
+            loc_strp = torch.cat([loc_strp, torch.arange(40, 51, dtype=dtp, device=dev)], dim=0)
+            loc_strp = torch.cat([loc_strp, torch.arange(10, 41, dtype=dtp, device=dev)], dim=0)
             loc_strp = loc_strp.to(torch.long)
             first = False
-            # loc_strp = ceil(rand(1,20)*column);
-            # switch which_case
-            #     case 'case1'
-            #
-            #         loc_strp = [loc_strp, 180:190];%loc_strp = [loc_strp, 200:210];
-            #         loc_strp = [loc_strp, 120:140]; %simulate a hole
-            #     case 'case2'
-            #         loc_strp = [loc_strp, 20:40];
-            #         loc_strp = [loc_strp, 160:175]; %simulate a hole
-            #     case 'case3'
-            #         loc_strp = [loc_strp, 70:90];
-            #         loc_strp = [loc_strp, 150:160]; %simulate a hole
-            # end
-        # img_noisy(:,loc_strp,ib)=zeros(row,size(loc_strp,2));
-        # print(ib)
         signal[:, loc_strp, ib] = 0
         mask[:, loc_strp, ib] = 0
 
@@ -274,6 +246,34 @@ def atleast_3d(image):
     else:
         dim.append(1)
         return image.view(dim)
+
+
+def custom_pca_image(img: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    This will do a standard SVD on a 2D projections of `img`. `U @ S`
+    is reshaped into a 3D tensor to match the shape im img at the start.
+    MUST BE IN (ROWS, COLS, CHANNELS)
+
+    Parameters
+    ----------
+    img: torch.Tensor
+        MUST BE IN (ROWS, COLS, CHANNELS)
+
+    Returns
+    -------
+    v_pca: torch.Tensor
+        the vh from torch.linalg.svd(img, (nr * nc, p), full_matrices=False)
+    pc: torch.Tensor
+        U @ s reshaped into the number of rows and columns of the input img
+    """
+    nr, nc, p = img.shape
+    # y_w -> h x w X c
+    im1 = torch.reshape(img, (nr * nc, p))
+    u, s, v_pca = torch.linalg.svd(im1, full_matrices=False)
+    # need to modify u and s
+    pc = torch.matmul(u, torch.diag(s))
+    pc = pc.reshape((nc, nr, p))
+    return v_pca, pc
 
 
 def diff(x: torch.Tensor, n: int = 1, dim=0) -> torch.Tensor:
@@ -493,53 +493,6 @@ def hysime(input, noise, noise_corr):
     return sig_subspace_dim, eigs_span_subspace
 
 
-def peak_snr(img1: torch.Tensor, img2: torch.Tensor) -> float:
-    """
-    Compute the peak signal to noise ratio between two images
-
-    Parameters
-    ----------
-    img1 : torch.Tensor
-    img2 : torch.Tensor
-
-    Returns
-    -------
-    snr : float
-        peak signal to noise ration
-    """
-    img1 = img1.to(torch.float32) / 255.0
-    img2 = img2.to(dtype=torch.float32, device=img1.device) / 255.0
-    mse = torch.mean((img1 - img2) ** 2)
-    if mse == 0:
-        return 0.0
-    return 10 * math.log10(1.0 / mse)
-
-
-def custom_pca_image(img: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    MUST BE IN (ROWS, COLS, CHANNELS)
-
-    Parameters
-    ----------
-    img
-
-    Returns
-    -------
-    v_pca: torch.Tensor
-        the vh from torch.linalg.svd(img, (nr * nc, p), full_matrices=False)
-    pc: torch.Tensor
-        U @ s reshaped into the number of rows and columns of the input img
-    """
-    nr, nc, p = img.shape
-    # y_w -> h x w X c
-    im1 = torch.reshape(img, (nr * nc, p))
-    u, s, v_pca = torch.linalg.svd(im1, full_matrices=False)
-    # need to modify u and s
-    pc = torch.matmul(u, torch.diag(s))
-    pc = pc.reshape((nc, nr, p))
-    return v_pca, pc
-
-
 def normalize(image: torch.Tensor, by_band=False, ignore_zeros=False) -> Tuple[torch.Tensor, dict]:
     """
     Normalize an input between 0 and 1. If `by_band` is True, the normalization will
@@ -563,6 +516,7 @@ def normalize(image: torch.Tensor, by_band=False, ignore_zeros=False) -> Tuple[t
     """
     out = torch.zeros_like(image)
     if by_band:
+        # todo: remove the ignore_zeros command!! + make smarted (avoid for loop)
         mins, maxs = [], []
         for b in range(image.shape[-1]):
             # print(image[:, :, b].max())
@@ -595,7 +549,126 @@ def normalize(image: torch.Tensor, by_band=False, ignore_zeros=False) -> Tuple[t
     return out, {"mins": min_y, "maxs": max_y}
 
 
-def snr(noisy, ref_signal):
+def peak_snr(img1: torch.Tensor, img2: torch.Tensor) -> float:
+    """
+    Compute the peak signal to noise ratio between two images
+
+    Parameters
+    ----------
+    img1 : torch.Tensor
+    img2 : torch.Tensor
+
+    Returns
+    -------
+    snr : float
+        peak signal to noise ration
+    """
+    img1 = img1.to(torch.float32) / 255.0
+    img2 = img2.to(dtype=torch.float32, device=img1.device) / 255.0
+    mse = torch.mean((img1 - img2) ** 2)
+    if mse == 0:
+        return 0.0
+    return 10 * math.log10(1.0 / mse)
+
+
+def rescale_wo_shift(
+    x1: torch.Tensor,
+    factor: Union[int, float],
+    mins: torch.Tensor,
+    maxs: torch.Tensor,
+    eps: float = 1e-7,
+) -> torch.Tensor:
+    """
+    Undo the scaling from :func:`scale_wo_shift`.
+
+    Parameters
+    ----------
+    x1: torch.Tensor
+    factor: int, float
+        scaling factor
+    mins: torch.Tensor
+        minimum values returned by :func:`scale_wo_shift`.
+    maxs: torch.Tensor
+        maximum values returned by :func:`scale_wo_shift`.
+    eps: float
+        floating point precision to use here
+
+    Returns
+    -------
+    scaled: torch.Tensor
+        scaled tensor
+    consts: dict
+        dictionary with the min and max values to be used in un-scaling
+    """
+    nx, ny, nz = x1.shape
+    x = x1.reshape((nx * ny, nz))
+
+    idx = torch.nonzero(maxs - mins < eps)
+    if len(idx) > 0:
+        y1 = x
+    else:
+        y1 = x / factor * (maxs - mins).repeat(nx * ny, 1)
+    y1 = y1.reshape((nx, ny, nz))
+    return y1
+
+
+def scale_wo_shift(
+    x1: torch.Tensor, factor: Union[int, float], eps: float = 1e-7
+) -> Tuple[torch.Tensor, dict]:
+    """
+    Scale a torch tensor with this formula:
+        y = x / (max(x, dim=0) - min(x, dim=0)) * factor
+    before this formula is applied x is reshaped to be 2D (maintaining the last dimension).
+    The reverse transform is :func:`rescale_wo_shift`.
+
+    Parameters
+    ----------
+    x1: torch.Tensor
+    factor: int, float
+        scaling factor
+    eps: float
+        floating point precision to use here
+
+    Returns
+    -------
+    scaled: torch.Tensor
+        scaled tensor
+    consts: dict
+        dictionary with the min and max values to be used in un-scaling
+    """
+    nx, ny, nz = x1.shape
+    x = x1.reshape((nx * ny, nz))
+    minx = x.min(0)[0]
+    maxx = x.max(0)[0]
+    idx = torch.nonzero(maxx - minx < eps)
+    if len(idx) > 0:
+        y1 = x
+    else:
+        y1 = x / (maxx - minx).repeat(nx * ny, 1) * factor
+    y1 = y1.reshape((nx, ny, nz))
+
+    return y1, {"mins": minx, "maxs": maxx}
+
+
+def snr(noisy: torch.Tensor, ref_signal: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Calculate the general signal-to-noise ratio and the peak signal-to-noise ratios.
+    Both values returned are in dB.
+
+    Parameters
+    ----------
+    noisy: torch.Tensor
+        The noisy image, i.e. the measured signal
+    ref_signal: torch.Tensor
+        the reference signal, i.e. the signal WITHOUT noise
+
+    Returns
+    -------
+    snr: torch.Tensor
+        general signal-to-noise ratio in dB
+    psnr: torch.Tensor
+        peak signal-to-noise ratio in dB
+    """
     err = torch.sum(torch.pow(noisy - ref_signal, 2)) / noisy.numel()
     snr = 10 * torch.log10(torch.mean(torch.pow(ref_signal, 2)) / err)
 
@@ -791,19 +864,15 @@ def vertical_difference(x: torch.Tensor, n: int = 1):
 
 def vertical_difference_transpose(x: torch.Tensor):
     """
-    Find the row differences in x for a vector, with extra flavor.
+    Find the column differences in x for a vector, with extra flavor.
 
     Parameters
     ----------
-    tens : torch.Tensor
-        the tensor to pad
-        must be 2D!
-    n : int, list
-        the amount to pad to the 2D tensor
+    x : torch.Tensor
 
     Returns
     -------
-
+    diff: torch.Tensor
     """
     # TODO: examples and characterize output of this function, also more specific up top
     u0 = (-1.0 * x[0]).unsqueeze(0)
