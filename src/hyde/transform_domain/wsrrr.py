@@ -1,6 +1,6 @@
 import torch
 
-from . import dwt3d, utils
+from hyde.lowlevel import dwt3d, utils
 
 __all__ = ["WSRRR"]
 

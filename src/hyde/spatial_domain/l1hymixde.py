@@ -1,6 +1,7 @@
 import torch
 
-from . import fast_hyde, utils
+from hyde.lowlevel import utils
+from hyde.spatial_domain import fast_hyde
 
 __all__ = ["L1HyMixDe"]
 

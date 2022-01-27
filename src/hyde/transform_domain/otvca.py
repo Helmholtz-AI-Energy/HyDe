@@ -3,7 +3,7 @@ from typing import Tuple
 import torch
 from skimage.restoration import denoise_tv_bregman
 
-from . import utils
+from hyde.lowlevel import utils
 
 __all__ = ["OTVCA"]
 

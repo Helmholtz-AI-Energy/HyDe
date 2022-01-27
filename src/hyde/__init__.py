@@ -15,15 +15,10 @@ except PackageNotFoundError:  # pragma: no cover
 finally:
     del version, PackageNotFoundError
 
-from . import bm3d
-from .dct import *
-from .dwt3d import *
-from .fast_hyde import *
-from .fast_hyin import *
-from .forpdn import *
-from .hyminor import *
-from .hyres import *
-from .l1hymixde import *
-from .otvca import *
-from .utils import *
-from .wsrrr import *
+from hyde.lowlevel import *
+from hyde.spatial_domain import *
+from hyde.transform_domain.forpdn import *
+from hyde.transform_domain.hyminor import *
+from hyde.transform_domain.hyres import *
+from hyde.transform_domain.otvca import *
+from hyde.transform_domain.wsrrr import *
