@@ -98,7 +98,7 @@ class FastHyIe(torch.nn.Module):
 
         # normalize and get the location of NOT 0 values in the image
         if normalize:
-            img, consts = utils.normalize(img, by_band=True, ignore_zeros=False)
+            img, consts = utils.normalize(img, by_band=True)
         y = torch.reshape(img, (n, b)).T
         m_pix = m_pix.flatten()
         loc_tmp = torch.nonzero(m_pix == 1, as_tuple=True)[0]

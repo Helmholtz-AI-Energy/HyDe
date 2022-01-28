@@ -56,7 +56,7 @@ class L1HyMixDe(torch.nn.Module):
         denoised_image: torch.Tensor
         """
         if normalize:
-            img, consts = utils.normalize(img, by_band=True, ignore_zeros=False)
+            img, consts = utils.normalize(img, by_band=True)
         row, col, band = img.shape
         n = row * col
         y_og = img.reshape((n, band)).T

@@ -493,7 +493,7 @@ def hysime(input, noise, noise_corr):
     return sig_subspace_dim, eigs_span_subspace
 
 
-def normalize(image: torch.Tensor, by_band=False, ignore_zeros=False) -> Tuple[torch.Tensor, dict]:
+def normalize(image: torch.Tensor, by_band=False) -> Tuple[torch.Tensor, dict]:
     """
     Normalize an input between 0 and 1. If `by_band` is True, the normalization will
     be done for each band of the image (assumes [h, w, band] shape).
@@ -521,10 +521,6 @@ def normalize(image: torch.Tensor, by_band=False, ignore_zeros=False) -> Tuple[t
         for b in range(image.shape[-1]):
             # print(image[:, :, b].max())
             sl = [slice(None), slice(None), b]
-            if ignore_zeros:
-                inds = torch.nonzero(image[sl] == 0, as_tuple=True)
-                sl[0] = inds[0] if len(inds[0]) > 0 else slice(None)
-                sl[1] = inds[1] if len(inds[1]) > 0 else slice(None)
             sl = tuple(sl)
             # print(sl)
             max_y = image[sl].max()  # [0]
@@ -537,10 +533,6 @@ def normalize(image: torch.Tensor, by_band=False, ignore_zeros=False) -> Tuple[t
     else:
         # normalize the entire image, not based on the band
         sl = [slice(None), slice(None), slice(None)]
-        if ignore_zeros:
-            inds = torch.nonzero(image[sl] == 0, as_tuple=True)
-            sl[0] = inds[0] if len(inds[0]) > 0 else slice(None)
-            sl[1] = inds[1] if len(inds[1]) > 0 else slice(None)
         sl = tuple(sl)
         max_y = image[sl].max()
         min_y = image[sl].min()
