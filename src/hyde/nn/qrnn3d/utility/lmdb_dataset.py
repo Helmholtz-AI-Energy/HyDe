@@ -8,18 +8,18 @@ __all__ = [
 
 
 class LMDBDataset(data.Dataset):
-    def __init__(
-        self,
-        db_path,
-        repeat=1,
-        transform=None,
-    ):
+    def __init__(self, db_path, repeat=1, transform=None, max_readers=None):
         import caffe  # noqa: E821
         import lmdb  # noqa: E821
 
         self.db_path = db_path
         self.env = lmdb.open(
-            db_path, max_readers=1, readonly=True, lock=False, readahead=False, meminit=False
+            db_path,
+            max_readers=max_readers,
+            readonly=True,
+            lock=False,
+            readahead=False,
+            meminit=False,
         )
         with self.env.begin(write=False) as txn:
             self.length = txn.stat()["entries"]
