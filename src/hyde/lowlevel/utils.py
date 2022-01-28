@@ -1,6 +1,7 @@
 import math
 from typing import Iterable, Optional, Tuple, Union
 
+import numpy as np
 import torch
 from torch.nn.functional import max_pool2d, pad
 
@@ -493,7 +494,9 @@ def hysime(input, noise, noise_corr):
     return sig_subspace_dim, eigs_span_subspace
 
 
-def normalize(image: torch.Tensor, by_band=False, band_dim: int = -1) -> Tuple[torch.Tensor, dict]:
+def normalize(
+    image: Union[torch.Tensor, np.ndarray], by_band=False, band_dim: int = -1
+) -> Tuple[Union[torch.Tensor, np.ndarray], dict]:
     """
     Normalize an input between 0 and 1. If `by_band` is True, the normalization will
     be done for each band of the image (assumes [h, w, band] shape).
@@ -536,7 +539,9 @@ def normalize(image: torch.Tensor, by_band=False, band_dim: int = -1) -> Tuple[t
         max_y = tuple(maxs)
     else:
         # normalize the entire image, not based on the band
-        sl = [slice(None), slice(None), slice(None)]
+        sl = [
+            slice(None),
+        ] * len(image.ndim)
         sl = tuple(sl)
         max_y = image[sl].max()
         min_y = image[sl].min()
