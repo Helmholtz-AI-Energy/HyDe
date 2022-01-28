@@ -493,7 +493,7 @@ def hysime(input, noise, noise_corr):
     return sig_subspace_dim, eigs_span_subspace
 
 
-def normalize(image: torch.Tensor, by_band=False) -> Tuple[torch.Tensor, dict]:
+def normalize(image: torch.Tensor, by_band=False, band_dim: int = -1) -> Tuple[torch.Tensor, dict]:
     """
     Normalize an input between 0 and 1. If `by_band` is True, the normalization will
     be done for each band of the image (assumes [h, w, band] shape).
@@ -506,6 +506,8 @@ def normalize(image: torch.Tensor, by_band=False) -> Tuple[torch.Tensor, dict]:
     image: torch.Tensor
     by_band: bool, optional
         if True, normalize each band individually.
+    band_dim: int, optional
+        if by_band is true, then this defines which band to iterate over
 
     Returns
     -------
@@ -518,11 +520,13 @@ def normalize(image: torch.Tensor, by_band=False) -> Tuple[torch.Tensor, dict]:
     if by_band:
         # todo: remove the ignore_zeros command!! + make smarted (avoid for loop)
         mins, maxs = [], []
-        for b in range(image.shape[-1]):
-            # print(image[:, :, b].max())
-            sl = [slice(None), slice(None), b]
+        for b in range(image.shape[band_dim]):
+            sl = [
+                slice(None),
+            ] * len(image.ndim)
+            sl[band_dim] = b
+            # sl = [slice(None), slice(None), b]
             sl = tuple(sl)
-            # print(sl)
             max_y = image[sl].max()  # [0]
             maxs.append(max_y)
             min_y = image[sl].min()  # [0]
@@ -901,7 +905,7 @@ def vertical_difference_transpose(x: torch.Tensor):
 
 
 def undo_normalize(
-    image: torch.Tensor, mins: torch.Tensor, maxs: torch.Tensor, by_band=False
+    image: torch.Tensor, mins: torch.Tensor, maxs: torch.Tensor, by_band=False, band_dim: int = -1
 ) -> torch.Tensor:
     """
     Undo the normalization to the original scale defined by the mins/maxs paraeters.
@@ -913,6 +917,8 @@ def undo_normalize(
     mins: torch.Tensor
     maxs: torch.Tensor
     by_band: bool, optional
+    band_dim: int, optional
+        if by_band is true, then this defines which band to iterate over
 
     Returns
     -------
@@ -920,8 +926,12 @@ def undo_normalize(
     """
     if by_band:
         out = torch.zeros_like(image)
-        for b in range(image.shape[-1]):
-            out[:, :, b] = image[:, :, b] * (maxs[b] - mins[b]) + mins[b]
+        for b in range(image.shape[band_dim]):
+            sl = [
+                slice(None),
+            ] * len(image.ndim)
+            sl[band_dim] = b
+            out[sl] = image[sl] * (maxs[b] - mins[b]) + mins[b]
     else:
         # normalize the entire image, not based on the band
         out = image * (maxs - mins) + mins
