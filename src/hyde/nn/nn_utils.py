@@ -11,6 +11,15 @@ from ..lowlevel import utils
 __all__ = [
     "crop_center",
     "lmdb_data_2_volume",
+    "AddGaussianNoise",
+    "AddNoiseMixed",
+    "RandRot90Transform",
+    "AddGaussianNoiseBlind",
+    "AddNoiseStripe",
+    "AddNoiseComplex",
+    "AddNoiseDeadline",
+    "AddNoiseImpulse",
+    "AddNoiseNoniid_dB",
 ]
 
 

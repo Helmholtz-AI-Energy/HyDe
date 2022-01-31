@@ -50,6 +50,7 @@ if __name__ == "__main__":
                 "PyWavelets>=1.1.1",
                 "bm3d",
                 # NOTE: need to have openBlas for bm3d
+                "kornia",
             ],
         )
     except:  # noqa
