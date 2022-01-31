@@ -163,7 +163,9 @@ def add_noise_std(
     return img_noisy
 
 
-def add_noise_db(signal: torch.Tensor, noise_pow: Union[int, float]) -> torch.Tensor:
+def add_noise_db(
+    signal: torch.Tensor, noise_pow: Union[int, float], scale_factor: float = 1, verbose=False
+) -> torch.Tensor:
     """
     Add Gaussian white noise to a torch.Tensor. The *power* of the noise is controlled
     by the `noise_pow` parameter. This value is in dB
@@ -172,20 +174,27 @@ def add_noise_db(signal: torch.Tensor, noise_pow: Union[int, float]) -> torch.Te
     ----------
     signal: torch.Tensor
     noise_pow: int, float
+    scale_factor: float, optional
+        The noise added is relative to the initial signal strength. if the signal is normalized,
+        then the final values should be scaled by the same max value
+    verbose: bool, optional
+        print out how much noise was added
 
     Returns
     -------
     noisy_signal: torch.Tensor
     """
-    noise_to_add = 10 ** (noise_pow / 20)
-    # snr = 10 * torch.log10(torch.mean(image ** 2) / torch.mean(noise_tensor ** 2))
-    # sig = 10 * torch.log10(torch.mean(image ** 2))
-    noise = torch.zeros_like(signal).normal_(std=noise_to_add)
-    print(f"Added Noise [dB]: {10 * torch.log10(torch.mean(torch.pow(noise, 2)))}")
-    # todo: scale the noise to be on the same scale as the image?
-    # norm_sig, consts = normalize(signal)
-    # ret = noise + norm_sig
-    # ret = undo_normalize(ret, **consts, by_band=False)
+    noise_to_add = 10 ** (noise_pow / 20) / scale_factor
+    try:
+        noise = torch.zeros_like(signal).normal_(std=noise_to_add)
+        # if verbose:
+        #     print(f"Added Noise [dB]: {10 * torch.log10(torch.mean(torch.pow(noise, 2)))}")
+    except TypeError:  # numpy.ndarray  todo: raise statement?
+        noise = np.random.normal(scale=noise_to_add, size=signal.shape)
+
+    if verbose:
+        print(f"Added Noise [dB]: {noise.pow(2).mean().log10() * 10}")
+
     return noise + signal
 
 
@@ -552,7 +561,7 @@ def normalize(
 
 def peak_snr(img1: torch.Tensor, img2: torch.Tensor) -> float:
     """
-    Compute the peak signal to noise ratio between two images
+    Compute the peak signal-to-noise ratio between two images
 
     Parameters
     ----------
@@ -562,7 +571,7 @@ def peak_snr(img1: torch.Tensor, img2: torch.Tensor) -> float:
     Returns
     -------
     snr : float
-        peak signal to noise ration
+        peak signal-to-noise ration
     """
     img1 = img1.to(torch.float32) / 255.0
     img2 = img2.to(dtype=torch.float32, device=img1.device) / 255.0
