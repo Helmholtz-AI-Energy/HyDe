@@ -1,0 +1,8 @@
+h5py
+ipdb
+kornia
+lmdb
+
+# QRNN3D
+torch
+torchvision >= 0.8.0

@@ -180,6 +180,11 @@ def init(method, batchnorm_group_size=1):
     else:
         raise NotImplementedError()
 
+    # set the default device to be restricted if there are multiple GPUs visible
+    vis_gpus = torch.cuda.device_count()
+    local_gpu = comm_rank % vis_gpus
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(local_gpu)
+
     # make sure to call a barrier here in order for sharp to use the default comm:
     if dist.is_initialized():
         dist.barrier(device_ids=[get_local_rank()])
