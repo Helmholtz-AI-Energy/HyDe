@@ -11,32 +11,19 @@ import torch.optim as optim
 import torchvision.transforms as transforms
 from kornia.losses import SSIMLoss
 from torch.utils.data import DataLoader
-from utility import dataset as ds_utils
-from utility import helper, indexes, lmdb_dataset
 from utils import train_argparse
 
 from ...lowlevel import logging
 from .. import comm
-from ..nn_utils import AddGaussianNoise, AddGaussianNoiseBlind
-from . import models
+from ..general_nn_utils import (
+    AddGaussianNoise,
+    AddGaussianNoiseBlind,
+    MultipleWeightedLosses,
+)
+from . import dataset_utils as ds_utils
+from . import helper, lmdb_dataset, models, training_utils
 
 logger = logging.get_logger()
-
-
-class MultipleLoss(nn.Module):
-    def __init__(self, losses, weight=None):
-        super(MultipleLoss, self).__init__()
-        self.losses = nn.ModuleList(losses)
-        self.weight = weight or [1 / len(self.losses)] * len(self.losses)
-
-    def forward(self, predict, target):
-        total_loss = 0
-        for weight, loss in zip(self.weight, self.losses):
-            total_loss += loss(predict, target) * weight
-        return total_loss
-
-    def extra_repr(self):
-        return "weight={}".format(self.weight)
 
 
 def main():
@@ -57,14 +44,8 @@ def main():
     if not os.path.exists(basedir):
         os.makedirs(basedir)
 
-    if torch.cuda.is_available:
-        cuda = True
-    device = "cuda" if cuda else "cpu"
-    # todo: if there are multiple devices, then launch torch distributed
-    #       get from MLPerf
+    cuda = torch.cuda.is_available()
     logger.debug("Cuda Acess: %d" % cuda)
-    if cuda and not torch.cuda.is_available():
-        raise Exception("No GPU found, please run without --cuda")
 
     torch.manual_seed(cla.seed)
     if cuda:
@@ -91,15 +72,15 @@ def main():
     elif cla.loss == "ssim":
         criterion = SSIMLoss(window_size=11, max_val=1)
     elif cla.loss == "l2_ssim":
-        criterion = MultipleLoss(
+        criterion = MultipleWeightedLosses(
             [nn.MSELoss(), SSIMLoss(window_size=11, max_val=1)], weight=[1, 2.5e-3]
         )
 
     logger.info(criterion)
 
     if cuda:
-        net.to(device)
-        criterion = criterion.to(device)
+        net.cuda()
+        criterion = criterion.cuda()
 
     writer = None
     if cla.tensorboard:
@@ -217,114 +198,25 @@ def main():
             helper.adjust_learning_rate(optimizer, base_lr * 0.01)
 
         if epoch <= 30:
-            train(icvl_64_31_TL_1, net, cla, epoch, optimizer, criterion, writer=writer)
-            validate(mat_loaders[1], "icvl-validate-50", net, cla, epoch, criterion, writer=writer)
+            training_utils.train(
+                icvl_64_31_TL_1, net, cla, epoch, optimizer, criterion, writer=writer
+            )
+            training_utils.validate(
+                mat_loaders[1], "icvl-validate-50", net, cla, epoch, criterion, writer=writer
+            )
         else:
-            train(icvl_64_31_TL_2, net, cla, epoch, optimizer, criterion)
-            validate(mat_loaders[0], "icvl-validate-30", net, cla, epoch, criterion, writer=writer)
-            validate(mat_loaders[1], "icvl-validate-50", net, cla, epoch, criterion, writer=writer)
+            training_utils.train(icvl_64_31_TL_2, net, cla, epoch, optimizer, criterion)
+            training_utils.validate(
+                mat_loaders[0], "icvl-validate-30", net, cla, epoch, criterion, writer=writer
+            )
+            training_utils.validate(
+                mat_loaders[1], "icvl-validate-50", net, cla, epoch, criterion, writer=writer
+            )
 
         helper.display_learning_rate(optimizer)
         if (epoch % epoch_per_save == 0 and epoch > 0) or epoch == max_epochs - 1:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(basedir, prefix, "model_latest.pth")
-            save_checkpoint(cla, epoch, net, optimizer, model_out_path=model_latest_path)
-
-
-def train(train_loader, network, cla, epoch, optimizer, criterion, writer=None):
-    logger.info(f"\nTrain Loop - Epoch: {epoch}")
-    network.train()
-    train_loss = 0
-
-    for batch_idx, (inputs, targets) in enumerate(train_loader):
-
-        if torch.cuda.is_available():
-            inputs, targets = inputs.cuda(), targets.cuda()
-
-        optimizer.zero_grad()
-        loss_data = 0
-        if network.bandwise:
-            outs = []
-            for time, (i, t) in enumerate(zip(inputs.split(1, 1), targets.split(1, 1))):
-                out = network(i)
-                outs.append(out)
-                loss = criterion(out, t)
-                if train:
-                    loss.backward()
-                loss_data += loss.item()
-        total_norm = nn.utils.clip_grad_norm_(network.parameters(), cla.clip)
-        optimizer.step()
-
-        train_loss += loss_data
-        avg_loss = train_loss / (batch_idx + 1)
-
-        if batch_idx % cla.log_freq == 0:
-            logger.info(
-                f"Epoch: {epoch} iteration: {batch_idx} Loss: {avg_loss} Norm: {total_norm}"
+            training_utils.save_checkpoint(
+                cla, epoch, net, optimizer, model_out_path=model_latest_path
             )
-
-    if writer is not None:
-        writer.add_scalar(join(cla.prefix, "train_loss_epoch"), avg_loss, epoch)
-
-
-def validate(valid_loader, name, network, cla, epoch, criterion, writer=None):
-    network.eval()
-    validate_loss = 0
-    total_psnr = 0
-    logger.info(f"Validation: Epoch: {epoch} dataset name: {name}")
-    with torch.no_grad():
-        for batch_idx, (inputs, targets) in enumerate(valid_loader):
-            if not torch.cuda.is_available():
-                inputs, targets = inputs.cuda(), targets.cuda()
-
-            loss_data = 0
-            if network.bandwise:
-                outs = []
-                for time, (i, t) in enumerate(zip(inputs.split(1, 1), targets.split(1, 1))):
-                    out = network(i)
-                    outs.append(out)
-                    loss = criterion(out, t)
-                    loss_data += loss.item()
-                outputs = torch.cat(outs, dim=1)
-            else:
-                outputs = network(inputs)
-                loss = criterion(outputs, targets)
-                loss_data += loss.item()
-
-            psnr = torch.mean(indexes.cal_bwpsnr(outputs, targets))
-
-            validate_loss += loss_data
-            avg_loss = validate_loss / (batch_idx + 1)
-
-            total_psnr += psnr
-            avg_psnr = total_psnr / (batch_idx + 1)
-
-            if batch_idx % cla.log_freq == 0:
-                logger.info(f"Loss: {avg_loss} | PSNR: {avg_psnr}")
-
-    logger.info(f"Final: Loss: {avg_loss} | PSNR: {avg_psnr}")
-
-    if writer is not None:
-        writer.add_scalar(join(cla.prefix, name, "val_loss_epoch"), avg_loss, epoch)
-        writer.add_scalar(join(cla.prefix, name, "val_psnr_epoch"), avg_psnr, epoch)
-
-    return avg_psnr, avg_loss
-
-
-def save_checkpoint(cla, epoch, network, optimizer, model_out_path=None, **kwargs):
-    if not model_out_path:
-        model_out_path = join(cla.basedir, cla.prefix, f"model_epoch_{epoch}.pth")
-
-    state = {
-        "network": network.state_dict(),
-        "optimizer": optimizer.state_dict(),
-        "epoch": epoch,
-    }
-
-    state.update(kwargs)
-
-    if not os.path.isdir(join(cla.basedir, cla.prefix)):
-        os.makedirs(join(cla.basedir, cla.prefix))
-
-    torch.save(state, model_out_path)
-    logger.info(f"Checkpoint saved to {model_out_path}")
