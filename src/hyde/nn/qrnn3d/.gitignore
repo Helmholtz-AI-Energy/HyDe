@@ -1,0 +1,11 @@
+.vscode
+*.pyc
+*.pth
+__pycache__
+result
+runs
+.ssh*
+.rsyncignore
+bak
+*.zip
+lib
