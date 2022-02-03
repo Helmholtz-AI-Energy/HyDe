@@ -15,10 +15,11 @@ except PackageNotFoundError:  # pragma: no cover
 finally:
     del version, PackageNotFoundError
 
-from hyde.lowlevel import *
-from hyde.spatial_domain import *
-from hyde.transform_domain.forpdn import *
-from hyde.transform_domain.hyminor import *
-from hyde.transform_domain.hyres import *
-from hyde.transform_domain.otvca import *
-from hyde.transform_domain.wsrrr import *
+from .lowlevel import *
+from .nn import *
+from .spatial_domain import *
+from .transform_domain.forpdn import *
+from .transform_domain.hyminor import *
+from .transform_domain.hyres import *
+from .transform_domain.otvca import *
+from .transform_domain.wsrrr import *
