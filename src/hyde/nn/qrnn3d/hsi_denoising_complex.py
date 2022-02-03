@@ -111,23 +111,19 @@ def main():
 
     tr_ds = lmdb_dataset.LMDBDataset(cla.dataroot, repeat=64)
 
-    HSI2Tensor = partial(ds_utils.HsiToTensor, use_2dconv=net.use_2dconv)
-    target_transform = [
-        HSI2Tensor(),
-    ]
-    train_transform = [
-        AddNoiseNonIIDdB(),
-        transforms.RandomApply([AddNoiseImpulse(), AddNoiseStripe(), AddNoiseDeadline()], p=0.25),
-        HSI2Tensor(),
-    ]
-    common_transforms = [
-        transforms.RandomCrop((32, 32)),
-    ]
+    train_transform = transforms.Compose(
+        [
+            AddNoiseNonIIDdB(),
+            transforms.RandomApply(
+                [AddNoiseImpulse(), AddNoiseStripe(), AddNoiseDeadline()], p=0.25
+            ),
+        ]
+    )
+    common_transforms = (transforms.RandomCrop((32, 32)),)
 
-    set_icvl_64_31_TL_1 = ds_utils.GeneralImageDataset(
+    set_icvl_64_31_TL_1 = ds_utils.ICVLDataset(
         tr_ds,
         transform=train_transform,
-        target_transform=target_transform,
         common_transforms=common_transforms,
     )
     # worker_init_fn is in dataset -> just getting the seed
@@ -144,36 +140,34 @@ def main():
 
     """Test-Dev"""
     basefolder = cla.val_datadir
-    mat_names = ["icvl_512_30", "icvl_512_50"]
 
-    if not net.use_2dconv:
-        mat_transform = [
-            ds_utils.LoadMatHSI(
-                input_key="input", gt_key="gt", transform=lambda x: x[:, ...][None]
-            ),
-        ]
-    else:
-        mat_transform = [
-            ds_utils.LoadMatHSI(input_key="input", gt_key="gt"),
-        ]
+    val_dataset = ds_utils.ICVLDataset(
+        os.path.join(basefolder, "test"), transform=AddNoiseNonIIDdB(), val=True  # complex noise
+    )
 
-    mat_datasets = [
-        ds_utils.MatDataFromFolder(
-            os.path.join(basefolder, name), size=5, common_transform=mat_transform
-        )
-        for name in mat_names
-    ]
-
-    mat_loaders = [
+    val_loaders = [
         DataLoader(
-            mat_dataset,
+            val_dataset,
             batch_size=32,
             shuffle=False,
             num_workers=cla.workers,
             pin_memory=torch.cuda.is_available(),
         )
-        for mat_dataset in mat_datasets
     ]
+
+    val_dataset = ds_utils.ICVLDataset(
+        os.path.join(basefolder, "test"), transform=train_transform, val=True  # complex/mixed noise
+    )
+
+    val_loaders.append(
+        DataLoader(
+            val_dataset,
+            batch_size=32,
+            shuffle=False,
+            num_workers=cla.workers,
+            pin_memory=torch.cuda.is_available(),
+        )
+    )
 
     base_lr = cla.lr
     helper.adjust_learning_rate(optimizer, cla.lr)
@@ -191,10 +185,10 @@ def main():
 
         training_utils.train(icvl_64_31_TL, net, cla, epoch, optimizer, criterion, writer=writer)
         training_utils.validate(
-            mat_loaders[0], "icvl-validate-noniid", net, cla, epoch, criterion, writer=writer
+            val_loaders[0], "icvl-validate-noniid", net, cla, epoch, criterion, writer=writer
         )
         training_utils.validate(
-            mat_loaders[1], "icvl-validate-mixture", net, cla, epoch, criterion, writer=writer
+            val_loaders[1], "icvl-validate-mixture", net, cla, epoch, criterion, writer=writer
         )
 
         helper.display_learning_rate(optimizer)

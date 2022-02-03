@@ -13,15 +13,15 @@ from kornia.losses import SSIMLoss
 from torch.utils.data import DataLoader
 from utils import train_argparse
 
-from ...lowlevel import logging
-from .. import comm
-from ..general_nn_utils import (
+from hyde.lowlevel import logging
+from hyde.nn import comm
+from hyde.nn.general_nn_utils import (
     AddGaussianNoise,
     AddGaussianNoiseBlind,
     MultipleWeightedLosses,
 )
-from . import dataset_utils as ds_utils
-from . import helper, lmdb_dataset, models, training_utils
+from hyde.nn.qrnn3d import dataset_utils as ds_utils
+from hyde.nn.qrnn3d import helper, models, training_utils
 
 logger = logging.get_logger()
 
@@ -44,7 +44,10 @@ def main():
     if not os.path.exists(basedir):
         os.makedirs(basedir)
 
-    cuda = torch.cuda.is_available()
+    if cla.no_cuda:
+        cuda = False
+    else:
+        cuda = torch.cuda.is_available()
     logger.debug("Cuda Acess: %d" % cuda)
 
     torch.manual_seed(cla.seed)
@@ -99,23 +102,13 @@ def main():
 
     cudnn.benchmark = True
 
-    tr_ds = lmdb_dataset.LMDBDataset(cla.dataroot, repeat=16)
-    dataset2 = lmdb_dataset.LMDBDataset(cla.dataroot, repeat=64)
+    # train_transform_1 = AddGaussianNoise(34)
+    common_transform_2 = transforms.RandomCrop((32, 32))
+    train_transform_2 = AddGaussianNoiseBlind(max_sigma_db=40)
 
-    HSI2Tensor = partial(ds_utils.HsiToTensor, use_2dconv=net.use_2dconv)
-    target_transform = [
-        HSI2Tensor(),
-    ]
-    train_transform_1 = [AddGaussianNoise(34), HSI2Tensor()]
-    common_transform_2 = [
-        transforms.RandomCrop((32, 32)),
-    ]
-    train_transform_2 = [AddGaussianNoiseBlind(max_sigma_db=40), HSI2Tensor()]
-
-    set_icvl_64_31_TL_1 = ds_utils.GeneralImageDataset(
-        tr_ds,
-        transform=train_transform_1,
-        target_transform=target_transform,
+    set_icvl_64_31_TL_1 = ds_utils.ICVLDataset(
+        cla.datadir,
+        transform=train_transform_2,
     )
     # worker_init_fn is in dataset -> just getting the seed
     icvl_64_31_TL_1 = DataLoader(
@@ -125,13 +118,12 @@ def main():
         num_workers=cla.workers,
         pin_memory=torch.cuda.is_available(),
         worker_init_fn=None,
-        persistent_workers=True,
+        persistent_workers=False,
     )
 
-    set_icvl_64_31_TL_2 = ds_utils.GeneralImageDataset(
-        dataset2,
+    set_icvl_64_31_TL_2 = ds_utils.ICVLDataset(
+        cla.datadir,
         transform=train_transform_2,
-        target_transform=target_transform,
         common_transforms=common_transform_2,
     )
     # worker_init_fn is in dataset -> just getting the seed
@@ -142,51 +134,35 @@ def main():
         num_workers=cla.workers,
         pin_memory=torch.cuda.is_available(),
         worker_init_fn=None,
-        persistent_workers=True,
+        persistent_workers=False,
     )
     # -------------- validation loader -------------------------
 
     """Test-Dev"""
     basefolder = cla.val_datadir
-    mat_names = ["icvl_512_30", "icvl_512_50"]
 
-    if not net.use_2dconv:
-        mat_transform = [
-            ds_utils.LoadMatHSI(
-                input_key="input", gt_key="gt", transform=lambda x: x[:, ...][None]
-            ),
-        ]
-    else:
-        mat_transform = [
-            ds_utils.LoadMatHSI(input_key="input", gt_key="gt"),
-        ]
+    val_dataset = ds_utils.ICVLDataset(
+        basefolder,
+        transform=AddGaussianNoiseBlind(max_sigma_db=40),  # blind gaussain noise
+        val=True,
+    )
 
-    mat_datasets = [
-        ds_utils.MatDataFromFolder(
-            os.path.join(basefolder, name), size=5, common_transform=mat_transform
-        )
-        for name in mat_names
-    ]
-
-    mat_loaders = [
-        DataLoader(
-            mat_dataset,
-            batch_size=32,
-            shuffle=False,
-            num_workers=cla.workers,
-            pin_memory=torch.cuda.is_available(),
-        )
-        for mat_dataset in mat_datasets
-    ]
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=1,
+        shuffle=False,
+        num_workers=cla.workers,
+        pin_memory=torch.cuda.is_available(),
+    )
 
     base_lr = cla.lr
     helper.adjust_learning_rate(optimizer, cla.lr)
     epoch_per_save = cla.save_freq
     max_epochs = 50
     for epoch in range(max_epochs):
-        s = torch.random.seed()
-        torch.cuda.manual_seed(s)
-        np.random.seed(s)
+        torch.manual_seed(epoch)
+        torch.cuda.manual_seed(epoch)
+        np.random.seed(epoch)
 
         if epoch == 20:
             helper.adjust_learning_rate(optimizer, base_lr * 0.1)
@@ -201,17 +177,11 @@ def main():
             training_utils.train(
                 icvl_64_31_TL_1, net, cla, epoch, optimizer, criterion, writer=writer
             )
-            training_utils.validate(
-                mat_loaders[1], "icvl-validate-50", net, cla, epoch, criterion, writer=writer
-            )
+
         else:
             training_utils.train(icvl_64_31_TL_2, net, cla, epoch, optimizer, criterion)
-            training_utils.validate(
-                mat_loaders[0], "icvl-validate-30", net, cla, epoch, criterion, writer=writer
-            )
-            training_utils.validate(
-                mat_loaders[1], "icvl-validate-50", net, cla, epoch, criterion, writer=writer
-            )
+
+        training_utils.validate(val_loader, "validate", net, cla, epoch, criterion, writer=writer)
 
         helper.display_learning_rate(optimizer)
         if (epoch % epoch_per_save == 0 and epoch > 0) or epoch == max_epochs - 1:
@@ -220,3 +190,7 @@ def main():
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
             )
+
+
+if __name__ == "__main__":
+    main()
