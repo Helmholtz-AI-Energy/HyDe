@@ -1,7 +1,7 @@
+
+bs4
 h5py
-ipdb
 kornia
-lmdb
 
 # QRNN3D
 torch
