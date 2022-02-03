@@ -1,8 +1,9 @@
+# import hyde.lowlevel.utils as utils
+import models
 import numpy as np
 import torch
 
 from ...lowlevel import utils
-from . import models
 
 __all__ = ["train_argparse"]
 
@@ -15,15 +16,7 @@ model_names = sorted(
 
 
 def train_argparse(parser):
-    def _parse_str_args(args):
-        str_args = args.split(",")
-        parsed_args = []
-        for str_arg in str_args:
-            arg = int(str_arg)
-            if arg >= 0:
-                parsed_args.append(arg)
-        return parsed_args
-
+    # get the args for QRNN3D networks
     parser.add_argument("--prefix", "-p", type=str, default="denoise", help="prefix")
     parser.add_argument(
         "--arch",
@@ -34,7 +27,7 @@ def train_argparse(parser):
         help="model architecture: " + " | ".join(model_names),
     )
     parser.add_argument(
-        "--batch-size", "-b", type=int, default=16, help="training batch size. default=16"
+        "--batch-size", "-b", type=int, default=1, help="training batch size. default=16"
     )
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate. default=1e-3.")
     parser.add_argument("--wd", type=float, default=0, help="weight decay. default=0")
@@ -53,9 +46,9 @@ def train_argparse(parser):
         choices=["kn", "ku", "xn", "xu", "edsr"],
     )
     parser.add_argument(
-        "--workers", type=int, default=8, help="number of workers for data loader to use"
+        "--workers", type=int, default=4, help="number of workers for data loader to use"
     )
-    parser.add_argument("--seed", type=int, default=2018, help="random seed to use. default=2018")
+    parser.add_argument("--seed", type=int, default=42, help="random seed to use. default=2018")
     parser.add_argument("--resume", "-r", action="store_true", help="resume from checkpoint")
     parser.add_argument("--no-ropt", "-nro", action="store_true", help="not resume optimizer")
     parser.add_argument("--chop", action="store_true", help="forward chop")
@@ -82,6 +75,7 @@ def train_argparse(parser):
     parser.add_argument(
         "--tensorboard", action="store_true", help="log with tensorboard and stdout"
     )
+    parser.add_argument("--no-cuda", action="store_true", help="log with tensorboard and stdout")
     opt = parser.parse_args()
     return opt
 
