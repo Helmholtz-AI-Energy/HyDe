@@ -1,4 +1,3 @@
-import math
 from typing import Iterable, Optional, Tuple, Union
 
 import kornia.metrics as km
@@ -6,11 +5,12 @@ import numpy as np
 import torch
 from torch.nn.functional import max_pool2d, pad
 
+from .logging import get_logger
+
+logger = get_logger()
+
 __all__ = [
     "adaptive_median_filtering",
-    "add_noise_std",
-    "add_noise_db",
-    "add_simulated_lines",
     "atleast_3d",
     "custom_pca_image",
     "diff",
@@ -100,138 +100,6 @@ def adaptive_median_filtering(image: torch.Tensor, max_size: int) -> torch.Tenso
             break
 
     return zmed
-
-
-def add_noise_std(
-    image: torch.Tensor, sigma: float, noise_type: str = "additive", iid: bool = True
-) -> torch.Tensor:
-    """
-    Add noise based on a standard deviation. Options for noise include additive (gaussian) noise with
-    or without i.i.d. and poisson.
-    Poisson will add a standard 15 dB noise to the data and ignores the sigma value.
-
-    Parameters
-    ----------
-    image: torch.Tensor
-        signal on which to add noise
-    sigma: float
-        standard deviation of the noise distribution to be added to the signal
-        NOTE: the 'standard' values of these are [0.10, 0.08, 0.06, 0.04, 0.02]
-    noise_type: str
-        options: [additive, poisson]
-        toggle between noise types
-        default: additive
-    iid: bool
-        if the noise added should be i.i.d. or not.
-        default: True
-
-    Returns
-    -------
-    noisy_image: torch.Tensor
-    """
-    if noise_type == "additive" and iid:
-        noise = sigma * torch.randn_like(image)
-        img_noisy = image + noise
-    elif noise_type == "additive" and not iid:
-        sigma = torch.rand(image.shape[-1], dtype=image.dtype, device=image.device) * 0.1
-        noise = torch.randn_like(image)
-        for band in range(image.shape[-1]):
-            noise[:, :, band] *= sigma[band]
-        img_noisy = image + noise
-    elif noise_type == "poisson":
-        img_wN = image
-        snr_db = 15
-        snr_set = torch.exp(
-            snr_db * torch.log(torch.tensor(10, device=image.device, dtype=image.dtype)) / 10
-        )
-
-        rc = image.shape[0] * image.shape[1]
-        bands = image.shape[-1]
-        img_wn_noisy = torch.zeros((bands, rc), dtype=image.dtype, device=image.device)
-        for i in range(bands):
-            img_wntmp = img_wN[:, :, i].unsqueeze(0)
-            img_wntmp[img_wntmp <= 0] = 0
-            # factor = snr_set/( sum(img_wNtmp.^2)/sum(img_wNtmp) );
-            factor = snr_set / ((img_wntmp ** 2).sum() / img_wntmp.sum())
-            # img_wN_scale(i,1:N) = factor*img_wNtmp;
-            # img_wN_scale[i] = factor * img_wNtmp
-            # % Generates Poisson random samples
-            # img_wN_noisy(i,1:N) = poissrnd(factor*img_wNtmp);
-            img_wn_noisy[i] = torch.poisson(factor * img_wntmp)
-        img_noisy = img_wn_noisy.T.reshape(image.shape)
-    else:
-        raise ValueError(f"noise type must be one of [poissson, additive], currently: {noise_type}")
-    return img_noisy
-
-
-def add_noise_db(
-    signal: torch.Tensor, noise_pow: Union[int, float], scale_factor: float = 1, verbose=False
-) -> torch.Tensor:
-    """
-    Add Gaussian white noise to a torch.Tensor. The *power* of the noise is controlled
-    by the `noise_pow` parameter. This value is in dB
-
-    Parameters
-    ----------
-    signal: torch.Tensor
-    noise_pow: int, float
-    scale_factor: float, optional
-        The noise added is relative to the initial signal strength. if the signal is normalized,
-        then the final values should be scaled by the same max value
-    verbose: bool, optional
-        print out how much noise was added
-
-    Returns
-    -------
-    noisy_signal: torch.Tensor
-    """
-    noise_to_add = 10 ** (noise_pow / 20) / scale_factor
-    try:
-        noise = torch.zeros_like(signal).normal_(std=noise_to_add)
-        # if verbose:
-        #     print(f"Added Noise [dB]: {10 * torch.log10(torch.mean(torch.pow(noise, 2)))}")
-    except TypeError:  # numpy.ndarray  todo: raise statement?
-        noise = np.random.normal(scale=noise_to_add, size=signal.shape)
-
-    if verbose:
-        print(f"Added Noise [dB]: {noise.pow(2).mean().log10() * 10}")
-
-    return noise + signal
-
-
-def add_simulated_lines(signal: torch.Tensor, bands=(9, 15)) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Remove random(-ish) veritical sections from specified bands
-
-    Parameters
-    ----------
-    signal: torch.Tensor
-    bands: tuple
-        bands to put stripe into
-        must be 3 dimensions!
-
-    Returns
-    -------
-    signal_with_lines: torch.Tensor
-        input signal with the simulated lines
-    mask: torch.Tensor
-        mask indicates where there is data. i.e. 1 -> good data, 0 -> no data
-    """
-    mask = torch.ones_like(signal)
-    bands_strp = list(range(*bands))
-    dtp, dev = signal.dtype, signal.device
-    first = True
-    for ib in bands_strp:
-        if first:
-            loc_strp = torch.ceil(torch.rand(20, dtype=dtp, device=dev) * signal.shape[1])
-            loc_strp = torch.cat([loc_strp, torch.arange(40, 51, dtype=dtp, device=dev)], dim=0)
-            loc_strp = torch.cat([loc_strp, torch.arange(10, 41, dtype=dtp, device=dev)], dim=0)
-            loc_strp = loc_strp.to(torch.long)
-            first = False
-        signal[:, loc_strp, ib] = 0
-        mask[:, loc_strp, ib] = 0
-
-    return signal, mask
 
 
 def atleast_3d(image):
@@ -536,7 +404,7 @@ def normalize(
         for b in range(image.shape[band_dim]):
             sl = [
                 slice(None),
-            ] * len(image.ndim)
+            ] * image.ndim
             sl[band_dim] = b
             # sl = [slice(None), slice(None), b]
             sl = tuple(sl)
@@ -551,7 +419,7 @@ def normalize(
         # normalize the entire image, not based on the band
         sl = [
             slice(None),
-        ] * len(image.ndim)
+        ] * image.ndim
         sl = tuple(sl)
         max_y = image[sl].max()
         min_y = image[sl].min()
@@ -957,7 +825,7 @@ def undo_normalize(
         for b in range(image.shape[band_dim]):
             sl = [
                 slice(None),
-            ] * len(image.ndim)
+            ] * image.ndim
             sl[band_dim] = b
             out[sl] = image[sl] * (maxs[b] - mins[b]) + mins[b]
     else:

@@ -8,7 +8,7 @@ global first_set_of_log_config
 first_set_of_log_config = False
 
 
-def get_logger(level=logging.DEBUG, log_file=None):
+def get_logger(level=logging.INFO, log_file=None):
     if first_set_of_log_config:
         return logging.getLogger("HyDe")
     # first_set = glo
@@ -50,13 +50,13 @@ def get_logger(level=logging.DEBUG, log_file=None):
                 record.levelname = levelname_color
             return logging.Formatter.format(self, record)
 
-    hyde_logger = logging.getLogger("CousCous")
+    hyde_logger = logging.getLogger("HyDe")
     hyde_stream = logging.StreamHandler()
 
     hyde_logger.setLevel(level)
 
     FORMAT = (
-        "%(asctime)s - [ $BOLD%(name)-6s$RESET ][ %(levelname)-s ] %(message)s "
+        "%(asctime)s - [ $BOLD%(name)-2s$RESET ][ %(levelname)-s ] %(message)s "
         "\t ($BOLD%(filename)s$RESET:%(lineno)d)"
     )
     COLOR_FORMAT = formatter_message(FORMAT, True)
