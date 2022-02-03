@@ -156,6 +156,135 @@ class QRNNUpsampleConv3d(QRNN3DLayer):
         )
 
 
+class QRNN3DEncoder(nn.Module):
+    def __init__(
+        self,
+        channels,
+        num_half_layer,
+        sample_idx,
+        encoder_layer=QRNNConv3D,  # QRNNConv3D
+        is_2d=False,
+        has_ad=True,
+        bn=True,
+        act="tanh",
+        plain=False,
+    ):
+        super(QRNN3DEncoder, self).__init__()
+        # Encoder
+        self.layers = nn.ModuleList()
+        self.enable_ad = has_ad
+        for i in range(num_half_layer):
+            if i not in sample_idx:
+                if is_2d:
+                    el_lp = encoder_layer(
+                        channels, channels, k=(1, 3, 3), s=1, p=(0, 1, 1), bn=bn, act=act
+                    )
+                else:
+                    el_lp = encoder_layer(channels, channels, bn=bn, act=act)
+            else:
+                if is_2d:
+                    el_lp = encoder_layer(
+                        channels,
+                        2 * channels,
+                        k=(1, 3, 3),
+                        s=(1, 2, 2),
+                        p=(0, 1, 1),
+                        bn=bn,
+                        act=act,
+                    )
+                else:
+                    if not plain:
+                        el_lp = encoder_layer(
+                            channels, 2 * channels, k=3, s=(1, 2, 2), p=1, bn=bn, act=act
+                        )
+                    else:
+                        el_lp = encoder_layer(
+                            channels, 2 * channels, k=3, s=(1, 1, 1), p=1, bn=bn, act=act
+                        )
+
+                channels *= 2
+            self.layers.append(el_lp)
+
+    def forward(self, x, xs, reverse=False):
+        if not self.enable_ad:
+            num_half_layer = len(self.layers)
+            for i in range(num_half_layer - 1):
+                x = self.layers[i](x)
+                xs.append(x)
+            x = self.layers[-1](x)
+
+            return x
+        else:
+            num_half_layer = len(self.layers)
+            for i in range(num_half_layer - 1):
+                x = self.layers[i](x, reverse=reverse)
+                reverse = not reverse
+                xs.append(x)
+            x = self.layers[-1](x, reverse=reverse)
+            reverse = not reverse
+
+            return x, reverse
+
+
+class QRNN3DDecoder(nn.Module):
+    def __init__(
+        self,
+        channels,
+        num_half_layer,
+        sample_idx,
+        decoder_layer=QRNNDeConv3D,  # QRNNDeConv3D
+        up_sample_decoder=QRNNUpsampleConv3d,  # QRNNUpsampleConv3d
+        is_2d=False,
+        has_ad=True,
+        bn=True,
+        act="tanh",
+        plain=False,
+    ):
+        super(QRNN3DDecoder, self).__init__()
+        # Decoder
+        self.layers = nn.ModuleList()
+        self.enable_ad = has_ad
+        for i in reversed(range(num_half_layer)):
+            if i not in sample_idx:
+                if is_2d:
+                    dl_lp = decoder_layer(
+                        channels, channels, k=(1, 3, 3), s=1, p=(0, 1, 1), bn=bn, act=act
+                    )
+                else:
+                    dl_lp = decoder_layer(channels, channels, bn=bn, act=act)
+            else:
+                if is_2d:
+                    dl_lp = up_sample_decoder(
+                        channels, channels // 2, k=(1, 3, 3), s=1, p=(0, 1, 1), bn=bn, act=act
+                    )
+                else:
+                    if not plain:
+                        dl_lp = up_sample_decoder(channels, channels // 2, bn=bn, act=act)
+                    else:
+                        dl_lp = decoder_layer(channels, channels // 2, bn=bn, act=act)
+
+                channels //= 2
+            self.layers.append(dl_lp)
+
+    def forward(self, x, xs, reverse=False):
+        if not self.enable_ad:
+            num_half_layer = len(self.layers)
+            x = self.layers[0](x)
+            for i in range(1, num_half_layer):
+                x = x + xs.pop()
+                x = self.layers[i](x)
+            return x
+        else:
+            num_half_layer = len(self.layers)
+            x = self.layers[0](x, reverse=reverse)
+            reverse = not reverse
+            for i in range(1, num_half_layer):
+                x = x + xs.pop()
+                x = self.layers[i](x, reverse=reverse)
+                reverse = not reverse
+            return x
+
+
 class QRNNREDC3D(nn.Module):
     def __init__(
         self,
@@ -163,10 +292,10 @@ class QRNNREDC3D(nn.Module):
         channels,
         num_half_layer,
         sample_idx,
-        feature_extractor=None,  # BiQRNNConv3D
-        reconstructor=None,  # BiQRNNDeConv3D
-        encoder=None,  # QRNN3DEncoder
-        decoder=None,  # QRNN3DDecoder
+        feature_extractor=BiQRNNConv3D,
+        reconstructor=BiQRNNDeConv3D,
+        encoder=QRNN3DEncoder,
+        decoder=QRNN3DDecoder,
         is_2d=False,
         has_ad=True,
         bn=True,
@@ -233,145 +362,18 @@ class QRNNREDC3D(nn.Module):
         return out
 
 
-class QRNN3DEncoder(nn.Module):
-    def __init__(
-        self,
-        channels,
-        num_half_layer,
-        sample_idx,
-        encoder_layer=None,  # QRNNConv3D
-        is_2d=False,
-        has_ad=True,
-        bn=True,
-        act="tanh",
-        plain=False,
-    ):
-        super(QRNN3DEncoder, self).__init__()
-        # Encoder
-        self.layers = nn.ModuleList()
-        self.enable_ad = has_ad
-        for i in range(num_half_layer):
-            if i not in sample_idx:
-                if is_2d:
-                    encoder_layer = encoder_layer(
-                        channels, channels, k=(1, 3, 3), s=1, p=(0, 1, 1), bn=bn, act=act
-                    )
-                else:
-                    encoder_layer = encoder_layer(channels, channels, bn=bn, act=act)
-            else:
-                if is_2d:
-                    encoder_layer = encoder_layer(
-                        channels,
-                        2 * channels,
-                        k=(1, 3, 3),
-                        s=(1, 2, 2),
-                        p=(0, 1, 1),
-                        bn=bn,
-                        act=act,
-                    )
-                else:
-                    if not plain:
-                        encoder_layer = encoder_layer(
-                            channels, 2 * channels, k=3, s=(1, 2, 2), p=1, bn=bn, act=act
-                        )
-                    else:
-                        encoder_layer = encoder_layer(
-                            channels, 2 * channels, k=3, s=(1, 1, 1), p=1, bn=bn, act=act
-                        )
+# QRNN3DEncoder = partial(QRNN3DEncoder, encoder_layer=QRNNConv3D)
 
-                channels *= 2
-            self.layers.append(encoder_layer)
+# QRNN3DDecoder = partial(
+#     QRNN3DDecoder,
+#     decoder_layer=QRNNDeConv3D,
+#     up_sample_decoder=QRNNUpsampleConv3d
+# )
 
-    def forward(self, x, xs, reverse=False):
-        if not self.enable_ad:
-            num_half_layer = len(self.layers)
-            for i in range(num_half_layer - 1):
-                x = self.layers[i](x)
-                xs.append(x)
-            x = self.layers[-1](x)
-
-            return x
-        else:
-            num_half_layer = len(self.layers)
-            for i in range(num_half_layer - 1):
-                x = self.layers[i](x, reverse=reverse)
-                reverse = not reverse
-                xs.append(x)
-            x = self.layers[-1](x, reverse=reverse)
-            reverse = not reverse
-
-            return x, reverse
-
-
-class QRNN3DDecoder(nn.Module):
-    def __init__(
-        self,
-        channels,
-        num_half_layer,
-        sample_idx,
-        decoder_layer=None,  # QRNNDeConv3D
-        up_sample_decoder=None,  # QRNNUpsampleConv3d
-        is_2d=False,
-        has_ad=True,
-        bn=True,
-        act="tanh",
-        plain=False,
-    ):
-        super(QRNN3DDecoder, self).__init__()
-        # Decoder
-        self.layers = nn.ModuleList()
-        self.enable_ad = has_ad
-        for i in reversed(range(num_half_layer)):
-            if i not in sample_idx:
-                if is_2d:
-                    decoder_layer = decoder_layer(
-                        channels, channels, k=(1, 3, 3), s=1, p=(0, 1, 1), bn=bn, act=act
-                    )
-                else:
-                    decoder_layer = decoder_layer(channels, channels, bn=bn, act=act)
-            else:
-                if is_2d:
-                    decoder_layer = up_sample_decoder(
-                        channels, channels // 2, k=(1, 3, 3), s=1, p=(0, 1, 1), bn=bn, act=act
-                    )
-                else:
-                    if not plain:
-                        decoder_layer = up_sample_decoder(channels, channels // 2, bn=bn, act=act)
-                    else:
-                        decoder_layer = decoder_layer(channels, channels // 2, bn=bn, act=act)
-
-                channels //= 2
-            self.layers.append(decoder_layer)
-
-    def forward(self, x, xs, reverse=False):
-        if not self.enable_ad:
-            num_half_layer = len(self.layers)
-            x = self.layers[0](x)
-            for i in range(1, num_half_layer):
-                x = x + xs.pop()
-                x = self.layers[i](x)
-            return x
-        else:
-            num_half_layer = len(self.layers)
-            x = self.layers[0](x, reverse=reverse)
-            reverse = not reverse
-            for i in range(1, num_half_layer):
-                x = x + xs.pop()
-                x = self.layers[i](x, reverse=reverse)
-                reverse = not reverse
-            return x
-
-
-QRNN3DEncoder = partial(QRNN3DEncoder, QRNNConv3D=QRNNConv3D)
-
-QRNN3DDecoder = partial(
-    QRNN3DDecoder, QRNNDeConv3D=QRNNDeConv3D, QRNNUpsampleConv3d=QRNNUpsampleConv3d
-)
-
-QRNNREDC3D = partial(
-    QRNNREDC3D,
-    BiQRNNConv3D=BiQRNNConv3D,
-    BiQRNNDeConv3D=BiQRNNDeConv3D,
-    QRNN3DEncoder=QRNN3DEncoder,
-    QRNN3DDecoder=QRNN3DDecoder,
-)
+# QRNNREDC3D = partial(
+#     QRNNREDC3D,
+#     feature_extractor=BiQRNNConv3D,
+#     reconstructor=BiQRNNDeConv3D,
+#     encoder=QRNN3DEncoder,
+#     decoder=QRNN3DDecoder,
+# )

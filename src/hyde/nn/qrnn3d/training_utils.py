@@ -18,7 +18,7 @@ def train(train_loader, network, cla, epoch, optimizer, criterion, writer=None):
 
     for batch_idx, (inputs, targets) in enumerate(train_loader):
 
-        if torch.cuda.is_available():
+        if not cla.no_cuda and torch.cuda.is_available():
             inputs, targets = inputs.cuda(), targets.cuda()
 
         optimizer.zero_grad()
@@ -29,19 +29,22 @@ def train(train_loader, network, cla, epoch, optimizer, criterion, writer=None):
                 out = network(i)
                 outs.append(out)
                 loss = criterion(out, t)
-                if train:
-                    loss.backward()
+                loss.backward()
                 loss_data += loss.item()
+        else:
+            outputs = network(inputs)
+            loss = criterion(outputs, targets)
+            loss.backward()
+            loss_data += loss.item()
+
         total_norm = nn.utils.clip_grad_norm_(network.parameters(), cla.clip)
         optimizer.step()
 
         train_loss += loss_data
         avg_loss = train_loss / (batch_idx + 1)
 
-        if batch_idx % cla.log_freq == 0:
-            logger.info(
-                f"Epoch: {epoch} iteration: {batch_idx} Loss: {avg_loss} Norm: {total_norm}"
-            )
+        # if batch_idx % cla.log_freq == 0:
+        logger.info(f"Epoch: {epoch} iteration: {batch_idx} Loss: {avg_loss} Norm: {total_norm}")
 
     if writer is not None:
         writer.add_scalar(os.path.join(cla.prefix, "train_loss_epoch"), avg_loss, epoch)
@@ -54,7 +57,7 @@ def validate(valid_loader, name, network, cla, epoch, criterion, writer=None):
     logger.info(f"Validation: Epoch: {epoch} dataset name: {name}")
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(valid_loader):
-            if not torch.cuda.is_available():
+            if not cla.no_cuda and torch.cuda.is_available():
                 inputs, targets = inputs.cuda(), targets.cuda()
 
             loss_data = 0
@@ -85,8 +88,9 @@ def validate(valid_loader, name, network, cla, epoch, criterion, writer=None):
             total_psnr += psnr
             avg_psnr = total_psnr / (batch_idx + 1)
 
-            if batch_idx % cla.log_freq == 0:
-                logger.info(f"Loss: {avg_loss} | PSNR: {avg_psnr}")
+            # if batch_idx % cla.log_freq == 0:
+            logger.info(f"Loss: {avg_loss} | PSNR: {avg_psnr}")
+            break
 
     logger.info(f"Final: Loss: {avg_loss} | PSNR: {avg_psnr}")
 
