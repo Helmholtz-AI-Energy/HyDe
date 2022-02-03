@@ -1,14 +1,26 @@
+import os
 import random
+import urllib
+from concurrent.futures import ThreadPoolExecutor
 from itertools import product
+from pathlib import Path
 from typing import List, Tuple, Union
 
+import h5py
 import numpy as np
+import requests
 import torch.nn as nn
 import torchvision.transforms.functional as TF
+from bs4 import BeautifulSoup
 
-from ..lowlevel import utils
+from ..lowlevel import add_noise, logging, utils
+
+logger = logging.get_logger()
+
+from tqdm import tqdm
 
 __all__ = [
+    "download_ICVL_data",
     "AddGaussianNoise",
     "AddGaussianNoiseBlind",
     "AddNoiseComplex",
@@ -24,15 +36,84 @@ __all__ = [
 ]
 
 
+def download_ICVL_data(target_dir, num_threads=5, hyde_dir="", matkey="rad"):
+
+    url = "http://icvl.cs.bgu.ac.il/hyperspectral/"
+    ext = "mat"
+    target_dir = Path(target_dir)
+
+    def listFD(url, ext=""):
+        page = requests.get(url).text
+        # print(page)
+        soup = BeautifulSoup(page, "html.parser")
+        return [node.get("href") for node in soup.find_all("a") if node.get("href").endswith(ext)]
+
+    # load one test file -> test gaussian
+    test_files = []
+
+    with open(hyde_dir + "src/hyde/nn/ICVL_test.txt", "r") as f:
+        for fn in f.readlines():
+            test_files.append(fn[:-1])
+
+    # make test and train dirs
+    train_dir = target_dir / "train"
+    test_dir = target_dir / "test"
+    train_dir.mkdir(exist_ok=True)
+    test_dir.mkdir(exist_ok=True)
+
+    def load_n_save(furl, fpath):
+        urllib.request.urlretrieve(furl, fpath)
+        with h5py.File(fpath, "r") as f:
+            img_clean = f[matkey][:]
+        np.save(fpath, img_clean)
+
+    # print(test_files)
+    logger.debug("Expected data size: ~90.2 GB uncompressed")
+    logger.info("Starting download of data... this might take some time...")
+    with ThreadPoolExecutor(max_workers=num_threads) as executor:
+        retl = []
+        for file in listFD(url, ext):
+            sv_name = file.split("/")[-1]
+            targ = test_dir if sv_name in test_files else train_dir
+            if not os.path.isfile(targ / sv_name):
+                ret = executor.submit(load_n_save, file, targ / sv_name)
+                retl.append(ret)
+        for r in tqdm(retl):
+            r.result()
+    logger.info("finished download")
+
+
 class AddGaussianNoise(object):
+    """
+    Add Gaussian white noise to a torch.Tensor. The *power* of the noise is controlled
+    by the `noise_pow` parameter. This value is in dB
+
+    Parameters
+    ----------
+    signal: torch.Tensor
+    noise_pow: int, float
+    scale_factor: float, optional
+        The noise added is relative to the initial signal strength. if the signal is normalized,
+        then the final values should be scaled by the same max value
+    verbose: bool, optional
+        print out how much noise was added
+
+    Returns
+    -------
+    noisy_signal: torch.Tensor
+    """
+
     """add gaussian noise to the given numpy array (B,H,W)"""
 
-    def __init__(self, sigma_db):
+    def __init__(self, sigma_db, scale_factor=255.0):
         self.sigma_db = sigma_db
+        self.scale_factor = scale_factor
 
     def __call__(self, img):
         # noise = np.random.randn(*img.shape) * self.sigma_ratio
-        return utils.add_noise_db(img, self.sigma_db, scale_factor=255.0, verbose=False)
+        return add_noise.add_noise_db(
+            img, self.sigma_db, scale_factor=self.scale_factor, verbose=False
+        )
 
 
 class AddGaussianNoiseBlind(object):
@@ -48,15 +129,17 @@ class AddGaussianNoiseBlind(object):
         default: 0
     """
 
-    def __init__(self, max_sigma_db, min_sigma_db=0):
+    def __init__(self, max_sigma_db, min_sigma_db=0, scale_factor=255.0):
         self.max_sigma_db = max_sigma_db
         self.min_sigma_db = min_sigma_db
+        self.scale_factor = scale_factor
 
     def __call__(self, img):
         # noise = np.random.randn(*img.shape) * self.sigmas[next(self.pos)]
         # return img + noise
-        noise_db = (self.max_sigma_db * np.random.rand()) + self.min_sigma_db
-        return utils.add_noise_db(img, noise_db, verbose=False)
+        return add_noise.add_gaussian_noise_blind(
+            img, self.min_sigma_db, self.max_sigma_db, self.scale_factor
+        )
 
 
 class AddNoiseNonIIDdB(object):
@@ -65,20 +148,20 @@ class AddNoiseNonIIDdB(object):
 
     Parameters
     ----------
-    max_sigma_db: int, float, optional
+    max_power: int, float, optional
         the maximum noise power level that can be used during noise generation
         unit: dB
         default: 40
     """
 
-    def __init__(self, max_sigma_db=40):
-        # self.sigmas = np.array(sigmas) / 255.0
-        self.max_sigma_db = max_sigma_db
+    def __init__(self, max_power=40, scale_factor=255.0):
+        self.scale_factor = scale_factor
+        self.max_power = max_power
 
     def __call__(self, img):
-        bwsigmas = np.random.rand(img.shape[0], 1, 1) * self.max_sigma_db
-        noise = np.random.randn(*img.shape) * bwsigmas
-        return img + noise
+        return add_noise.add_non_iid_noise_db(
+            img, max_power=self.max_power, scale_factor=self.scale_factor
+        )
 
 
 class AddNoiseMixed(object):
