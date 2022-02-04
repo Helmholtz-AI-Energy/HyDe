@@ -192,13 +192,6 @@ def main():
             val_loader, "validate", net, cla, epoch, criterion, bandwise, writer=writer
         )
 
-        if best_val_psnr < psnr or best_val_psnr > ls:
-            logger.info("Saving current network...")
-            model_latest_path = os.path.join(cla.save_dir, prefix, "model_latest.pth")
-            training_utils.save_checkpoint(
-                cla, epoch, net, optimizer, model_out_path=model_latest_path
-            )
-
         epochs_wo_best += 1
 
         helper.display_learning_rate(optimizer)
@@ -211,7 +204,15 @@ def main():
             best_val_loss = ls
             epochs_wo_best = 0
 
+        if epochs_wo_best == 0:  # best_val_psnr < psnr or best_val_psnr > ls:
+            logger.info("Saving current network...")
+            model_latest_path = os.path.join(cla.save_dir, prefix, "model_latest.pth")
+            training_utils.save_checkpoint(
+                cla, epoch, net, optimizer, model_out_path=model_latest_path
+            )
+
         if epochs_wo_best == 5:
+            logger.info(f"Breaking loop, not improving for 5 epochs, current epoch: {epoch}")
             break
 
 
