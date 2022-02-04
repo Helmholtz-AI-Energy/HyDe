@@ -1,9 +1,10 @@
-# import hyde.lowlevel.utils as utils
 import models
 import numpy as np
 import torch
 
-from ...lowlevel import utils
+import hyde.lowlevel.utils as utils
+
+# from ...lowlevel import utils
 
 __all__ = ["train_argparse"]
 
@@ -27,7 +28,7 @@ def train_argparse(parser):
         help="model architecture: " + " | ".join(model_names),
     )
     parser.add_argument(
-        "--batch-size", "-b", type=int, default=1, help="training batch size. default=16"
+        "--batch-size", "-b", type=int, default=2, help="training batch size. default=16"
     )
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate. default=1e-3.")
     parser.add_argument("--wd", type=float, default=0, help="weight decay. default=0")

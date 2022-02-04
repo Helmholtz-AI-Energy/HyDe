@@ -111,13 +111,13 @@ def main():
         transform=train_transform_2,
     )
     # worker_init_fn is in dataset -> just getting the seed
+    print(cla.batch_size)
     icvl_64_31_TL_1 = DataLoader(
         set_icvl_64_31_TL_1,
         batch_size=cla.batch_size,
         shuffle=True,
         num_workers=cla.workers,
         pin_memory=torch.cuda.is_available(),
-        worker_init_fn=None,
         persistent_workers=False,
     )
 

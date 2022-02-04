@@ -6,7 +6,7 @@ from .qrnn import QRNNREDC3D, REDC3D, ResQRNN3D
 
 
 def qrnn3d():
-    net = QRNNREDC3D(1, 16, 5, [1, 3], has_ad=True)
+    net = QRNNREDC3D(in_channels=1, channels=16, num_half_layer=5, sample_idx=[1, 3], has_ad=True)
     net.use_2dconv = False
     net.bandwise = False
     return net

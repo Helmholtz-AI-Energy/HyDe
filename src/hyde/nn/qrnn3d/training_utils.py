@@ -74,8 +74,7 @@ def validate(valid_loader, name, network, cla, epoch, criterion, writer=None):
                 loss = criterion(outputs, targets)
                 loss_data += loss.item()
 
-            # psnr = torch.mean(indexes.cal_bwpsnr(outputs, targets))
-            # data units: [batch, bands, h, w]
+            # data units: [batch, 1, bands, h, w]
             psnr = utils.peak_snr(outputs, targets, bandwise=True, band_dim=1)
             try:
                 psnr = torch.mean(psnr)

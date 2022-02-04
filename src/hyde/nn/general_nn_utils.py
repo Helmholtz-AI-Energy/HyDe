@@ -64,7 +64,7 @@ def download_ICVL_data(target_dir, num_threads=5, hyde_dir="", matkey="rad"):
     def load_n_save(furl, fpath):
         urllib.request.urlretrieve(furl, fpath)
         with h5py.File(fpath, "r") as f:
-            img_clean = f[matkey][:]
+            img_clean = f[matkey][:].astype(np.float32)
         np.save(fpath, img_clean)
 
     # print(test_files)

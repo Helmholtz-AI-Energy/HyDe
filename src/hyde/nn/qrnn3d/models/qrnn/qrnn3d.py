@@ -37,23 +37,26 @@ class QRNN3DLayer(nn.Module):
     def forward(self, inputs, reverse=False):
         h = None
         Z, F = self._conv_step(inputs)
-        h_time = []
-
+        out_sh = list(Z[0].shape)
+        out_sh.insert(0, 2)
+        out = torch.zeros(out_sh, device=inputs.device)
         if not reverse:
-            for time, (z, f) in enumerate(
-                zip(Z.split(1, 2), F.split(1, 2))
-            ):  # split along timestep
+            for c, (z, f) in enumerate(zip(Z.split(1, 2), F.split(1, 2))):  # split along timestep
                 h = self._rnn_step(z, f, h)
-                h_time.append(h)
+                out[:, :, c : c + 1] = h
+                # h_time.append(h)
         else:
-            for time, (z, f) in enumerate(
+            for c, (z, f) in enumerate(
                 (zip(reversed(Z.split(1, 2)), reversed(F.split(1, 2))))
             ):  # split along timestep
                 h = self._rnn_step(z, f, h)
-                h_time.insert(0, h)
+                # h_time.insert(0, h)
+                idx = out.shape[2] - 1 - c
+                out[:, :, idx : idx + 1] = h
 
         # return concatenated hidden states
-        return torch.cat(h_time, dim=2)
+        # out = torch.cat(h_time, dim=2)
+        return out
 
     def extra_repr(self):
         return "act={}".format(self.act)
@@ -75,29 +78,26 @@ class BiQRNN3DLayer(QRNN3DLayer):
     def forward(self, inputs, fname=None):
         h = None
         Z, F1, F2 = self._conv_step(inputs)
-        hsl = []
-        hsr = []
         zs = Z.split(1, 2)
-
-        for time, (z, f) in enumerate(zip(zs, F1.split(1, 2))):  # split along timestep
+        in_shape = inputs.shape
+        out_shape = list(in_shape)
+        out_shape[1] = zs[0].shape[1]
+        out = torch.zeros(out_shape, device=inputs.device)
+        for c, (z, f) in enumerate(zip(zs, F1.split(1, 2))):  # split along timestep
             h = self._rnn_step(z, f, h)
-            hsl.append(h)
+            # hsl.append(h)
+            out[:, :, c : c + 1] = h
 
         h = None
-        for time, (z, f) in enumerate(
+        for c, (z, f) in enumerate(
             (zip(reversed(zs), reversed(F2.split(1, 2))))
         ):  # split along timestep
             h = self._rnn_step(z, f, h)
-            hsr.insert(0, h)
+            idx = in_shape[2] - c - 1
+            out[:, :, idx : idx + 1] += h
+            # hsr.insert(0, h) -> insert elements at front of list...
 
-        # return concatenated hidden states
-        hsl = torch.cat(hsl, dim=2)
-        hsr = torch.cat(hsr, dim=2)
-
-        if fname is not None:
-            stats_dict = {"z": Z, "fl": F1, "fr": F2, "hsl": hsl, "hsr": hsr}
-            torch.save(stats_dict, fname)
-        return hsl + hsr
+        return out
 
 
 class BiQRNNConv3D(BiQRNN3DLayer):
@@ -349,10 +349,14 @@ class QRNNREDC3D(nn.Module):
     def forward(self, x):
         xs = [x]
         out = self.feature_extractor(xs[0])
+        print("finished feature extractor")
+
         xs.append(out)
         if self.enable_ad:
             out, reverse = self.encoder(out, xs, reverse=False)
+            print("after encoder")
             out = self.decoder(out, xs, reverse=(reverse))
+            print("after decoder")
         else:
             out = self.encoder(out, xs)
             out = self.decoder(out, xs)
