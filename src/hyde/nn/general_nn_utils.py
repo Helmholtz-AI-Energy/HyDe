@@ -36,7 +36,7 @@ __all__ = [
 ]
 
 
-def download_ICVL_data(target_dir, num_threads=5, hyde_dir="", matkey="rad"):
+def download_ICVL_data(target_dir, num_threads=5, matkey="rad"):
 
     url = "http://icvl.cs.bgu.ac.il/hyperspectral/"
     ext = "mat"
@@ -50,8 +50,8 @@ def download_ICVL_data(target_dir, num_threads=5, hyde_dir="", matkey="rad"):
 
     # load one test file -> test gaussian
     test_files = []
-
-    with open(hyde_dir + "src/hyde/nn/ICVL_test.txt", "r") as f:
+    hyde_dir = Path(__file__[: __file__.find("src")])
+    with open(hyde_dir / "src/hyde/nn/ICVL_test.txt", "r") as f:
         for fn in f.readlines():
             test_files.append(fn[:-1])
 

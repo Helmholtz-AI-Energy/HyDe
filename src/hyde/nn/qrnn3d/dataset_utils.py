@@ -26,7 +26,7 @@ class ICVLDataset(Dataset):
     ):
         super(ICVLDataset, self).__init__()
         datadir = Path(datadir)
-        self.files = [datadir / f for f in os.listdir(datadir)]
+        self.files = [datadir / f for f in os.listdir(datadir) if f.endswith(".npy")]
         self.base_transforms = transforms.Compose(
             [
                 transforms.ToTensor(),
