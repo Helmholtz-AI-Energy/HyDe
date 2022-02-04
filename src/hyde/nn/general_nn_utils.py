@@ -18,6 +18,7 @@ from ..lowlevel import add_noise, logging, utils
 logger = logging.get_logger()
 
 from tqdm import tqdm
+from random import shuffle
 
 __all__ = [
     "download_ICVL_data",
@@ -46,7 +47,9 @@ def download_ICVL_data(target_dir, num_threads=5, matkey="rad"):
         page = requests.get(url).text
         # print(page)
         soup = BeautifulSoup(page, "html.parser")
-        return [node.get("href") for node in soup.find_all("a") if node.get("href").endswith(ext)]
+        ret =  [node.get("href") for node in soup.find_all("a") if node.get("href").endswith(ext)]
+        shuffle(ret)
+        return ret
 
     # load one test file -> test gaussian
     test_files = []
@@ -67,9 +70,11 @@ def download_ICVL_data(target_dir, num_threads=5, matkey="rad"):
             try:
                 img_clean = f[matkey][:].astype(np.float32)
             except Exception as e:
-                logger.debug(f"FAILURE: URL: {furl}\nfile: {fpath}\n{e}")
+                logger.warning(f"FAILURE: URL: {furl}\nfile: {fpath}\n{e}")
+                return
         np.save(fpath, img_clean)
-        logger.info(f"finished file: {fpath}")
+        return
+        #logger.info(f"finished file: {fpath}")
 
     # print(test_files)
     logger.debug("Expected data size: ~90.2 GB uncompressed")
