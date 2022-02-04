@@ -121,13 +121,13 @@ def main():
 
     set_icvl_64_31_TL_1 = ds_utils.ICVLDataset(
         cla.datadir,
-        transform=train_transform_2,
+        transform=AddGaussianNoise(40), # train_transform_2,
     )
     # worker_init_fn is in dataset -> just getting the seed
-    print(cla.batch_size * world_size)
+    #print(cla.batch_size * world_size)
     icvl_64_31_TL_1 = DataLoader(
         set_icvl_64_31_TL_1,
-        batch_size=cla.batch_size * world_size,
+        batch_size=cla.batch_size,
         shuffle=True,
         num_workers=cla.workers,
         pin_memory=torch.cuda.is_available(),
@@ -162,7 +162,7 @@ def main():
 
     val_loader = DataLoader(
         val_dataset,
-        batch_size=64 * world_size,
+        batch_size=cla.batch_size,
         shuffle=False,
         num_workers=cla.workers,
         pin_memory=torch.cuda.is_available(),

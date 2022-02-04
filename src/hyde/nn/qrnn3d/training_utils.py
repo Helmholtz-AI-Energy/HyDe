@@ -23,7 +23,7 @@ def train(train_loader, network, cla, epoch, optimizer, criterion, bandwise, wri
 
         optimizer.zero_grad()
         loss_data = 0
-        print(bandwise, inputs.shape)
+        #print(bandwise, inputs.shape)
         if bandwise:
             outs = []
             for time, (i, t) in enumerate(zip(inputs.split(1, 1), targets.split(1, 1))):
@@ -33,10 +33,10 @@ def train(train_loader, network, cla, epoch, optimizer, criterion, bandwise, wri
                 loss.backward()
                 loss_data += loss.item()
         else:
-            print('before input')
+            #print('before input')
             outputs = network(inputs)
             loss = criterion(outputs, targets)
-            print("before backward")
+            #print("before backward")
             loss.backward()
             loss_data += loss.item()
 
@@ -46,8 +46,8 @@ def train(train_loader, network, cla, epoch, optimizer, criterion, bandwise, wri
         train_loss += loss_data
         avg_loss = train_loss / (batch_idx + 1)
 
-        # if batch_idx % cla.log_freq == 0:
-        logger.info(f"Epoch: {epoch} iteration: {batch_idx} Loss: {avg_loss} Norm: {total_norm}")
+        if batch_idx % cla.log_freq == 0:
+            logger.info(f"Epoch: {epoch} iteration: {batch_idx} Loss: {avg_loss} Norm: {total_norm}")
 
     if writer is not None:
         writer.add_scalar(os.path.join(cla.prefix, "train_loss_epoch"), avg_loss, epoch)
