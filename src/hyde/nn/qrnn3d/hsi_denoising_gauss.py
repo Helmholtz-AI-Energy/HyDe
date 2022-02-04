@@ -61,17 +61,19 @@ def main():
     # init params will set the model params with a random distribution
     helper.init_params(net, init_type=cla.init)  # disable for default initialization
 
+    bandwise = net.bandwise
     world_size = 1
     if torch.cuda.device_count() > 1 and cuda:
         import torch.distributed as dist
+
         logger.info("Spawning torch groups for DDP")
         group = comm.init(method=cla.comm_method)
-        
+
         loc_rank = dist.get_rank() % torch.cuda.device_count()
         world_size = dist.get_world_size()
         device = torch.device("cuda", loc_rank)
         net = net.to(device)
-        
+
         net = nn.parallel.DistributedDataParallel(net, device_ids=[device.index])
         net = nn.SyncBatchNorm.convert_sync_batchnorm(net, group)
 
@@ -186,13 +188,17 @@ def main():
 
         if epoch <= 30:
             training_utils.train(
-                icvl_64_31_TL_1, net, cla, epoch, optimizer, criterion, writer=writer
+                icvl_64_31_TL_1, net, cla, epoch, optimizer, criterion, bandwise, writer=writer
             )
 
         else:
-            training_utils.train(icvl_64_31_TL_2, net, cla, epoch, optimizer, criterion)
+            training_utils.train(
+                icvl_64_31_TL_2, net, cla, epoch, optimizer, criterion, bandwise, writer=writer
+            )
 
-        training_utils.validate(val_loader, "validate", net, cla, epoch, criterion, writer=writer)
+        training_utils.validate(
+            val_loader, "validate", net, cla, epoch, criterion, bandwise, writer=writer
+        )
 
         helper.display_learning_rate(optimizer)
         if (epoch % epoch_per_save == 0 and epoch > 0) or epoch == max_epochs - 1:

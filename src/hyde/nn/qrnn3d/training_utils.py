@@ -11,7 +11,7 @@ __all__ = ["train"]
 logger = logging.get_logger()
 
 
-def train(train_loader, network, cla, epoch, optimizer, criterion, writer=None):
+def train(train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer=None):
     logger.info(f"\nTrain Loop - Epoch: {epoch}")
     network.train()
     train_loss = 0
@@ -23,7 +23,7 @@ def train(train_loader, network, cla, epoch, optimizer, criterion, writer=None):
 
         optimizer.zero_grad()
         loss_data = 0
-        if network.bandwise:
+        if bandwise:
             outs = []
             for time, (i, t) in enumerate(zip(inputs.split(1, 1), targets.split(1, 1))):
                 out = network(i)
@@ -50,7 +50,7 @@ def train(train_loader, network, cla, epoch, optimizer, criterion, writer=None):
         writer.add_scalar(os.path.join(cla.prefix, "train_loss_epoch"), avg_loss, epoch)
 
 
-def validate(valid_loader, name, network, cla, epoch, criterion, writer=None):
+def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, writer=None):
     network.eval()
     validate_loss = 0
     total_psnr = 0
@@ -61,7 +61,7 @@ def validate(valid_loader, name, network, cla, epoch, criterion, writer=None):
                 inputs, targets = inputs.cuda(), targets.cuda()
 
             loss_data = 0
-            if network.bandwise:
+            if bandwise:
                 outs = []
                 for time, (i, t) in enumerate(zip(inputs.split(1, 1), targets.split(1, 1))):
                     out = network(i)
