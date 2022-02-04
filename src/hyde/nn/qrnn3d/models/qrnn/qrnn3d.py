@@ -1,9 +1,8 @@
+import gc
 from functools import partial
 
 import torch
 import torch.nn as nn
-
-import gc
 
 from . import combinations
 
@@ -91,29 +90,34 @@ class BiQRNN3DLayer(QRNN3DLayer):
         Z, F1, F2 = self._conv_step(inputs)
         zs = Z.split(1, 2)
         in_shape = inputs.shape
+        hsl = []
+        hsr = []
         # out_shape = list(in_shape)
         # out_shape[1] = zs[0].shape[1]
         # out = torch.zeros(out_shape, device=inputs.device)
-        out = None
-        ln_h = len(Z.split(1, 2)) * 2
+        # out = None
+        # ln_h = len(Z.split(1, 2)) * 2
         for c, (z, f) in enumerate(zip(zs, F1.split(1, 2))):  # split along timestep
             h = self._rnn_step(z, f, h)
-            # hsl.append(h)
-            if out is None:
-                out_sh = list(h.shape)
-                out_sh[2] = ln_h
-                out = torch.zeros(out_sh, device=inputs.device)
-            out[:, :, c : c + 1] = h
+            hsl.append(h)
+            # if out is None:
+            #     out_sh = list(h.shape)
+            #     out_sh[2] = ln_h
+            #     out = torch.zeros(out_sh, device=inputs.device)
+            # out[:, :, c : c + 1] = h
 
         h = None
         for c, (z, f) in enumerate(
             (zip(reversed(zs), reversed(F2.split(1, 2))))
         ):  # split along timestep
             h = self._rnn_step(z, f, h)
-            idx = in_shape[2] - c - 1
-            out[:, :, idx : idx + 1] += h
-            # hsr.insert(0, h) -> insert elements at front of list...
+            # idx = in_shape[2] - c - 1
+            # out[:, :, idx : idx + 1] += h
+            hsr.insert(0, h)  # -> insert elements at front of list...
 
+        hsl = torch.cat(hsl, dim=2)
+        hsr = torch.cat(hsr, dim=2)
+        out = hsl + hsr
         return out
 
 
