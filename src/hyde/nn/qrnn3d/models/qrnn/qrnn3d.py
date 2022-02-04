@@ -89,7 +89,7 @@ class BiQRNN3DLayer(QRNN3DLayer):
         h = None
         Z, F1, F2 = self._conv_step(inputs)
         zs = Z.split(1, 2)
-        in_shape = inputs.shape
+        # in_shape = inputs.shape
         hsl = []
         hsr = []
         # out_shape = list(in_shape)
@@ -371,16 +371,16 @@ class QRNNREDC3D(nn.Module):
         xs = [x]
         gc.enable()
         out = self.feature_extractor(xs[0])
-        #print("finished feature extractor")
+        # print("finished feature extractor")
         gc.collect()
 
         xs.append(out)
         if self.enable_ad:
             out, reverse = self.encoder(out, xs, reverse=False)
-            #print("after encoder")
+            # print("after encoder")
             gc.collect()
             out = self.decoder(out, xs, reverse=(reverse))
-            #print("after decoder")
+            # print("after decoder")
         else:
             out = self.encoder(out, xs)
             out = self.decoder(out, xs)
