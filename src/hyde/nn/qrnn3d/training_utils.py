@@ -92,9 +92,9 @@ def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, write
             total_psnr += psnr
             avg_psnr = total_psnr / (batch_idx + 1)
 
-            # if batch_idx % cla.log_freq == 0:
-            logger.info(f"Loss: {avg_loss} | PSNR: {avg_psnr}")
-            break
+            if batch_idx % cla.log_freq == 0:
+                logger.info(f"Loss: {avg_loss} | PSNR: {avg_psnr}")
+            # break
 
     logger.info(f"Final: Loss: {avg_loss} | PSNR: {avg_psnr}")
 
@@ -110,7 +110,7 @@ def save_checkpoint(cla, epoch, network, optimizer, model_out_path=None, **kwarg
         model_out_path = os.path.join(cla.save_dir, cla.prefix, f"model_epoch_{epoch}.pth")
 
     state = {
-        "network": network.state_dict(),
+        "net": network.state_dict(),
         "optimizer": optimizer.state_dict(),
         "epoch": epoch,
     }

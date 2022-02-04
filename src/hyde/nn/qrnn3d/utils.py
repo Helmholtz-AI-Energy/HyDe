@@ -18,7 +18,6 @@ model_names = sorted(
 
 def train_argparse(parser):
     # get the args for QRNN3D networks
-    parser.add_argument("--prefix", "-p", type=str, default="denoise", help="prefix")
     parser.add_argument(
         "--arch",
         "-a",
