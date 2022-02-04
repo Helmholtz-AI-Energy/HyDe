@@ -117,22 +117,22 @@ def main():
 
     # train_transform_1 = AddGaussianNoise(34)
     common_transform_2 = transforms.RandomCrop((256, 256))
-    train_transform_2 = AddGaussianNoiseBlind(max_sigma_db=40)
+    train_transform_2 = AddGaussianNoiseBlind(max_sigma_db=60)
 
-    set_icvl_64_31_TL_1 = ds_utils.ICVLDataset(
-        cla.datadir,
-        transform=AddGaussianNoise(40), # train_transform_2,
-    )
+    # set_icvl_64_31_TL_1 = ds_utils.ICVLDataset(
+    #     cla.datadir,
+    #     transform=AddGaussianNoise(40), # train_transform_2,
+    # )
     # worker_init_fn is in dataset -> just getting the seed
-    #print(cla.batch_size * world_size)
-    icvl_64_31_TL_1 = DataLoader(
-        set_icvl_64_31_TL_1,
-        batch_size=cla.batch_size,
-        shuffle=True,
-        num_workers=cla.workers,
-        pin_memory=torch.cuda.is_available(),
-        persistent_workers=False,
-    )
+    # print(cla.batch_size * world_size)
+    # icvl_64_31_TL_1 = DataLoader(
+    #     set_icvl_64_31_TL_1,
+    #     batch_size=cla.batch_size,
+    #     shuffle=True,
+    #     num_workers=cla.workers,
+    #     pin_memory=torch.cuda.is_available(),
+    #     persistent_workers=False,
+    # )
 
     set_icvl_64_31_TL_2 = ds_utils.ICVLDataset(
         cla.datadir,
@@ -177,24 +177,24 @@ def main():
         torch.cuda.manual_seed(epoch)
         np.random.seed(epoch)
 
-        if epoch == 20:
+        if epoch == 5:
             helper.adjust_learning_rate(optimizer, base_lr * 0.1)
-        elif epoch == 30:
-            helper.adjust_learning_rate(optimizer, base_lr)
-        elif epoch == 35:
-            helper.adjust_learning_rate(optimizer, base_lr * 0.1)
-        elif epoch == 30:
+        # elif epoch == 30:
+        #     helper.adjust_learning_rate(optimizer, base_lr)
+        # elif epoch == 35:
+        #     helper.adjust_learning_rate(optimizer, base_lr * 0.1)
+        elif epoch == 10:
             helper.adjust_learning_rate(optimizer, base_lr * 0.01)
 
-        if epoch <= 30:
-            training_utils.train(
-                icvl_64_31_TL_1, net, cla, epoch, optimizer, criterion, bandwise, writer=writer
-            )
-
-        else:
-            training_utils.train(
-                icvl_64_31_TL_2, net, cla, epoch, optimizer, criterion, bandwise, writer=writer
-            )
+        # if epoch <= 30:
+        #     training_utils.train(
+        #         icvl_64_31_TL_1, net, cla, epoch, optimizer, criterion, bandwise, writer=writer
+        #     )
+        #
+        # else:
+        training_utils.train(
+            icvl_64_31_TL_2, net, cla, epoch, optimizer, criterion, bandwise, writer=writer
+        )
 
         training_utils.validate(
             val_loader, "validate", net, cla, epoch, criterion, bandwise, writer=writer
@@ -203,7 +203,7 @@ def main():
         helper.display_learning_rate(optimizer)
         if (epoch % epoch_per_save == 0 and epoch > 0) or epoch == max_epochs - 1:
             logger.info("Saving current network...")
-            model_latest_path = os.path.join(basedir, prefix, "model_latest.pth")
+            model_latest_path = os.path.join(cla.save_dir, prefix, "model_latest.pth")
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
             )
