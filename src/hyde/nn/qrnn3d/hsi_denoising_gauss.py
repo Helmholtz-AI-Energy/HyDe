@@ -170,8 +170,10 @@ def main():
 
     base_lr = cla.lr
     helper.adjust_learning_rate(optimizer, cla.lr)
-    epoch_per_save = cla.save_freq
+    # epoch_per_save = cla.save_freq
     max_epochs = 50
+    best_val_loss, best_val_psnr = 100000, 0
+    epochs_wo_best = 0
     for epoch in range(max_epochs):
         torch.manual_seed(epoch)
         torch.cuda.manual_seed(epoch)
@@ -179,34 +181,38 @@ def main():
 
         if epoch == 5:
             helper.adjust_learning_rate(optimizer, base_lr * 0.1)
-        # elif epoch == 30:
-        #     helper.adjust_learning_rate(optimizer, base_lr)
-        # elif epoch == 35:
-        #     helper.adjust_learning_rate(optimizer, base_lr * 0.1)
         elif epoch == 10:
             helper.adjust_learning_rate(optimizer, base_lr * 0.01)
 
-        # if epoch <= 30:
-        #     training_utils.train(
-        #         icvl_64_31_TL_1, net, cla, epoch, optimizer, criterion, bandwise, writer=writer
-        #     )
-        #
-        # else:
         training_utils.train(
             icvl_64_31_TL_2, net, cla, epoch, optimizer, criterion, bandwise, writer=writer
         )
 
-        training_utils.validate(
+        psnr, ls = training_utils.validate(
             val_loader, "validate", net, cla, epoch, criterion, bandwise, writer=writer
         )
 
-        helper.display_learning_rate(optimizer)
-        if (epoch % epoch_per_save == 0 and epoch > 0) or epoch == max_epochs - 1:
+        if best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(cla.save_dir, prefix, "model_latest.pth")
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
             )
+
+        epochs_wo_best += 1
+
+        helper.display_learning_rate(optimizer)
+        # if (epoch % epoch_per_save == 0 and epoch > 0) or epoch == max_epochs - 1:
+        if psnr > best_val_psnr:
+            best_val_psnr = psnr
+            epochs_wo_best = 0
+
+        if ls < best_val_loss:
+            best_val_loss = ls
+            epochs_wo_best = 0
+
+        if epochs_wo_best == 5:
+            break
 
 
 if __name__ == "__main__":

@@ -76,9 +76,6 @@ def train_argparse(parser):
         help="directory to save model to",
     )
     parser.add_argument("--clip", type=float, default=1e6)
-    parser.add_argument(
-        "--save-freq", type=int, default=10, help="how frequently to save the model"
-    )
     parser.add_argument("--log-freq", type=int, default=10, help="how frequently to log outputs")
     parser.add_argument(
         "--tensorboard", action="store_true", help="log with tensorboard and stdout"
