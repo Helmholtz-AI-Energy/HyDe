@@ -61,7 +61,7 @@ def main():
     # init params will set the model params with a random distribution
     helper.init_params(net, init_type=cla.init)  # disable for default initialization
 
-    if torch.cuda.device_count() > 1:
+    if torch.cuda.device_count() > 1 and cuda:
         group = comm.init(method="nccl-mpi")
         net = nn.parallel.DistributedDataParallel(net, device_ids=cla.gpu_ids)
         net = nn.SyncBatchNorm.convert_sync_batchnorm(net, group)
