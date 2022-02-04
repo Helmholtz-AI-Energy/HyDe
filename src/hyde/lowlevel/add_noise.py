@@ -104,7 +104,7 @@ def add_noise_db(
     if verbose:
         logger.info(f"Added Noise [dB]: {(noise * scale_factor).pow(2).mean().log10() * 10}")
     else:
-        logger.deug(f"Added Noise [dB]: {(noise * scale_factor).pow(2).mean().log10() * 10}")
+        logger.debug(f"Added Noise [dB]: {(noise * scale_factor).pow(2).mean().log10() * 10}")
 
     return noise + signal
 

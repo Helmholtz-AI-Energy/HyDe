@@ -23,6 +23,7 @@ def train(train_loader, network, cla, epoch, optimizer, criterion, bandwise, wri
 
         optimizer.zero_grad()
         loss_data = 0
+        print(bandwise, inputs.shape)
         if bandwise:
             outs = []
             for time, (i, t) in enumerate(zip(inputs.split(1, 1), targets.split(1, 1))):
@@ -32,8 +33,10 @@ def train(train_loader, network, cla, epoch, optimizer, criterion, bandwise, wri
                 loss.backward()
                 loss_data += loss.item()
         else:
+            print('before input')
             outputs = network(inputs)
             loss = criterion(outputs, targets)
+            print("before backward")
             loss.backward()
             loss_data += loss.item()
 
