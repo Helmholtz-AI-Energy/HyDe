@@ -66,6 +66,7 @@ def download_ICVL_data(target_dir, num_threads=5, matkey="rad"):
         with h5py.File(fpath, "r") as f:
             img_clean = f[matkey][:].astype(np.float32)
         np.save(fpath, img_clean)
+        logger.info(f"finished file: {fpath}")
 
     # print(test_files)
     logger.debug("Expected data size: ~90.2 GB uncompressed")
