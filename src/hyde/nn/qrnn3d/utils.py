@@ -28,7 +28,7 @@ def train_argparse(parser):
         help="model architecture: " + " | ".join(model_names),
     )
     parser.add_argument(
-        "--batch-size", "-b", type=int, default=2, help="training batch size. default=16"
+        "--batch-size", "-b", type=int, default=4, help="training batch size. default=16"
     )
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate. default=1e-3.")
     parser.add_argument("--wd", type=float, default=0, help="weight decay. default=0")
@@ -77,6 +77,10 @@ def train_argparse(parser):
         "--tensorboard", action="store_true", help="log with tensorboard and stdout"
     )
     parser.add_argument("--no-cuda", action="store_true", help="log with tensorboard and stdout")
+    parser.add_argument(
+        "--comm-method", type=str, default="nccl-mpi", help="how to spawn processes"
+    )
+
     opt = parser.parse_args()
     return opt
 

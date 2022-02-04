@@ -62,9 +62,12 @@ def main():
     helper.init_params(net, init_type=cla.init)  # disable for default initialization
 
     if torch.cuda.device_count() > 1 and cuda:
-        group = comm.init(method="nccl-mpi")
+        logger.info("Spawning torch groups for DDP")
+        group = comm.init(method=cla.comm_method)
         net = nn.parallel.DistributedDataParallel(net, device_ids=cla.gpu_ids)
         net = nn.SyncBatchNorm.convert_sync_batchnorm(net, group)
+
+        logger.info("Finished conversion to SyncBatchNorm")
 
     if cla.loss == "l2":
         criterion = nn.MSELoss()
@@ -103,7 +106,7 @@ def main():
     cudnn.benchmark = True
 
     # train_transform_1 = AddGaussianNoise(34)
-    common_transform_2 = transforms.RandomCrop((32, 32))
+    common_transform_2 = transforms.RandomCrop((512, 512))
     train_transform_2 = AddGaussianNoiseBlind(max_sigma_db=40)
 
     set_icvl_64_31_TL_1 = ds_utils.ICVLDataset(
