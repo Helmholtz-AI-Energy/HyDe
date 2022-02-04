@@ -116,7 +116,7 @@ def main():
     cudnn.benchmark = True
 
     # train_transform_1 = AddGaussianNoise(34)
-    common_transform_2 = transforms.RandomCrop((512, 512))
+    common_transform_2 = transforms.RandomCrop((256, 256))
     train_transform_2 = AddGaussianNoiseBlind(max_sigma_db=40)
 
     set_icvl_64_31_TL_1 = ds_utils.ICVLDataset(
