@@ -63,7 +63,7 @@ def main():
 
     if torch.cuda.device_count() > 1:
         group = comm.init(method="nccl-mpi")
-        # net = nn.parallel.DistributedDataParallel(net, device_ids=cla.gpu_ids)
+        net = nn.parallel.DistributedDataParallel(net, device_ids=cla.gpu_ids)
         net = nn.SyncBatchNorm.convert_sync_batchnorm(net, group)
 
     if cla.loss == "l2":
