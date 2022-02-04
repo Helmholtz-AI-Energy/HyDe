@@ -1,4 +1,8 @@
+
+bm3d
+bs4
 git+https://github.com/fbcotter/pytorch_wavelets
+h5py
 ipython
 isort
 #-e .  # install git checkout of hyde in editable mode
@@ -12,6 +16,10 @@ isort
 
 # DEVELOPMENT ONLY PACKAGES (could also be kept in a separate environment file)
 jupyterlab
+
+# from nn
+kornia
+kornia
 # VISUALIZATION
 matplotlib
 nbdime
@@ -37,4 +45,5 @@ PyWavelets
 recommonmark
 sphinx
 torch
+torchvision >= 0.8.0
 tqdm
