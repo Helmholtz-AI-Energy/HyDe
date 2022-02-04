@@ -33,7 +33,7 @@ def main():
     )
     # cla == command line arguments
     cla = train_argparse(parser)
-    logger.debug(cla)
+    logger.info(cla)
 
     # self.prefix = cla.prefix
     # parser.add_argument("--prefix", "-p", type=str, default="denoise", help="prefix")
@@ -61,10 +61,18 @@ def main():
     # init params will set the model params with a random distribution
     helper.init_params(net, init_type=cla.init)  # disable for default initialization
 
+    world_size = 1
     if torch.cuda.device_count() > 1 and cuda:
+        import torch.distributed as dist
         logger.info("Spawning torch groups for DDP")
         group = comm.init(method=cla.comm_method)
-        net = nn.parallel.DistributedDataParallel(net, device_ids=cla.gpu_ids)
+        
+        loc_rank = dist.get_rank() % torch.cuda.device_count()
+        world_size = dist.get_world_size()
+        device = torch.device("cuda", loc_rank)
+        net = net.to(device)
+        
+        net = nn.parallel.DistributedDataParallel(net, device_ids=[device.index])
         net = nn.SyncBatchNorm.convert_sync_batchnorm(net, group)
 
         logger.info("Finished conversion to SyncBatchNorm")
@@ -114,10 +122,10 @@ def main():
         transform=train_transform_2,
     )
     # worker_init_fn is in dataset -> just getting the seed
-    print(cla.batch_size)
+    print(cla.batch_size * world_size)
     icvl_64_31_TL_1 = DataLoader(
         set_icvl_64_31_TL_1,
-        batch_size=cla.batch_size,
+        batch_size=cla.batch_size * world_size,
         shuffle=True,
         num_workers=cla.workers,
         pin_memory=torch.cuda.is_available(),
@@ -132,7 +140,7 @@ def main():
     # worker_init_fn is in dataset -> just getting the seed
     icvl_64_31_TL_2 = DataLoader(
         set_icvl_64_31_TL_2,
-        batch_size=cla.batch_size,
+        batch_size=cla.batch_size * world_size,
         shuffle=True,
         num_workers=cla.workers,
         pin_memory=torch.cuda.is_available(),
@@ -152,7 +160,7 @@ def main():
 
     val_loader = DataLoader(
         val_dataset,
-        batch_size=1,
+        batch_size=64 * world_size,
         shuffle=False,
         num_workers=cla.workers,
         pin_memory=torch.cuda.is_available(),

@@ -107,6 +107,7 @@ def get_local_group(batchnorm_group_size):
 def init(method, batchnorm_group_size=1):
     # get master address and port
     os.environ["NCCL_ASYNC_ERROR_HANDLING"] = "0"
+    print(method)
     if method == "nccl-openmpi":
         addrport = os.getenv("PMIX_SERVER_URI2").split("//")[1]
         # use that URI
@@ -115,14 +116,14 @@ def init(method, batchnorm_group_size=1):
         port = "29500"
         os.environ["MASTER_ADDR"] = address
         os.environ["MASTER_PORT"] = port
-        rank = int(os.getenv("OMPI_COMM_WORLD_RANK", 0))
+        comm_rank = int(os.getenv("OMPI_COMM_WORLD_RANK", 0))
         world_size = int(os.getenv("OMPI_COMM_WORLD_SIZE", 0))
 
         # init DDP
-        dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
+        dist.init_process_group(backend="nccl", rank=comm_rank, world_size=world_size)
 
     elif method == "nccl-slurm":
-        rank = int(os.getenv("PMIX_RANK"))
+        comm_rank = int(os.getenv("PMIX_RANK"))
         world_size = int(os.getenv("SLURM_NTASKS"))
         address = os.getenv("SLURM_LAUNCH_NODE_IPADDR")
         port = "29500"
@@ -130,10 +131,10 @@ def init(method, batchnorm_group_size=1):
         os.environ["MASTER_PORT"] = port
 
         # init DDP
-        dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
+        dist.init_process_group(backend="nccl", rank=comm_rank, world_size=world_size)
 
     elif method == "nccl-slurm-pmi":
-        rank = int(os.getenv("PMI_RANK"))
+        comm_rank = int(os.getenv("PMI_RANK"))
         world_size = int(os.getenv("SLURM_NTASKS"))
         address = os.getenv("SLURM_LAUNCH_NODE_IPADDR")
         port = "29500"
@@ -145,7 +146,7 @@ def init(method, batchnorm_group_size=1):
         # init DDP
         dist.init_process_group(
             backend="nccl",
-            rank=rank,
+            rank=comm_rank,
             world_size=world_size,
             # timeout=timedelta(seconds=240)
         )
