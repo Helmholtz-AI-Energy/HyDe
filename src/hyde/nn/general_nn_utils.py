@@ -1,7 +1,7 @@
 import os
 import random
 import urllib
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from itertools import product
 from pathlib import Path
 from typing import List, Tuple, Union
@@ -64,14 +64,17 @@ def download_ICVL_data(target_dir, num_threads=5, matkey="rad"):
     def load_n_save(furl, fpath):
         urllib.request.urlretrieve(furl, fpath)
         with h5py.File(fpath, "r") as f:
-            img_clean = f[matkey][:].astype(np.float32)
+            try:
+                img_clean = f[matkey][:].astype(np.float32)
+            except Exception as e:
+                logger.debug(f"FAILURE: URL: {furl}\nfile: {fpath}\n{e}")
         np.save(fpath, img_clean)
         logger.info(f"finished file: {fpath}")
 
     # print(test_files)
     logger.debug("Expected data size: ~90.2 GB uncompressed")
     logger.info("Starting download of data... this might take some time...")
-    with ProcessPoolExecutor(max_workers=num_threads) as executor:
+    with ThreadPoolExecutor(max_workers=num_threads) as executor:
         retl = []
         for file in listFD(url, ext):
             sv_name = file.split("/")[-1]
