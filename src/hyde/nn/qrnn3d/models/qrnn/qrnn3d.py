@@ -37,12 +37,17 @@ class QRNN3DLayer(nn.Module):
     def forward(self, inputs, reverse=False):
         h = None
         Z, F = self._conv_step(inputs)
-        out_sh = list(Z[0].shape)
-        out_sh.insert(0, 2)
-        out = torch.zeros(out_sh, device=inputs.device)
+        # out_sh = list(Z[0].shape)
+        # out_sh.insert(0, 2)
+        out = None
+        ln_h = len(Z.split(1, 2))
         if not reverse:
             for c, (z, f) in enumerate(zip(Z.split(1, 2), F.split(1, 2))):  # split along timestep
                 h = self._rnn_step(z, f, h)
+                if out is None:
+                    out_sh = list(h.shape)
+                    out_sh[2] = ln_h
+                    out = torch.zeros(out_sh, device=inputs.device)
                 out[:, :, c : c + 1] = h
                 # h_time.append(h)
         else:
@@ -51,6 +56,10 @@ class QRNN3DLayer(nn.Module):
             ):  # split along timestep
                 h = self._rnn_step(z, f, h)
                 # h_time.insert(0, h)
+                if out is None:
+                    out_sh = list(h.shape)
+                    out_sh[2] = ln_h
+                    out = torch.zeros(out_sh, device=inputs.device)
                 idx = out.shape[2] - 1 - c
                 out[:, :, idx : idx + 1] = h
 
@@ -80,12 +89,18 @@ class BiQRNN3DLayer(QRNN3DLayer):
         Z, F1, F2 = self._conv_step(inputs)
         zs = Z.split(1, 2)
         in_shape = inputs.shape
-        out_shape = list(in_shape)
-        out_shape[1] = zs[0].shape[1]
-        out = torch.zeros(out_shape, device=inputs.device)
+        # out_shape = list(in_shape)
+        # out_shape[1] = zs[0].shape[1]
+        # out = torch.zeros(out_shape, device=inputs.device)
+        out = None
+        ln_h = len(Z.split(1, 2)) * 2
         for c, (z, f) in enumerate(zip(zs, F1.split(1, 2))):  # split along timestep
             h = self._rnn_step(z, f, h)
             # hsl.append(h)
+            if out is None:
+                out_sh = list(h.shape)
+                out_sh[2] = ln_h
+                out = torch.zeros(out_sh, device=inputs.device)
             out[:, :, c : c + 1] = h
 
         h = None

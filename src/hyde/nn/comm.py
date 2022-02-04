@@ -187,7 +187,8 @@ def init(method, batchnorm_group_size=1):
     os.environ["CUDA_VISIBLE_DEVICES"] = str(local_gpu)
 
     # make sure to call a barrier here in order for sharp to use the default comm:
-    #if dist.is_initialized():
+
+    # if dist.is_initialized():
     dist.barrier(device_ids=[get_local_rank()])
 
     # get the local process group for batchnorm
