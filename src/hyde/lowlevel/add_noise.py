@@ -101,7 +101,10 @@ def add_noise_db(
     except TypeError:  # numpy.ndarray  todo: raise statement?
         noise = np.random.normal(scale=noise_to_add, size=signal.shape)
 
-    logger.info(f"Added Noise [dB]: {(noise * scale_factor).pow(2).mean().log10() * 10}")
+    if verbose:
+        logger.info(f"Added Noise [dB]: {(noise * scale_factor).pow(2).mean().log10() * 10}")
+    else:
+        logger.deug(f"Added Noise [dB]: {(noise * scale_factor).pow(2).mean().log10() * 10}")
 
     return noise + signal
 
