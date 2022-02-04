@@ -1,7 +1,7 @@
 import os
 import random
 import urllib
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 from itertools import product
 from pathlib import Path
 from typing import List, Tuple, Union
@@ -70,7 +70,7 @@ def download_ICVL_data(target_dir, num_threads=5, matkey="rad"):
     # print(test_files)
     logger.debug("Expected data size: ~90.2 GB uncompressed")
     logger.info("Starting download of data... this might take some time...")
-    with ThreadPoolExecutor(max_workers=num_threads) as executor:
+    with ProcessPoolExecutor(max_workers=num_threads) as executor:
         retl = []
         for file in listFD(url, ext):
             sv_name = file.split("/")[-1]
