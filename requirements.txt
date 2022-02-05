@@ -48,3 +48,6 @@ sphinx
 torch
 torchvision >= 0.8.0
 tqdm
+
+scikit-image
+
