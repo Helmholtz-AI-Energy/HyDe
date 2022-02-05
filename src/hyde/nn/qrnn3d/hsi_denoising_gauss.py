@@ -13,6 +13,8 @@ from kornia.losses import SSIMLoss
 from torch.utils.data import DataLoader
 from utils import train_argparse
 
+import time
+
 from hyde.lowlevel import logging
 from hyde.nn import comm
 from hyde.nn.general_nn_utils import (
@@ -116,7 +118,7 @@ def main():
     cudnn.benchmark = True
 
     # train_transform_1 = AddGaussianNoise(34)
-    common_transform_2 = transforms.RandomCrop((512, 512))
+    common_transform_2 = transforms.RandomCrop((256, 256))
     train_transform_2 = AddGaussianNoiseBlind(max_sigma_db=40)
 
     # set_icvl_64_31_TL_1 = ds_utils.ICVLDataset(
@@ -174,23 +176,34 @@ def main():
     max_epochs = 50
     best_val_loss, best_val_psnr = 100000, 0
     epochs_wo_best = 0
+    expected_finish_time = None
     for epoch in range(max_epochs):
         torch.manual_seed(epoch)
         torch.cuda.manual_seed(epoch)
         np.random.seed(epoch)
 
-        if epoch == 5:
-            helper.adjust_learning_rate(optimizer, base_lr * 0.1)
-        elif epoch == 10:
-            helper.adjust_learning_rate(optimizer, base_lr * 0.01)
-
+        #if epoch == 5:
+        #    helper.adjust_learning_rate(optimizer, base_lr * 0.1)
+        #elif epoch == 10:
+        #    helper.adjust_learning_rate(optimizer, base_lr * 0.01)
+        
+        ttime = time.perf_counter()
         training_utils.train(
             icvl_64_31_TL_2, net, cla, epoch, optimizer, criterion, bandwise, writer=writer
         )
-
+        ttime = time.perf_counter() - ttime
+        
+        vtime = time.perf_counter()
         psnr, ls = training_utils.validate(
             val_loader, "validate", net, cla, epoch, criterion, bandwise, writer=writer
         )
+        vtime = time.perf_counter() - vtime
+
+        expected_time_remaining = time.strftime(
+            '%H:%M:%S', 
+            time.gmtime((ttime + vtime) * (max_epochs - epoch))
+        )
+        logger.info(f"Expected time remaing: {expected_time_remaining}")
 
         epochs_wo_best += 1
 
@@ -211,9 +224,9 @@ def main():
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
             )
 
-        if epochs_wo_best == 5:
-            logger.info(f"Breaking loop, not improving for 5 epochs, current epoch: {epoch}")
-            break
+        #if epochs_wo_best == 5:
+        #    logger.info(f"Breaking loop, not improving for 5 epochs, current epoch: {epoch}")
+            #break
 
 
 if __name__ == "__main__":

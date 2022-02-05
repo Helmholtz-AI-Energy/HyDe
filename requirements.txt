@@ -2,9 +2,11 @@
 bm3d
 bs4
 git+https://github.com/fbcotter/pytorch_wavelets
+
 h5py
 ipython
 isort
+
 #-e .  # install git checkout of hyde in editable mode
 # add here only pip-packages that are not available in conda/conda-forge! E.g.:
 # - icecream
@@ -15,10 +17,9 @@ isort
 # - neptune-contrib
 
 # DEVELOPMENT ONLY PACKAGES (could also be kept in a separate environment file)
-jupyterlab
+#jupyterlab
 
 # from nn
-kornia
 kornia
 # VISUALIZATION
 matplotlib

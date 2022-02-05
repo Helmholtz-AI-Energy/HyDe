@@ -107,7 +107,7 @@ def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, write
 
 def save_checkpoint(cla, epoch, network, optimizer, model_out_path=None, **kwargs):
     if not model_out_path:
-        model_out_path = os.path.join(cla.save_dir, cla.prefix, f"model_epoch_{epoch}.pth")
+        model_out_path = os.path.join(cla.save_dir, cla.arch, f"model_epoch_{epoch}.pth")
 
     state = {
         "net": network.state_dict(),
@@ -117,8 +117,8 @@ def save_checkpoint(cla, epoch, network, optimizer, model_out_path=None, **kwarg
 
     state.update(kwargs)
 
-    if not os.path.isdir(os.path.join(cla.save_dir, cla.prefix)):
-        os.makedirs(os.path.join(cla.save_dir, cla.prefix))
+    if not os.path.isdir(os.path.join(cla.save_dir, cla.arch)):
+        os.makedirs(os.path.join(cla.save_dir, cla.arch))
 
     torch.save(state, model_out_path)
     logger.info(f"Checkpoint saved to {model_out_path}")
