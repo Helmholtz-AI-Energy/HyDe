@@ -126,7 +126,7 @@ def main():
 
     # train_transform_1 = AddGaussianNoise(34)
     common_transform_2 = transforms.RandomCrop((256, 256))
-    train_transform_2 = AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=10)
+    train_transform_2 = AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=20)
     harder_train_transform = AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=20)
 
     # set_icvl_64_31_TL_1 = ds_utils.ICVLDataset(
@@ -202,7 +202,7 @@ def main():
 
 
         if epoch == 30:
-            helper.adjust_learning_rate(optimzer, cla.lr * 0.1)
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
 
         ttime = time.perf_counter()
         training_utils.train(
