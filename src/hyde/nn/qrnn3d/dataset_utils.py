@@ -22,10 +22,12 @@ class ICVLDataset(Dataset):
     def __init__(
         self,
         datadir,
-        transform,
         crop_size=(512, 512),
         target_transform=None,
         common_transforms=None,
+        easy_transform=None,
+        medium_transform=None,
+        last_transform=None,
         val=False,
         net2d=False,
     ):
@@ -42,7 +44,7 @@ class ICVLDataset(Dataset):
 
         self.loadfrom = []  # np.zeros(first, dtype=np.float32)
         for c, f in enumerate(self.files):
-            #print(f, np.load(f).shape)
+            # print(f, np.load(f).shape)
             loaded, _ = utils.normalize(torch.tensor(np.asarray(np.load(f), dtype=np.float32)))
             self.loadfrom.append(loaded)
 
@@ -61,18 +63,16 @@ class ICVLDataset(Dataset):
                 transforms.RandomCrop(crop_size),
             ]
         )
+        self.stage = 0
 
-        self.transform = transform
         self.target_transform = target_transform
         self.common_transforms = common_transforms
         self.length = len(self.files)
-        #self.val_transform = transforms.Compose(
-        #    [
-        #        # transforms.ToTensor(),
-        #        transforms.RandomCrop(crop_size),
-        #    ]
-        #)
-        # if
+
+        self.easy_transform = easy_transform
+        self.medium_transform = medium_transform
+        self.last_transform = last_transform
+
         self.val = val
 
     def __len__(self):
@@ -82,26 +82,23 @@ class ICVLDataset(Dataset):
         # logger.info(f'loading file: {self.files[idx]}')
         # return None
         # img = np.load(self.files[idx]).transpose((2, 3, 1))
-
-        #img = torch.tensor(self.loadfrom[idx], dtype=torch.float).unsqueeze(0)
         img = self.loadfrom[idx].unsqueeze(0)
-        #imt, _ = utils.normalize(img)
         # print(img.shape)
         if not self.val:
             img = self.base_transforms(img)
-        #else:
-        #    img = self.val_transform(img)
-        # logger.info("after base")
-
-        # make img 5 dimensional...???
-        # img = img.unsqueeze(0).to(torch.float)
 
         if self.common_transforms is not None:
             img = self.common_transforms(img)
         target = img.clone().detach()
         # logger.info("after clone")
-        if self.transform is not None:
-            img = self.transform(img)
+
+        if self.val or (self.stage == 0 and self.easy_transform is not None):
+            img = self.easy_transform(img)
+        elif self.stage == 1 and self.medium_transform is not None:
+            img = self.medium_transform(img)
+        else:
+            img = self.hard_transform(img)
+
         # logger.info("after transform")
         if self.target_transform is not None:
             target = self.target_transform(target)
