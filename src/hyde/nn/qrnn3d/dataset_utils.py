@@ -10,7 +10,7 @@ import torch.distributed as dist
 from torch.utils.data import Dataset
 from torchvision import transforms
 
-from ...lowlevel import logging
+from ...lowlevel import logging, utils
 from .. import general_nn_utils
 
 logger = logging.get_logger()
@@ -23,7 +23,7 @@ class ICVLDataset(Dataset):
         self,
         datadir,
         transform,
-        crop_size=(256, 256),
+        crop_size=(512, 512),
         target_transform=None,
         common_transforms=None,
         val=False,
@@ -42,8 +42,10 @@ class ICVLDataset(Dataset):
 
         self.loadfrom = []  # np.zeros(first, dtype=np.float32)
         for c, f in enumerate(self.files):
-            # print(f, np.load(f).shape)
-            self.loadfrom.append(np.asarray(np.load(f), dtype=np.float32))  # .transpose((1, 2, 0))
+            #print(f, np.load(f).shape)
+            loaded, _ = utils.normalize(torch.tensor(np.asarray(np.load(f), dtype=np.float32)))
+            self.loadfrom.append(loaded)
+
         self.loadfrom = tuple(self.loadfrom)
 
         self.base_transforms = transforms.Compose(
@@ -64,12 +66,12 @@ class ICVLDataset(Dataset):
         self.target_transform = target_transform
         self.common_transforms = common_transforms
         self.length = len(self.files)
-        self.val_transform = transforms.Compose(
-            [
-                # transforms.ToTensor(),
-                transforms.RandomCrop(crop_size),
-            ]
-        )
+        #self.val_transform = transforms.Compose(
+        #    [
+        #        # transforms.ToTensor(),
+        #        transforms.RandomCrop(crop_size),
+        #    ]
+        #)
         # if
         self.val = val
 
@@ -81,16 +83,17 @@ class ICVLDataset(Dataset):
         # return None
         # img = np.load(self.files[idx]).transpose((2, 3, 1))
 
-        img = torch.tensor(self.loadfrom[idx], dtype=torch.float).unsqueeze(0)
+        #img = torch.tensor(self.loadfrom[idx], dtype=torch.float).unsqueeze(0)
+        img = self.loadfrom[idx].unsqueeze(0)
+        #imt, _ = utils.normalize(img)
         # print(img.shape)
         if not self.val:
             img = self.base_transforms(img)
-        else:
-            img = self.val_transform(img)
+        #else:
+        #    img = self.val_transform(img)
         # logger.info("after base")
 
         # make img 5 dimensional...???
-        # TODO: bfloat16??
         # img = img.unsqueeze(0).to(torch.float)
 
         if self.common_transforms is not None:
@@ -103,8 +106,5 @@ class ICVLDataset(Dataset):
         if self.target_transform is not None:
             target = self.target_transform(target)
         # logger.info("after target transform")
-
-        img = img.to(torch.bfloat16)
-        target = img.to(torch.bfloat16)
 
         return img, target
