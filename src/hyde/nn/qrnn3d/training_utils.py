@@ -17,13 +17,13 @@ def train(train_loader, network, cla, epoch, optimizer, criterion, bandwise, wri
     train_loss = 0
 
     for batch_idx, (inputs, targets) in enumerate(train_loader):
-
+        #logger.info("start of train loop")
         if not cla.no_cuda and torch.cuda.is_available():
             inputs, targets = inputs.cuda(), targets.cuda()
-
+        #logger.info("put devices onto the GPUs")
         optimizer.zero_grad()
         loss_data = 0
-        # print(bandwise, inputs.shape)
+        #print(bandwise, inputs.shape)
         if bandwise:
             outs = []
             for time, (i, t) in enumerate(zip(inputs.split(1, 1), targets.split(1, 1))):
@@ -33,7 +33,7 @@ def train(train_loader, network, cla, epoch, optimizer, criterion, bandwise, wri
                 loss.backward()
                 loss_data += loss.item()
         else:
-            # print('before input')
+            #print('before input')
             outputs = network(inputs)
             loss = criterion(outputs, targets)
             # print("before backward")

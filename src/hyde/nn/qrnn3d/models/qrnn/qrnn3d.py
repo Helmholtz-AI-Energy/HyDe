@@ -371,7 +371,7 @@ class QRNNREDC3D(nn.Module):
         xs = [x]
         gc.enable()
         out = self.feature_extractor(xs[0])
-        # print("finished feature extractor")
+        #print("finished feature extractor")
         gc.collect()
 
         xs.append(out)
