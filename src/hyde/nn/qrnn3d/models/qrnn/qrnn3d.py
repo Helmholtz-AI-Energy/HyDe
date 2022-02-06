@@ -48,7 +48,7 @@ class QRNN3DLayer(nn.Module):
                 if out is None:
                     out_sh = list(h.shape)
                     out_sh[2] = ln_h
-                    out = torch.zeros(out_sh, device=inputs.device)
+                    out = torch.zeros(out_sh, device=inputs.device, dtype=inputs.dtype)
                 out[:, :, c : c + 1] = h
                 # h_time.append(h)
         else:
@@ -60,7 +60,7 @@ class QRNN3DLayer(nn.Module):
                 if out is None:
                     out_sh = list(h.shape)
                     out_sh[2] = ln_h
-                    out = torch.zeros(out_sh, device=inputs.device)
+                    out = torch.zeros(out_sh, device=inputs.device, dtype=inputs.dtype)
                 idx = out.shape[2] - 1 - c
                 out[:, :, idx : idx + 1] = h
 
@@ -117,7 +117,7 @@ class BiQRNN3DLayer(QRNN3DLayer):
 
         hsl = torch.cat(hsl, dim=2)
         hsr = torch.cat(hsr, dim=2)
-        out = hsl + hsr
+        out = (hsl + hsr).to(inputs.dtype)
         return out
 
 
@@ -371,7 +371,7 @@ class QRNNREDC3D(nn.Module):
         xs = [x]
         gc.enable()
         out = self.feature_extractor(xs[0])
-        #print("finished feature extractor")
+        # print("finished feature extractor")
         gc.collect()
 
         xs.append(out)

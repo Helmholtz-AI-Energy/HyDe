@@ -134,7 +134,7 @@ def init(method, batchnorm_group_size=1):
         dist.init_process_group(backend="nccl", rank=comm_rank, world_size=world_size)
 
     elif method == "nccl-slurm-pmi":
-        comm_rank = int(os.getenv("SLURM_PROCID")) # PMI_RANK"))
+        comm_rank = int(os.getenv("SLURM_PROCID"))  # PMI_RANK"))
         world_size = int(os.getenv("SLURM_NTASKS"))
         address = os.getenv("SLURM_LAUNCH_NODE_IPADDR")
         port = "29500"
@@ -145,10 +145,7 @@ def init(method, batchnorm_group_size=1):
 
         # init DDP
         dist.init_process_group(
-            backend="nccl",
-            rank=comm_rank,
-            world_size=world_size,
-            timeout=timedelta(seconds=30)
+            backend="nccl", rank=comm_rank, world_size=world_size, timeout=timedelta(seconds=30)
         )
     elif method == "nccl-mpi":
         from mpi4py import MPI
@@ -169,10 +166,7 @@ def init(method, batchnorm_group_size=1):
         os.environ["MASTER_ADDR"] = address
         os.environ["MASTER_PORT"] = port
         dist.init_process_group(
-            backend="nccl",
-            rank=comm_rank,
-            world_size=world_size,
-            timeout=timedelta(seconds=240)
+            backend="nccl", rank=comm_rank, world_size=world_size, timeout=timedelta(seconds=240)
         )
     elif method == "mpi":
         # init DDP
@@ -182,9 +176,9 @@ def init(method, batchnorm_group_size=1):
         raise NotImplementedError()
 
     # set the default device to be restricted if there are multiple GPUs visible
-    #vis_gpus = torch.cuda.device_count()
-    #local_gpu = comm_rank % vis_gpus
-    #os.environ["CUDA_VISIBLE_DEVICES"] = str(local_gpu)
+    # vis_gpus = torch.cuda.device_count()
+    # local_gpu = comm_rank % vis_gpus
+    # os.environ["CUDA_VISIBLE_DEVICES"] = str(local_gpu)
 
     # make sure to call a barrier here in order for sharp to use the default comm:
 

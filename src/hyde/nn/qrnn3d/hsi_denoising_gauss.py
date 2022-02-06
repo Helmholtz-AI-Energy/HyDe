@@ -1,24 +1,20 @@
 import argparse
 import os
+import time
 from functools import partial
 from os.path import join
 
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
+import torch.distributed as dist
 import torch.nn as nn
 import torch.optim as optim
 import torchvision.transforms as transforms
 from kornia.losses import SSIMLoss
+from torch._six import string_classes
 from torch.utils.data import DataLoader
-
-import torch.distributed as dist
-
 from utils import train_argparse
-
-import hyde.nn.comm as comm
-
-import time
 
 from hyde.lowlevel import logging
 from hyde.nn import comm
@@ -29,7 +25,6 @@ from hyde.nn.general_nn_utils import (
 )
 from hyde.nn.qrnn3d import dataset_utils as ds_utils
 from hyde.nn.qrnn3d import helper, models, training_utils
-from torch._six import string_classes
 
 logger = logging.get_logger()
 
@@ -68,18 +63,17 @@ def main():
     net = models.__dict__[cla.arch]()
     # initialize parameters
     # init params will set the model params with a random distribution
-    #helper.init_params(net, init_type=cla.init)  # disable for default initialization
+    # helper.init_params(net, init_type=cla.init)  # disable for default initialization
     distributed = False
     bandwise = net.bandwise
-    world_size = 1
+    # world_size = 1
     if torch.cuda.device_count() > 1 and cuda:
-        import torch.distributed as dist
-        #print("cuda devices:", os.environ["CUDA_VISIBLE_DEVICES"])
+        # print("cuda devices:", os.environ["CUDA_VISIBLE_DEVICES"])
         logger.info("Spawning torch groups for DDP")
         group = comm.init(method=cla.comm_method)
 
         loc_rank = dist.get_rank() % torch.cuda.device_count()
-        world_size = dist.get_world_size()
+        # world_size = dist.get_world_size()
         device = torch.device("cuda", loc_rank)
         logger.info(f"Default GPU: {device}")
         net = models.__dict__[cla.arch]()
@@ -88,7 +82,7 @@ def main():
         net = nn.SyncBatchNorm.convert_sync_batchnorm(net, group)
 
         net = nn.parallel.DistributedDataParallel(net, device_ids=[device.index])
-        #net = nn.SyncBatchNorm.convert_sync_batchnorm(net, group)
+        # net = nn.SyncBatchNorm.convert_sync_batchnorm(net, group)
 
         logger.info("Finished conversion to SyncBatchNorm")
 
@@ -159,68 +153,17 @@ def main():
     else:
         train_sampler = None
 
-    #def colate_fn(batch):
-    #    print('in colate')
-    #    elem = batch[0]
-    #    elem_type = type(elem)
-    #    if isinstance(elem, torch.Tensor):
-    #        out = None
-    #        if torch.utils.data.get_worker_info() is not None:
-    #            # If we're in a background process, concatenate directly into a
-    #            # shared memory tensor to avoid an extra copy
-    #            numel = sum(x.numel() for x in batch)
-    #            storage = elem.storage()._new_shared(numel)
-    #            out = elem.new(storage)
-    #        return torch.stack(batch, 0, out=out)
-    #    elif elem_type.__module__ == 'numpy' and elem_type.__name__ != 'str_' \
-    #            and elem_type.__name__ != 'string_':
-    #        if elem_type.__name__ == 'ndarray' or elem_type.__name__ == 'memmap':
-    #            # array of string classes and object
-    #            if np_str_obj_array_pattern.search(elem.dtype.str) is not None:
-    #                raise TypeError(default_collate_err_msg_format.format(elem.dtype))
-   # 
-   #             return default_collate([torch.as_tensor(b) for b in batch])
-   #         elif elem.shape == ():  # scalars
-   #             return torch.as_tensor(batch)
-   #     elif isinstance(elem, float):
-   #         return torch.tensor(batch, dtype=torch.float64)
-   #     elif isinstance(elem, int):
-   #         return torch.tensor(batch)
-   #     elif isinstance(elem, string_classes):
-   #         return batch
-   #     elif isinstance(elem, collections.abc.Mapping):
-   #         return {key: default_collate([d[key] for d in batch]) for key in elem}
-   #     elif isinstance(elem, tuple) and hasattr(elem, '_fields'):  # namedtuple
-   #         return elem_type(*(default_collate(samples) for samples in zip(*batch)))
-   #     elif isinstance(elem, collections.abc.Sequence):
-   #         # check to make sure that the elements in batch have consistent size
-   #         it = iter(batch)
-   #         elem_size = len(next(it))
-   #         if not all(len(elem) == elem_size for elem in it):
-   #             raise RuntimeError('each element in list of batch should be of equal size')
-   #         transposed = zip(*batch)
-   #         return [default_collate(samples) for samples in transposed]
-   # 
-   #     raise TypeError(default_collate_err_msg_format.format(elem_type))
-
     # worker_init_fn is in dataset -> just getting the seed
     icvl_64_31_TL_2 = DataLoader(
         set_icvl_64_31_TL_2,
         batch_size=cla.batch_size,
         shuffle=True,
         num_workers=cla.workers,
-        pin_memory=False, #torch.cuda.is_available(),
-        #worker_init_fn=None,
+        pin_memory=torch.cuda.is_available(),
+        # worker_init_fn=None,
         persistent_workers=False,
         sampler=train_sampler,
-        #collate_fn=colate_fn,
     )
-
-    #dist.barrier()
-    #logger.info("testing train loader")
-    #for d, t in icvl_64_31_TL_2:
-    #    print(d.shape, t.shape)
-    #logger.info("finished train loader test")
 
     # -------------- validation loader -------------------------
 
@@ -241,32 +184,23 @@ def main():
         pin_memory=torch.cuda.is_available(),
     )
 
-    base_lr = cla.lr
     helper.adjust_learning_rate(optimizer, cla.lr)
     # epoch_per_save = cla.save_freq
     max_epochs = 50
     best_val_loss, best_val_psnr = 100000, 0
     epochs_wo_best = 0
-    expected_finish_time = None
-
-    #dist.barrier()
 
     for epoch in range(max_epochs):
         torch.manual_seed(epoch)
         torch.cuda.manual_seed(epoch)
         np.random.seed(epoch)
 
-        #if epoch == 5:
-        #    helper.adjust_learning_rate(optimizer, base_lr * 0.1)
-        #elif epoch == 10:
-        #    helper.adjust_learning_rate(optimizer, base_lr * 0.01)
-        
         ttime = time.perf_counter()
         training_utils.train(
             icvl_64_31_TL_2, net, cla, epoch, optimizer, criterion, bandwise, writer=writer
         )
         ttime = time.perf_counter() - ttime
-        
+
         vtime = time.perf_counter()
         psnr, ls = training_utils.validate(
             val_loader, "validate", net, cla, epoch, criterion, bandwise, writer=writer
@@ -274,8 +208,7 @@ def main():
         vtime = time.perf_counter() - vtime
 
         expected_time_remaining = time.strftime(
-            '%H:%M:%S', 
-            time.gmtime((ttime + vtime) * (max_epochs - epoch))
+            "%H:%M:%S", time.gmtime((ttime + vtime) * (max_epochs - epoch))
         )
         logger.info(f"Expected time remaing: {expected_time_remaining}")
 
@@ -298,9 +231,9 @@ def main():
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
             )
 
-        #if epochs_wo_best == 5:
+        # if epochs_wo_best == 5:
         #    logger.info(f"Breaking loop, not improving for 5 epochs, current epoch: {epoch}")
-            #break
+        # break
 
 
 if __name__ == "__main__":
