@@ -25,8 +25,7 @@ class ICVLDataset(Dataset):
         crop_size=(512, 512),
         target_transform=None,
         common_transforms=None,
-        train_transform=None,
-        val_transform=None,
+        transform=None,
         val=False,
         net2d=False,
     ):
@@ -49,46 +48,43 @@ class ICVLDataset(Dataset):
 
         self.loadfrom = tuple(self.loadfrom)
 
-        self.base_transforms = transforms.Compose(
-            [
-                # transforms.ToTensor(),
-                transforms.RandomApply(
-                    [
-                        general_nn_utils.RandRot90Transform(),
-                        transforms.RandomVerticalFlip(p=0.5),
-                    ],
-                    p=0.75,
-                ),
-                transforms.RandomCrop(crop_size),
-            ]
-        )
-        self.stage = 0
+        if not val:
+            self.base_transforms = transforms.Compose(
+                [
+                    # transforms.ToTensor(),
+                    transforms.RandomApply(
+                        [
+                            general_nn_utils.RandRot90Transform(),
+                            transforms.RandomVerticalFlip(p=0.5),
+                        ],
+                        p=0.75,
+                    ),
+                    transforms.RandomCrop(crop_size),
+                ]
+            )
+        else:
+            self.base_transforms = transforms.RandomCrop(crop_size)
 
         self.target_transform = target_transform
         self.common_transforms = common_transforms
         self.length = len(self.files)
 
-        self.train_transform = train_transform
-        self.val_transform = val_transform
-
-        self.val = val
+        self.transform = transform
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, idx):
         img = self.loadfrom[idx].unsqueeze(0)
-        if not self.val:
-            img = self.base_transforms(img)
+
+        img = self.base_transforms(img)
 
         if self.common_transforms is not None:
             img = self.common_transforms(img)
         target = img.clone().detach()
 
-        if self.val and self.val_transform:
-            img = self.val_transform(img)
-        else:
-            img = self.train_transform(img)
+        if self.transform:
+            img = self.transform(img)
 
         if self.target_transform is not None:
             target = self.target_transform(target)

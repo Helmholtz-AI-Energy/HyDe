@@ -87,6 +87,8 @@ def main():
 
         set_logger_to_rank0(logger, cla.rank)
 
+        torch.backends.cudnn.benchmark = True
+
     elif cuda:
         torch.cuda.manual_seed(cla.seed)
         device = torch.device("cuda", 0)
@@ -148,7 +150,7 @@ def main():
     train_icvl = ds_utils.ICVLDataset(
         cla.datadir,
         common_transforms=None,
-        train_transform=AddGaussianNoise(15),
+        transform=AddGaussianNoise(15),
         crop_size=crop_size,
     )
     if distributed:
@@ -174,10 +176,7 @@ def main():
 
     val_dataset = ds_utils.ICVLDataset(
         basefolder,
-        val_transform=AddGaussianNoiseBlind(
-            max_sigma_db=40, min_sigma_db=10
-        ),  # blind gaussain noise
-        common_transforms=None,
+        transform=AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=10),  # blind gaussain noise
         val=True,
         crop_size=crop_size,
     )
@@ -204,17 +203,17 @@ def main():
         # if epoch == 10:
         #    icvl_64_31_TL_2.transform = harder_train_transform
         if epoch <= 30:
-            train_icvl.train_transform = AddGaussianNoise(1 + epoch)
+            train_icvl.transform = AddGaussianNoise(1 + epoch)
             logger.info(f"New noise level: {1 + epoch // 2} dB")
 
         # if epoch == 5:
         #    set_icvl_64_31_TL_2.stage = 1
         if epoch == 30:
-            train_icvl.train_transform = AddGaussianNoise(35)
+            train_icvl.transform = AddGaussianNoise(35)
             logger.info(f"New noise level: {35} dB")
 
         if epoch == 40:
-            train_icvl.train_transform = AddGaussianNoise(45)
+            train_icvl.transform = AddGaussianNoise(45)
             logger.info(f"New noise level: {45} dB")
 
         if epoch == 70:
