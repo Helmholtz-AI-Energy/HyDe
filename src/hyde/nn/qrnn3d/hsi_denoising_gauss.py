@@ -16,7 +16,7 @@ from torch._six import string_classes
 from torch.utils.data import DataLoader
 from utils import train_argparse
 
-from hyde.lowlevel import logging
+from hyde.lowlevel import logging, set_logger_to_rank0
 from hyde.nn import comm
 from hyde.nn.general_nn_utils import (
     AddGaussianNoise,
@@ -84,6 +84,9 @@ def main():
         logger.info("Finished conversion to SyncBatchNorm")
         cla.rank = comm.get_rank()
         distributed = True
+
+        set_logger_to_rank0(logger, cla.rank)
+
     elif cuda:
         torch.cuda.manual_seed(cla.seed)
         device = torch.device("cuda", 0)
@@ -142,9 +145,9 @@ def main():
 
     train_icvl = ds_utils.ICVLDataset(
         cla.datadir,
-        common_transforms=transforms.RandomCrop((256, 256)),
+        common_transforms=transforms.RandomCrop((512, 512)),
         easy_transform=AddGaussianNoise(15),
-        medium_transform=AddGaussianNoise(30),
+        medium_transform=AddGaussianNoise(35),
         last_transform=AddGaussianNoise(40),
     )
     if distributed:
@@ -199,7 +202,7 @@ def main():
         # if epoch == 10:
         #    icvl_64_31_TL_2.transform = harder_train_transform
         if epoch <= 30:
-            train_icvl.easy_transform = AddGaussianNoise(1 + epoch // 2)
+            train_icvl.easy_transform = AddGaussianNoise(1 + epoch)
             logger.info(f"New noise level: {1 + epoch // 2} dB")
 
         # if epoch == 5:
@@ -207,10 +210,10 @@ def main():
         if epoch == 30:
             train_icvl.stage = 1
 
-        if epoch == 50:
+        if epoch == 40:
             train_icvl.stage = 2
 
-        if epoch == 30:
+        if epoch == 70:
             helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
 
         ttime = time.perf_counter()

@@ -14,6 +14,7 @@ logger = logging.get_logger()
 
 def _train_loop(train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer, scaler):
     train_loss = 0
+    avg_loss = 0
     for batch_idx, (inputs, targets) in enumerate(train_loader):
         if not cla.no_cuda and torch.cuda.is_available():
             inputs, targets = inputs.to(cla.device), targets.to(cla.device)
@@ -49,6 +50,7 @@ def _train_loop(train_loader, network, cla, epoch, optimizer, criterion, bandwis
             logger.info(
                 f"Epoch: {epoch} iteration: {batch_idx} Loss: {avg_loss} Norm: {total_norm}"
             )
+    return avg_loss
 
 
 def train(train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer=None):
@@ -115,7 +117,7 @@ def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, write
             if batch_idx % cla.log_freq == 0 and cla.rank == 0:
                 logger.info(f"Loss: {avg_loss} | PSNR: {avg_psnr}")
             # break
-    
+
     if cla.rank == 0:
         logger.info(f"Final: Loss: {avg_loss} | PSNR: {avg_psnr}")
 

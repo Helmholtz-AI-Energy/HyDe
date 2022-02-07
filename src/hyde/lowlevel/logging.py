@@ -1,7 +1,7 @@
 import logging
 import sys
 
-__all__ = ["get_logger", "set_basic_config"]
+__all__ = ["get_logger", "set_basic_config", "set_logger_to_rank0"]
 
 
 global first_set_of_log_config
@@ -87,3 +87,9 @@ def set_basic_config(level):
         datefmt="%Y-%m-%d %H:%M",
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
+
+
+def set_logger_to_rank0(logger, rank):
+    if rank != 0:
+        logger.propagate = False
+        logger.disabled = True

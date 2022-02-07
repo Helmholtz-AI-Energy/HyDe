@@ -113,10 +113,8 @@ def init(method, batchnorm_group_size=1):
     from mpi4py import MPI
 
     mpi_comm = MPI.COMM_WORLD.Dup()
-    comm_size = mpi_comm.Get_size()
+    world_size = mpi_comm.Get_size()
     comm_rank = mpi_comm.Get_rank()
-
-    world_size = comm_size
 
     if method == "nccl-openmpi":
         addrport = os.getenv("PMIX_SERVER_URI2").split("//")[1]
@@ -124,11 +122,12 @@ def init(method, batchnorm_group_size=1):
         address = addrport.split(":")[0]
         # use the default pytorch port
         port = "29500"
-        os.environ["MASTER_ADDR"] = address
-        os.environ["MASTER_PORT"] = port
+        if "MASTER_ADDR" not in os.environ:
+            os.environ["MASTER_ADDR"] = address
+        if "MASTER_PORT" not in os.environ:
+            os.environ["MASTER_PORT"] = port
         comm_rank = int(os.getenv("OMPI_COMM_WORLD_RANK", 0))
         world_size = int(os.getenv("OMPI_COMM_WORLD_SIZE", 0))
-        comm_size = world_size
 
         # init DDP
         dist.init_process_group(backend="nccl", rank=comm_rank, world_size=world_size)
@@ -138,8 +137,10 @@ def init(method, batchnorm_group_size=1):
         world_size = int(os.getenv("SLURM_NTASKS"))
         address = os.getenv("SLURM_LAUNCH_NODE_IPADDR")
         port = "29500"
-        os.environ["MASTER_ADDR"] = address
-        os.environ["MASTER_PORT"] = port
+        if "MASTER_ADDR" not in os.environ:
+            os.environ["MASTER_ADDR"] = address
+        if "MASTER_PORT" not in os.environ:
+            os.environ["MASTER_PORT"] = port
 
         # init DDP
         dist.init_process_group(backend="nccl", rank=comm_rank, world_size=world_size)
@@ -154,15 +155,16 @@ def init(method, batchnorm_group_size=1):
             os.environ["MASTER_PORT"] = port
 
         os.environ["NCCL_ASYNC_ERROR_HANDLING"] = "0"
+
         logger.debug("creating process group")
         if comm_rank != 0:
-            time.sleep(2 + 10 * comm_rank / comm_size)
+            time.sleep(2 + 10 * comm_rank / world_size)
 
         dist.init_process_group(
             backend="nccl",
             # store=wireup_store,
             rank=comm_rank,
-            world_size=comm_size,
+            world_size=world_size,
             timeout=timedelta(seconds=100),
         )
 
@@ -188,12 +190,15 @@ def init(method, batchnorm_group_size=1):
 
         address = mpi_comm.bcast(address, root=0)
         # if instance_id == 1:
-        logger.debug("MASTER_ADDR is set to ", address)
 
         # save env vars
         port = "29500"
-        os.environ["MASTER_ADDR"] = address
-        os.environ["MASTER_PORT"] = port
+        if "MASTER_ADDR" not in os.environ:
+            os.environ["MASTER_ADDR"] = address
+        if "MASTER_PORT" not in os.environ:
+            os.environ["MASTER_PORT"] = port
+
+        logger.debug("MASTER_ADDR is set to ", os.environ["MASTER_ADDR"])
         dist.init_process_group(
             backend="nccl", rank=comm_rank, world_size=world_size, timeout=timedelta(seconds=240)
         )
@@ -204,11 +209,6 @@ def init(method, batchnorm_group_size=1):
     else:
         raise NotImplementedError()
 
-    # set the default device to be restricted if there are multiple GPUs visible
-    # vis_gpus = torch.cuda.device_count()
-    # local_gpu = comm_rank % vis_gpus
-    # os.environ["CUDA_VISIBLE_DEVICES"] = str(local_gpu)
-
     # make sure to call a barrier here in order for sharp to use the default comm:
     mpi_comm.Barrier()
     # if dist.is_initialized():
@@ -218,7 +218,9 @@ def init(method, batchnorm_group_size=1):
     test = torch.ones(2).cuda(get_local_rank())
     dist.all_reduce(test)
     if not torch.all(test == world_size):
-        raise RuntimeError(f"All reduce failed -> this should be {world_size}, currently {test}")
+        raise RuntimeError(
+            f"All reduce failed -> this should all be {world_size}, currently {test}"
+        )
 
     # get the local process group for batchnorm
     batchnorm_group = get_local_group(world_size)
