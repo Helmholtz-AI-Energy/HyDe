@@ -143,12 +143,13 @@ def main():
 
     # AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=10),
 
+    crop_size = (512, 512)
+
     train_icvl = ds_utils.ICVLDataset(
         cla.datadir,
-        common_transforms=transforms.RandomCrop((512, 512)),
-        easy_transform=AddGaussianNoise(15),
-        medium_transform=AddGaussianNoise(35),
-        last_transform=AddGaussianNoise(40),
+        common_transforms=None,
+        train_transform=AddGaussianNoise(15),
+        crop_size=crop_size,
     )
     if distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_icvl)
@@ -173,11 +174,12 @@ def main():
 
     val_dataset = ds_utils.ICVLDataset(
         basefolder,
-        easy_transform=AddGaussianNoiseBlind(
+        val_transform=AddGaussianNoiseBlind(
             max_sigma_db=40, min_sigma_db=10
         ),  # blind gaussain noise
-        common_transforms=transforms.RandomCrop((256, 256)),
+        common_transforms=None,
         val=True,
+        crop_size=crop_size,
     )
 
     val_loader = DataLoader(
@@ -202,16 +204,18 @@ def main():
         # if epoch == 10:
         #    icvl_64_31_TL_2.transform = harder_train_transform
         if epoch <= 30:
-            train_icvl.easy_transform = AddGaussianNoise(1 + epoch)
+            train_icvl.train_transform = AddGaussianNoise(1 + epoch)
             logger.info(f"New noise level: {1 + epoch // 2} dB")
 
         # if epoch == 5:
         #    set_icvl_64_31_TL_2.stage = 1
         if epoch == 30:
-            train_icvl.stage = 1
+            train_icvl.train_transform = AddGaussianNoise(35)
+            logger.info(f"New noise level: {35} dB")
 
         if epoch == 40:
-            train_icvl.stage = 2
+            train_icvl.train_transform = AddGaussianNoise(45)
+            logger.info(f"New noise level: {45} dB")
 
         if epoch == 70:
             helper.adjust_learning_rate(optimizer, cla.lr * 0.1)

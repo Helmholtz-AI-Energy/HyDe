@@ -25,9 +25,8 @@ class ICVLDataset(Dataset):
         crop_size=(512, 512),
         target_transform=None,
         common_transforms=None,
-        easy_transform=None,
-        medium_transform=None,
-        last_transform=None,
+        train_transform=None,
+        val_transform=None,
         val=False,
         net2d=False,
     ):
@@ -69,9 +68,8 @@ class ICVLDataset(Dataset):
         self.common_transforms = common_transforms
         self.length = len(self.files)
 
-        self.easy_transform = easy_transform
-        self.medium_transform = medium_transform
-        self.last_transform = last_transform
+        self.train_transform = train_transform
+        self.val_transform = val_transform
 
         self.val = val
 
@@ -79,29 +77,20 @@ class ICVLDataset(Dataset):
         return self.length
 
     def __getitem__(self, idx):
-        # logger.info(f'loading file: {self.files[idx]}')
-        # return None
-        # img = np.load(self.files[idx]).transpose((2, 3, 1))
         img = self.loadfrom[idx].unsqueeze(0)
-        # print(img.shape)
         if not self.val:
             img = self.base_transforms(img)
 
         if self.common_transforms is not None:
             img = self.common_transforms(img)
         target = img.clone().detach()
-        # logger.info("after clone")
 
-        if self.val or (self.stage == 0 and self.easy_transform is not None):
-            img = self.easy_transform(img)
-        elif self.stage == 1 and self.medium_transform is not None:
-            img = self.medium_transform(img)
+        if self.val and self.val_transform:
+            img = self.val_transform(img)
         else:
-            img = self.last_transform(img)
+            img = self.train_transform(img)
 
-        # logger.info("after transform")
         if self.target_transform is not None:
             target = self.target_transform(target)
-        # logger.info("after target transform")
 
         return img, target
