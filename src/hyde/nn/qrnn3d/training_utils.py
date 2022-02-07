@@ -15,13 +15,10 @@ logger = logging.get_logger()
 def _train_loop(train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer, scaler):
     train_loss = 0
     for batch_idx, (inputs, targets) in enumerate(train_loader):
-        # logger.info("start of train loop")
         if not cla.no_cuda and torch.cuda.is_available():
-            inputs, targets = inputs.cuda(), targets.cuda()
-        # logger.info("put devices onto the GPUs")
+            inputs, targets = inputs.to(cla.device), targets.to(cla.device)
         optimizer.zero_grad()
         loss_data = 0
-        # print(bandwise, inputs.shape)
         if bandwise:
             outs = []
             for time, (i, t) in enumerate(zip(inputs.split(1, 1), targets.split(1, 1))):
@@ -31,21 +28,19 @@ def _train_loop(train_loader, network, cla, epoch, optimizer, criterion, bandwis
                 loss.backward()
                 loss_data += loss.item()
         else:
-            # print('before input')
             with amp.autocast():
                 outputs = network(inputs)
                 outputs = outputs.squeeze()
                 targets = targets.squeeze()
                 loss = criterion(outputs, targets)
-            # print("before backward")
             scaler.scale(loss).backward()
-            #loss.backward()
+            # loss.backward()
             loss_data += loss.item()
 
         total_norm = nn.utils.clip_grad_norm_(network.parameters(), cla.clip)
         scaler.step(optimizer)
         scaler.update()
-        #optimizer.step()
+        # optimizer.step()
 
         train_loss += loss_data
         avg_loss = train_loss / (batch_idx + 1)
@@ -56,56 +51,17 @@ def _train_loop(train_loader, network, cla, epoch, optimizer, criterion, bandwis
             )
 
 
-
 def train(train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer=None):
     logger.info(f"\nTrain Loop - Epoch: {epoch}")
     network.train()
-    train_loss = 0
 
     scaler = amp.GradScaler()
 
     _train_loop(train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer, scaler)
     _train_loop(train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer, scaler)
-    _train_loop(train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer, scaler)
-
-    #for batch_idx, (inputs, targets) in enumerate(train_loader):
-    #    # logger.info("start of train loop")
-    #    if not cla.no_cuda and torch.cuda.is_available():
-    #        inputs, targets = inputs.cuda(), targets.cuda()
-    #    # logger.info("put devices onto the GPUs")
-    #    optimizer.zero_grad()
-    #    loss_data = 0
-    #    # print(bandwise, inputs.shape)
-    #    if bandwise:
-    #        outs = []
-    #        for time, (i, t) in enumerate(zip(inputs.split(1, 1), targets.split(1, 1))):
-    #            out = network(i)
-    #            outs.append(out)
-    #            loss = criterion(out, t)
-    #            loss.backward()
-    #            loss_data += loss.item()
-    #    else:
-    #        # print('before input')
-    #        with amp.autocast():
-    #            outputs = network(inputs)
-    #            loss = criterion(outputs, targets)
-    #        # print("before backward")
-    #        scaler.scale(loss).backward()
-    #        #loss.backward()
-    #        loss_data += loss.item()
-#
-    #    total_norm = nn.utils.clip_grad_norm_(network.parameters(), cla.clip)
-    #    scaler.step(optimizer)
-    #    scaler.update()
-    #    #optimizer.step()
-
-    #    train_loss += loss_data
-    #    avg_loss = train_loss / (batch_idx + 1)
-
-    #    if batch_idx % cla.log_freq == 0:
-    #        logger.info(
-    #            f"Epoch: {epoch} iteration: {batch_idx} Loss: {avg_loss} Norm: {total_norm}"
-    #        )
+    avg_loss = _train_loop(
+        train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer, scaler
+    )
 
     if writer is not None:
         writer.add_scalar(os.path.join(cla.prefix, "train_loss_epoch"), avg_loss, epoch)
@@ -115,12 +71,11 @@ def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, write
     network.eval()
     validate_loss = 0
     total_psnr = 0
-    elems = 0
     logger.info(f"Validation: Epoch: {epoch} dataset name: {name}")
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(valid_loader):
             if not cla.no_cuda and torch.cuda.is_available():
-                inputs, targets = inputs.cuda(), targets.cuda()
+                inputs, targets = inputs.to(cla.device), targets.to(cla.device)
 
             loss_data = 0
             if bandwise:
@@ -133,19 +88,23 @@ def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, write
                 outputs = torch.cat(outs, dim=1)
             else:
                 outputs = network(inputs)
+                outputs = outputs.squeeze()
+                targets = targets.squeeze()
                 loss = criterion(outputs, targets)
                 loss_data += loss.item()
 
             # data units: [batch, 1, bands, h, w]
             psnr = []
             for d in range(outputs.shape[0]):
-                psnr.append(torch.mean(utils.peak_snr(outputs[d], targets[d], bandwise=True, band_dim=1)))
+                psnr.append(
+                    torch.mean(utils.peak_snr(outputs[d], targets[d], bandwise=True, band_dim=1))
+                )
             psnr = sum(psnr) / float(len(psnr))
-            #snr = utils.peak_snr(outputs, targets, bandwise=True, band_dim=1)
-            #try:
-            #    psnr = torch.mean(psnr)
-            #except (RuntimeError, TypeError):
-            #    pass
+            # snr = utils.peak_snr(outputs, targets, bandwise=True, band_dim=1)
+            # try:
+            #     psnr = torch.mean(psnr)
+            # except (RuntimeError, TypeError):
+            #     pass
 
             validate_loss += loss_data
             avg_loss = validate_loss / (batch_idx + 1)

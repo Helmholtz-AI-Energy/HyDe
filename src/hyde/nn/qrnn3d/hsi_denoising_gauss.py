@@ -30,8 +30,8 @@ logger = logging.get_logger()
 
 
 def main():
-    #print('testing 123')
-    #return None
+    # print('testing 123')
+    # return None
 
     """Training settings"""
     parser = argparse.ArgumentParser(
@@ -58,8 +58,6 @@ def main():
 
     torch.manual_seed(cla.seed)
     np.random.seed(cla.seed)
-    if cuda:
-        torch.cuda.manual_seed(cla.seed)
 
     """Model"""
     logger.info(f"=> creating model: {cla.arch}")
@@ -71,35 +69,28 @@ def main():
     bandwise = net.bandwise
     # world_size = 1
     if torch.cuda.device_count() > 1 and cuda:
-        # print("cuda devices:", os.environ["CUDA_VISIBLE_DEVICES"])
-        #os.environ["CUDA_VISIBLE_DEVICES"] = str(os.environ["SLURM_PROCID"])
-        #print("cuda devices:", os.environ["CUDA_VISIBLE_DEVICES"])
-
         logger.info("Spawning torch groups for DDP")
         group = comm.init(method=cla.comm_method)
 
         loc_rank = dist.get_rank() % torch.cuda.device_count()
         # world_size = dist.get_world_size()
         device = torch.device("cuda", loc_rank)
-        #print("cuda devices:", os.environ["CUDA_VISIBLE_DEVICES"])
         logger.info(f"Default GPU: {device}")
 
-        test = torch.zeros(2).cuda(loc_rank)
-        print(test)
-        dist.all_reduce(test)
-        print("after test", test)
-
         net = models.__dict__[cla.arch]()
-
-
         net = net.to(device)
-
         net = nn.SyncBatchNorm.convert_sync_batchnorm(net, group)
-
         net = nn.parallel.DistributedDataParallel(net, device_ids=[device.index])
-        # net = nn.SyncBatchNorm.convert_sync_batchnorm(net, group)
-
         logger.info("Finished conversion to SyncBatchNorm")
+    elif cuda:
+        torch.cuda.manual_seed(cla.seed)
+        device = torch.device("cuda", 0)
+        loc_rank = 0
+    else:
+        device = torch.device("cpu")
+        loc_rank = None
+
+    cla.device = device
 
     if cla.loss == "l2":
         criterion = nn.MSELoss()
@@ -113,12 +104,16 @@ def main():
         criterion = MultipleWeightedLosses(
             [nn.MSELoss(), SSIMLoss(window_size=11, max_val=1.0)], weight=[1, 2.5e-3]
         )
+    else:
+        raise ValueError(
+            f"Loss function must be one of: [l2, l1, smooth_l1, ssim, l2_ssim], currently: {cla.loss}"
+        )
 
     logger.info(criterion)
 
     if cuda:
-        net.cuda()
-        criterion = criterion.cuda()
+        net.cuda(loc_rank)
+        criterion = criterion.cuda(loc_rank)
 
     writer = None
     if cla.tensorboard:
@@ -139,46 +134,27 @@ def main():
 
     cudnn.benchmark = True
 
-    # train_transform_1 = AddGaussianNoise(34)
-    common_transform_2 = transforms.RandomCrop((256, 256))
-    # train_transform_2 = AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=20)
-    # harder_train_transform = AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=20)
+    # AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=10),
 
-    # set_icvl_64_31_TL_1 = ds_utils.ICVLDataset(
-    #     cla.datadir,
-    #     transform=AddGaussianNoise(40), # train_transform_2,
-    # )
-    # worker_init_fn is in dataset -> just getting the seed
-    # print(cla.batch_size * world_size)
-    # icvl_64_31_TL_1 = DataLoader(
-    #     set_icvl_64_31_TL_1,
-    #     batch_size=cla.batch_size,
-    #     shuffle=True,
-    #     num_workers=cla.workers,
-    #     pin_memory=torch.cuda.is_available(),
-    #     persistent_workers=False,
-    # )
-
-    set_icvl_64_31_TL_2 = ds_utils.ICVLDataset(
+    train_icvl = ds_utils.ICVLDataset(
         cla.datadir,
-        common_transforms=common_transform_2,
+        common_transforms=transforms.RandomCrop((256, 256)),
         easy_transform=AddGaussianNoise(15),
         medium_transform=AddGaussianNoise(30),
-        last_transform=AddGaussianNoise(40), #AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=10),
+        last_transform=AddGaussianNoise(40),
     )
     if distributed:
-        train_sampler = torch.utils.data.distributed.DistributedSampler(set_icvl_64_31_TL_2)
+        train_sampler = torch.utils.data.distributed.DistributedSampler(train_icvl)
     else:
         train_sampler = None
 
     # worker_init_fn is in dataset -> just getting the seed
-    icvl_64_31_TL_2 = DataLoader(
-        set_icvl_64_31_TL_2,
+    train_loader = DataLoader(
+        train_icvl,
         batch_size=cla.batch_size,
         shuffle=True,
         num_workers=cla.workers,
         pin_memory=torch.cuda.is_available(),
-        # worker_init_fn=None,
         persistent_workers=False,
         sampler=train_sampler,
     )
@@ -219,24 +195,23 @@ def main():
         # if epoch == 10:
         #    icvl_64_31_TL_2.transform = harder_train_transform
         if epoch <= 30:
-            set_icvl_64_31_TL_2.easy_transform = AddGaussianNoise(1 + epoch // 2)
+            train_icvl.easy_transform = AddGaussianNoise(1 + epoch // 2)
             logger.info(f"New noise level: {1 + epoch // 2} dB")
 
-        #if epoch == 5:
+        # if epoch == 5:
         #    set_icvl_64_31_TL_2.stage = 1
         if epoch == 30:
-            set_icvl_64_31_TL_2.stage = 1
+            train_icvl.stage = 1
 
         if epoch == 50:
-            set_icvl_64_31_TL_2.stage = 2
-
+            train_icvl.stage = 2
 
         if epoch == 30:
             helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
 
         ttime = time.perf_counter()
         training_utils.train(
-            icvl_64_31_TL_2, net, cla, epoch, optimizer, criterion, bandwise, writer=writer
+            train_loader, net, cla, epoch, optimizer, criterion, bandwise, writer=writer
         )
         ttime = time.perf_counter() - ttime
 
@@ -269,7 +244,9 @@ def main():
         if epochs_wo_best == 0 or epoch % 10 == 0:
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
-            model_latest_path = os.path.join(cla.save_dir, prefix, "model_latest_gradual_noise_warmup.pth")
+            model_latest_path = os.path.join(
+                cla.save_dir, prefix, "model_latest_gradual_noise_warmup.pth"
+            )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
             )
