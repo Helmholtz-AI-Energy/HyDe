@@ -97,7 +97,7 @@ class ICVLDataset(Dataset):
         elif self.stage == 1 and self.medium_transform is not None:
             img = self.medium_transform(img)
         else:
-            img = self.hard_transform(img)
+            img = self.last_transform(img)
 
         # logger.info("after transform")
         if self.target_transform is not None:

@@ -34,6 +34,8 @@ def _train_loop(train_loader, network, cla, epoch, optimizer, criterion, bandwis
             # print('before input')
             with amp.autocast():
                 outputs = network(inputs)
+                outputs = outputs.squeeze()
+                targets = targets.squeeze()
                 loss = criterion(outputs, targets)
             # print("before backward")
             scaler.scale(loss).backward()

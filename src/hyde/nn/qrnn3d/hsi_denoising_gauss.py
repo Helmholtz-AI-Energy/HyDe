@@ -147,9 +147,9 @@ def main():
     set_icvl_64_31_TL_2 = ds_utils.ICVLDataset(
         cla.datadir,
         common_transforms=common_transform_2,
-        easy_transform=AddGaussianNoise(10),
-        medium_transform=AddGaussianNoise(20),
-        last_transform=AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=10),
+        easy_transform=AddGaussianNoise(15),
+        medium_transform=AddGaussianNoise(30),
+        last_transform=AddGaussianNoise(40), #AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=10),
     )
     if distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(set_icvl_64_31_TL_2)
@@ -176,7 +176,7 @@ def main():
     val_dataset = ds_utils.ICVLDataset(
         basefolder,
         easy_transform=AddGaussianNoiseBlind(
-            max_sigma_db=40, min_sigma_db=20
+            max_sigma_db=40, min_sigma_db=10
         ),  # blind gaussain noise
         common_transforms=transforms.RandomCrop((256, 256)),
         val=True,
@@ -203,10 +203,18 @@ def main():
         # TODO: change the transform to something harder at some point in the training?
         # if epoch == 10:
         #    icvl_64_31_TL_2.transform = harder_train_transform
-        if epoch == 20:
+        if epoch <= 30:
+            set_icvl_64_31_TL_2.easy_transform = AddGaussianNoise(1 + epoch // 2)
+            logger.info(f"New noise level: {1 + epoch // 2} dB")
+
+        #if epoch == 5:
+        #    set_icvl_64_31_TL_2.stage = 1
+        if epoch == 30:
             set_icvl_64_31_TL_2.stage = 1
-        if epoch == 35:
+
+        if epoch == 50:
             set_icvl_64_31_TL_2.stage = 2
+
 
         if epoch == 30:
             helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
@@ -246,7 +254,7 @@ def main():
         if epochs_wo_best == 0 or epoch % 10 == 0:
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
-            model_latest_path = os.path.join(cla.save_dir, prefix, "model_latest.pth")
+            model_latest_path = os.path.join(cla.save_dir, prefix, "model_latest_gradual_noise_warmup.pth")
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
             )
