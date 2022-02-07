@@ -73,6 +73,7 @@ def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, write
     network.eval()
     validate_loss = 0
     total_psnr = 0
+    ls, psnrs = [], []
     logger.info(f"Validation: Epoch: {epoch} dataset name: {name}")
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(valid_loader):
@@ -101,7 +102,10 @@ def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, write
                 psnr.append(
                     torch.mean(utils.peak_snr(outputs[d], targets[d], bandwise=True, band_dim=1))
                 )
+            psnrs.extend(psnr)
             psnr = sum(psnr) / float(len(psnr))
+
+            ls.append(loss_data)
             # snr = utils.peak_snr(outputs, targets, bandwise=True, band_dim=1)
             # try:
             #     psnr = torch.mean(psnr)
@@ -124,8 +128,9 @@ def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, write
     if writer is not None:
         writer.add_scalar(os.path.join(cla.prefix, name, "val_loss_epoch"), avg_loss, epoch)
         writer.add_scalar(os.path.join(cla.prefix, name, "val_psnr_epoch"), avg_psnr, epoch)
-
-    return total_psnr, avg_loss
+    avg_psnr = sum(psnrs) / float(len(psnrs))
+    avg_loss = sum(ls) / float(len(ls))
+    return avg_psnr, avg_loss
 
 
 def save_checkpoint(cla, epoch, network, optimizer, model_out_path=None, **kwargs):
