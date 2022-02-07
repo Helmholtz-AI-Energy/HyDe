@@ -108,6 +108,13 @@ def init(method, batchnorm_group_size=1):
     # get master address and port
     os.environ["NCCL_ASYNC_ERROR_HANDLING"] = "0"
     print(method)
+
+    from mpi4py import MPI
+
+    mpi_comm = MPI.COMM_WORLD.Dup()
+    comm_size = mpi_comm.Get_size()
+    comm_rank = mpi_comm.Get_rank()
+
     if method == "nccl-openmpi":
         addrport = os.getenv("PMIX_SERVER_URI2").split("//")[1]
         # use that URI
@@ -134,21 +141,45 @@ def init(method, batchnorm_group_size=1):
         dist.init_process_group(backend="nccl", rank=comm_rank, world_size=world_size)
 
     elif method == "nccl-slurm-pmi":
-        comm_rank = int(os.getenv("SLURM_PROCID"))  # PMI_RANK"))
-        world_size = int(os.getenv("SLURM_NTASKS"))
-        address = os.getenv("SLURM_LAUNCH_NODE_IPADDR")
+        address = socket.gethostname()
+        if comm_rank != 0:
+            address = ""
+
+        address = mpi_comm.bcast(address, root=0)
+        # if instance_id == 1:
+        # print("MASTER_ADDR is set to ", address)
+
+        # save env vars
         port = "29500"
         os.environ["MASTER_ADDR"] = address
         os.environ["MASTER_PORT"] = port
-        # if rank != 0:
-        #     time.sleep(2 + 10 * rank / world_size)
+        wireup_store = None
 
-        # init DDP
+        os.environ["NCCL_ASYNC_ERROR_HANDLING"] = "0"
+        # print("creating process group")
+        if comm_rank != 0:
+            time.sleep(2 + 10 * comm_rank / comm_size)
+
         dist.init_process_group(
-            backend="nccl", rank=comm_rank, world_size=world_size, timeout=timedelta(seconds=30)
+            backend="nccl",
+            store=wireup_store,
+            rank=comm_rank,
+            world_size=comm_size,
+            timeout=timedelta(seconds=240),
         )
+
+        # print("Process group successfully created for rank", comm_rank, ". Now a global mpi barrier...")
+        mpi_comm.barrier()
+        # print("... barrier passed on rank ", comm_rank, ".")
+
+        # make sure to call a barrier here in order for sharp to use the default comm:
+        dist.barrier(device_ids=[get_local_rank()])
+        # the nccl wireup call could be non blocking, so we wait for the first barrier
+        # to complete before printing this message
+        if comm_rank == 0:
+            print("Completed NCCL wireup", flush=True)
+
     elif method == "nccl-mpi":
-        from mpi4py import MPI
 
         mpi_comm = MPI.COMM_WORLD.Dup()
         world_size = mpi_comm.Get_size()
