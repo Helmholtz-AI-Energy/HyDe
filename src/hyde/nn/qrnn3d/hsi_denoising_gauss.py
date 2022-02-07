@@ -82,13 +82,17 @@ def main():
         net = nn.SyncBatchNorm.convert_sync_batchnorm(net, group)
         net = nn.parallel.DistributedDataParallel(net, device_ids=[device.index])
         logger.info("Finished conversion to SyncBatchNorm")
+        cla.rank = comm.get_rank()
+        distributed = True
     elif cuda:
         torch.cuda.manual_seed(cla.seed)
         device = torch.device("cuda", 0)
         loc_rank = 0
+        cla.rank = 0
     else:
         device = torch.device("cpu")
         loc_rank = None
+        cla.rank = 0
 
     cla.device = device
 
@@ -152,7 +156,7 @@ def main():
     train_loader = DataLoader(
         train_icvl,
         batch_size=cla.batch_size,
-        shuffle=True,
+        shuffle=True if train_sampler is None else False,
         num_workers=cla.workers,
         pin_memory=torch.cuda.is_available(),
         persistent_workers=False,

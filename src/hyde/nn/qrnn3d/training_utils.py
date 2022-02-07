@@ -30,8 +30,8 @@ def _train_loop(train_loader, network, cla, epoch, optimizer, criterion, bandwis
         else:
             with amp.autocast():
                 outputs = network(inputs)
-                outputs = outputs.squeeze()
-                targets = targets.squeeze()
+                outputs = outputs.squeeze(1)
+                targets = targets.squeeze(1)
                 loss = criterion(outputs, targets)
             scaler.scale(loss).backward()
             # loss.backward()
@@ -45,7 +45,7 @@ def _train_loop(train_loader, network, cla, epoch, optimizer, criterion, bandwis
         train_loss += loss_data
         avg_loss = train_loss / (batch_idx + 1)
 
-        if batch_idx % cla.log_freq == 0:
+        if batch_idx % cla.log_freq == 0 and cla.rank == 0:
             logger.info(
                 f"Epoch: {epoch} iteration: {batch_idx} Loss: {avg_loss} Norm: {total_norm}"
             )
@@ -88,8 +88,8 @@ def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, write
                 outputs = torch.cat(outs, dim=1)
             else:
                 outputs = network(inputs)
-                outputs = outputs.squeeze()
-                targets = targets.squeeze()
+                outputs = outputs.squeeze(1)
+                targets = targets.squeeze(1)
                 loss = criterion(outputs, targets)
                 loss_data += loss.item()
 
@@ -112,11 +112,12 @@ def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, write
             total_psnr += psnr
             avg_psnr = total_psnr / (batch_idx + 1)
 
-            if batch_idx % cla.log_freq == 0:
+            if batch_idx % cla.log_freq == 0 and cla.rank == 0:
                 logger.info(f"Loss: {avg_loss} | PSNR: {avg_psnr}")
             # break
-
-    logger.info(f"Final: Loss: {avg_loss} | PSNR: {avg_psnr}")
+    
+    if cla.rank == 0:
+        logger.info(f"Final: Loss: {avg_loss} | PSNR: {avg_psnr}")
 
     if writer is not None:
         writer.add_scalar(os.path.join(cla.prefix, name, "val_loss_epoch"), avg_loss, epoch)
@@ -126,6 +127,8 @@ def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, write
 
 
 def save_checkpoint(cla, epoch, network, optimizer, model_out_path=None, **kwargs):
+    if cla.rank != 0:
+        return
     if not model_out_path:
         model_out_path = os.path.join(cla.save_dir, cla.arch, f"model_epoch_{epoch}.pth")
 
