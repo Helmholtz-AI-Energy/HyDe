@@ -115,6 +115,8 @@ def init(method, batchnorm_group_size=1):
     comm_size = mpi_comm.Get_size()
     comm_rank = mpi_comm.Get_rank()
 
+    world_size = comm_size
+
     if method == "nccl-openmpi":
         addrport = os.getenv("PMIX_SERVER_URI2").split("//")[1]
         # use that URI
@@ -125,6 +127,7 @@ def init(method, batchnorm_group_size=1):
         os.environ["MASTER_PORT"] = port
         comm_rank = int(os.getenv("OMPI_COMM_WORLD_RANK", 0))
         world_size = int(os.getenv("OMPI_COMM_WORLD_SIZE", 0))
+        comm_size = world_size
 
         # init DDP
         dist.init_process_group(backend="nccl", rank=comm_rank, world_size=world_size)
@@ -141,11 +144,17 @@ def init(method, batchnorm_group_size=1):
         dist.init_process_group(backend="nccl", rank=comm_rank, world_size=world_size)
 
     elif method == "nccl-slurm-pmi":
-        address = socket.gethostname()
-        if comm_rank != 0:
-            address = ""
+        #address = socket.gethostname()
+        #if comm_rank != 0:
+        #    address = ""
 
-        address = mpi_comm.bcast(address, root=0)
+        #address = mpi_comm.bcast(address, root=0)
+        address = os.getenv("SLURM_LAUNCH_NODE_IPADDR")
+
+        #MASTER_ADDR=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)
+        #port=6000
+
+        #print(f"\n\naddress: {address}\n\n")
         # if instance_id == 1:
         # print("MASTER_ADDR is set to ", address)
 
@@ -153,23 +162,23 @@ def init(method, batchnorm_group_size=1):
         port = "29500"
         os.environ["MASTER_ADDR"] = address
         os.environ["MASTER_PORT"] = port
-        wireup_store = None
+        #wireup_store = None
 
         os.environ["NCCL_ASYNC_ERROR_HANDLING"] = "0"
-        # print("creating process group")
+        print("creating process group")
         if comm_rank != 0:
             time.sleep(2 + 10 * comm_rank / comm_size)
 
         dist.init_process_group(
             backend="nccl",
-            store=wireup_store,
+            #store=wireup_store,
             rank=comm_rank,
             world_size=comm_size,
-            timeout=timedelta(seconds=240),
+            timeout=timedelta(seconds=100),
         )
 
         # print("Process group successfully created for rank", comm_rank, ". Now a global mpi barrier...")
-        mpi_comm.barrier()
+        mpi_comm.Barrier()
         # print("... barrier passed on rank ", comm_rank, ".")
 
         # make sure to call a barrier here in order for sharp to use the default comm:
@@ -212,15 +221,17 @@ def init(method, batchnorm_group_size=1):
     # os.environ["CUDA_VISIBLE_DEVICES"] = str(local_gpu)
 
     # make sure to call a barrier here in order for sharp to use the default comm:
-
+    mpi_comm.Barrier()
     # if dist.is_initialized():
     dist.barrier(device_ids=[get_local_rank()])
-
+    
     # test if the comms are working
-    test = torch.ones(2).cuda()
-    dist.all_reduce(test)
-    if not torch.all(test == world_size):
-        raise RuntimeError(f"All reduce failed -> this should be {world_size}, currently {test}")
+    #test = torch.ones(2).cuda()
+    #print(test)
+    #dist.all_reduce(test)
+    #print('end test', test)
+    #if not torch.all(test == world_size):
+    #    raise RuntimeError(f"All reduce failed -> this should be {world_size}, currently {test}")
 
     # get the local process group for batchnorm
     batchnorm_group = get_local_group(world_size)

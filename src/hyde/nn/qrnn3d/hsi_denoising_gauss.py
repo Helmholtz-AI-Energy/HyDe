@@ -30,6 +30,9 @@ logger = logging.get_logger()
 
 
 def main():
+    #print('testing 123')
+    #return None
+
     """Training settings"""
     parser = argparse.ArgumentParser(
         description="QRNN3D Hyperspectral Image Denoising (Gaussian Noise)"
@@ -51,7 +54,7 @@ def main():
         cuda = False
     else:
         cuda = torch.cuda.is_available()
-    logger.debug("Cuda Acess: %d" % cuda)
+    logger.info("Cuda Acess: %d" % cuda)
 
     torch.manual_seed(cla.seed)
     np.random.seed(cla.seed)
@@ -69,14 +72,26 @@ def main():
     # world_size = 1
     if torch.cuda.device_count() > 1 and cuda:
         # print("cuda devices:", os.environ["CUDA_VISIBLE_DEVICES"])
+        #os.environ["CUDA_VISIBLE_DEVICES"] = str(os.environ["SLURM_PROCID"])
+        #print("cuda devices:", os.environ["CUDA_VISIBLE_DEVICES"])
+
         logger.info("Spawning torch groups for DDP")
         group = comm.init(method=cla.comm_method)
 
         loc_rank = dist.get_rank() % torch.cuda.device_count()
         # world_size = dist.get_world_size()
         device = torch.device("cuda", loc_rank)
+        #print("cuda devices:", os.environ["CUDA_VISIBLE_DEVICES"])
         logger.info(f"Default GPU: {device}")
+
+        test = torch.zeros(2).cuda(loc_rank)
+        print(test)
+        dist.all_reduce(test)
+        print("after test", test)
+
         net = models.__dict__[cla.arch]()
+
+
         net = net.to(device)
 
         net = nn.SyncBatchNorm.convert_sync_batchnorm(net, group)
