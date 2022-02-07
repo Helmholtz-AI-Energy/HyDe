@@ -202,22 +202,31 @@ def main():
         # TODO: change the transform to something harder at some point in the training?
         # if epoch == 10:
         #    icvl_64_31_TL_2.transform = harder_train_transform
-        if epoch <= 30:
-            train_icvl.transform = AddGaussianNoise(1 + epoch)
-            logger.info(f"New noise level: {1 + epoch // 2} dB")
+        # 5, 10, 20, 30, 40, 50, blind
+        if epoch < 5:
+            noise = 5
+        elif epoch < 10:
+            noise = 10
+        elif epoch < 15:
+            noise = 20
+        elif epoch < 20:
+            noise = 30
+        elif epoch < 30:
+            noise = 40
+        elif epoch < 50:
+            noise = 50
+        else:
+            noise = None
 
-        # if epoch == 5:
-        #    set_icvl_64_31_TL_2.stage = 1
-        if epoch == 30:
-            train_icvl.transform = AddGaussianNoise(35)
-            logger.info(f"New noise level: {35} dB")
+        if noise is not None:
+            train_icvl.transform = AddGaussianNoise(noise)
+            logger.info(f"New noise level: {noise} dB")
+        else:
+            train_icvl.transform = AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=10)
+            logger.info(f"New noise level -> BLIND!")
 
-        if epoch == 40:
-            train_icvl.transform = AddGaussianNoise(45)
-            logger.info(f"New noise level: {45} dB")
-
-        if epoch == 70:
-            helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
+        #if epoch == 70:
+        #    helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
 
         ttime = time.perf_counter()
         training_utils.train(
@@ -255,7 +264,7 @@ def main():
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(
-                cla.save_dir, prefix, "model_latest_gradual_noise_warmup.pth"
+                cla.save_dir, prefix, "model_latest_gradual_noise_warmup2.pth"
             )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
