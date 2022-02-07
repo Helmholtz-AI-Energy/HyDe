@@ -191,7 +191,7 @@ def main():
 
     helper.adjust_learning_rate(optimizer, cla.lr)
     # epoch_per_save = cla.save_freq
-    max_epochs = 100
+    max_epochs = 50
     best_val_loss, best_val_psnr = 100000, 0
     epochs_wo_best = 0
 
@@ -203,34 +203,39 @@ def main():
         # if epoch == 10:
         #    icvl_64_31_TL_2.transform = harder_train_transform
         # 5, 10, 20, 30, 40, 50, blind
-        if epoch < 5:
-            noise = 50
-        elif epoch < 10:
+        if epoch < 20:
             noise = 20
-        elif epoch < 15:
-            noise = 30
-        elif epoch < 20:
-            noise = 40
-        elif epoch < 30:
-            noise = 30
-        elif epoch < 50:
-            noise = 40
+        elif epoch < 40:
+            noise = 34
+        # elif epoch < 15:
+        #     noise = 30
+        # elif epoch < 20:
+        #     noise = 40
+        # elif epoch < 30:
+        #     noise = 30
+        # elif epoch < 50:
+        #     noise = 40
         else:
             noise = None
-        
-        if epoch == 70:
-            helper.adjust_learning_rate(optimizer, cla.lr)
 
+        if epoch == 20:
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
+        elif epoch == 30:
+            helper.adjust_learning_rate(optimizer, cla.lr)
+        elif epoch == 35:
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
+        elif epoch == 45:
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
 
         if noise is not None:
             train_icvl.transform = AddGaussianNoise(noise)
             logger.info(f"New noise level: {noise} dB")
         else:
-            train_icvl.transform = AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=10)
-            logger.info(f"New noise level -> BLIND!")
+            train_icvl.transform = AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=20)
+            logger.info("New noise level -> BLIND!")
 
-        #if epoch == 70:
-        #    helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
+        # if epoch == 70:
+        #     helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
 
         ttime = time.perf_counter()
         training_utils.train(
@@ -267,9 +272,7 @@ def main():
         if epochs_wo_best == 0 or epoch % 10 == 0:
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
-            model_latest_path = os.path.join(
-                cla.save_dir, prefix, "model_latest_gradual_noise_warmup3.pth"
-            )
+            model_latest_path = os.path.join(cla.save_dir, prefix, "model_latest_og_style.pth")
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
             )
