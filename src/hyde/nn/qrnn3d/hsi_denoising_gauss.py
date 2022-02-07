@@ -204,19 +204,23 @@ def main():
         #    icvl_64_31_TL_2.transform = harder_train_transform
         # 5, 10, 20, 30, 40, 50, blind
         if epoch < 5:
-            noise = 5
-        elif epoch < 10:
-            noise = 10
-        elif epoch < 15:
-            noise = 20
-        elif epoch < 20:
-            noise = 30
-        elif epoch < 30:
-            noise = 40
-        elif epoch < 50:
             noise = 50
+        elif epoch < 10:
+            noise = 20
+        elif epoch < 15:
+            noise = 30
+        elif epoch < 20:
+            noise = 40
+        elif epoch < 30:
+            noise = 30
+        elif epoch < 50:
+            noise = 40
         else:
             noise = None
+        
+        if epoch == 70:
+            helper.adjust_learning_rate(optimizer, cla.lr)
+
 
         if noise is not None:
             train_icvl.transform = AddGaussianNoise(noise)
@@ -264,7 +268,7 @@ def main():
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(
-                cla.save_dir, prefix, "model_latest_gradual_noise_warmup2.pth"
+                cla.save_dir, prefix, "model_latest_gradual_noise_warmup3.pth"
             )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
