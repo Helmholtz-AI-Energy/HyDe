@@ -149,6 +149,7 @@ class ICVLDataset(Dataset):
         if not val:
             self.base_transforms = transforms.Compose(
                 [
+                    transforms.RandomCrop(crop_size),
                     transforms.RandomApply(
                         [
                             hyde_transforms.RandRot90Transform(),
@@ -156,7 +157,6 @@ class ICVLDataset(Dataset):
                         ],
                         p=0.75,
                     ),
-                    transforms.RandomCrop(crop_size),
                 ]
             )
         else:

@@ -181,7 +181,7 @@ def main():
     max_epochs = 50
     best_val_loss, best_val_psnr = 100000, 0
     epochs_wo_best = 0
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min")
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.5)
 
     for epoch in range(max_epochs):
         logger.info(f"\n\t --------- Start epoch {epoch} ---------\n")
@@ -200,7 +200,7 @@ def main():
         else:
             noise = None
 
-        #if epoch == 30:
+        # if epoch == 30:
         #    # RESET LR???
         #    helper.adjust_learning_rate(optimizer, cla.lr)
 
