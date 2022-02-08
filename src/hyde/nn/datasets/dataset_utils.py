@@ -17,7 +17,7 @@ from torchvision import transforms
 from tqdm import tqdm
 
 from ...lowlevel import logging, utils
-from .. import general_nn_utils
+from . import transforms as hyde_transforms
 
 logger = logging.get_logger()
 
@@ -149,7 +149,7 @@ class ICVLDataset(Dataset):
                 [
                     transforms.RandomApply(
                         [
-                            general_nn_utils.RandRot90Transform(),
+                            hyde_transforms.RandRot90Transform(),
                             transforms.RandomVerticalFlip(p=0.5),
                         ],
                         p=0.75,
