@@ -12,7 +12,9 @@ __all__ = ["train"]
 logger = logging.get_logger()
 
 
-def _train_loop(train_loader, network, cla, epoch, optimizer, criterion, bandwise, scaler):
+def _train_loop(
+    train_loader, network, cla, epoch, optimizer, criterion, bandwise, scaler, outer_iter
+):
     train_loss = 0
     avg_loss = 0
     for batch_idx, (inputs, targets) in enumerate(train_loader):
@@ -48,7 +50,7 @@ def _train_loop(train_loader, network, cla, epoch, optimizer, criterion, bandwis
 
         if batch_idx % cla.log_freq == 0 and cla.rank == 0:
             logger.info(
-                f"Epoch: {epoch} iteration: {batch_idx} Loss: {avg_loss} Norm: {total_norm}"
+                f"Epoch: {epoch} outer iter: {outer_iter} iteration: {batch_idx} Loss: {avg_loss} Norm: {total_norm}"
             )
     return avg_loss
 
