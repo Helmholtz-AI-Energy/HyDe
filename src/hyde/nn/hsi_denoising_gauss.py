@@ -1,7 +1,6 @@
 import argparse
 import os
 import time
-from functools import partial
 from os.path import join
 
 import numpy as np
@@ -10,21 +9,14 @@ import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 import torch.nn as nn
 import torch.optim as optim
-import torchvision.transforms as transforms
 from kornia.losses import SSIMLoss
-from torch._six import string_classes
 from torch.utils.data import DataLoader
-from utils import train_argparse
 
-from hyde.lowlevel import logging, set_logger_to_rank0
-from hyde.nn import comm
-from hyde.nn.general_nn_utils import (
-    AddGaussianNoise,
-    AddGaussianNoiseBlind,
-    MultipleWeightedLosses,
-)
-from hyde.nn.qrnn3d import dataset_utils as ds_utils
-from hyde.nn.qrnn3d import helper, models, training_utils
+from hyde.lowlevel import logging
+from hyde.nn import MultipleWeightedLosses, comm, helper, models, training_utils
+from hyde.nn.datasets import dataset_utils as ds_utils
+from hyde.nn.datasets.transforms import AddGaussianNoise, AddGaussianNoiseBlind
+from hyde.nn.parsers import qrnn_parser
 
 logger = logging.get_logger()
 
@@ -34,11 +26,9 @@ def main():
     # return None
 
     """Training settings"""
-    parser = argparse.ArgumentParser(
-        description="QRNN3D Hyperspectral Image Denoising (Gaussian Noise)"
-    )
+    parser = argparse.ArgumentParser(description="Hyperspectral Image Denoising (Gaussian Noise)")
     # cla == command line arguments
-    cla = train_argparse(parser)
+    cla = qrnn_parser(parser)
     logger.info(cla)
 
     # self.prefix = cla.prefix
@@ -85,7 +75,7 @@ def main():
         cla.rank = comm.get_rank()
         distributed = True
 
-        set_logger_to_rank0(logger, cla.rank)
+        comm.set_logger_to_rank0(logger, cla.rank)
 
         torch.backends.cudnn.benchmark = True
 
@@ -137,6 +127,7 @@ def main():
         torch.load(cla.resume_path, not cla.no_ropt)
     else:
         logger.info("==> Building model..")
+        helper.init_network(net, cla.nn_init_mode)
         logger.debug(net)
 
     # net = net.to(torch.float16)
@@ -196,6 +187,7 @@ def main():
     epochs_wo_best = 0
 
     for epoch in range(max_epochs):
+        logger.info(f"\n\t --------- Start epoch {epoch} ---------\n")
         torch.manual_seed(epoch)
         torch.cuda.manual_seed(epoch)
         np.random.seed(epoch)

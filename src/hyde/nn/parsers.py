@@ -1,12 +1,6 @@
 import models
-import numpy as np
-import torch
 
-import hyde.lowlevel.utils as utils
-
-# from ...lowlevel import utils
-
-__all__ = ["train_argparse"]
+__all__ = ["qrnn_parser"]
 
 
 model_names = sorted(
@@ -16,8 +10,17 @@ model_names = sorted(
 )
 
 
-def train_argparse(parser):
-    # get the args for QRNN3D networks
+def qrnn_parser(parser):
+    parser = basic_parser(parser)
+    parser.add_argument("--chop", action="store_true", help="forward chop")
+    parser.add_argument("--clip", type=float, default=1e6)
+    parser.add_argument(
+        "--tensorboard", action="store_true", help="log with tensorboard and stdout"
+    )
+    return parser.parse_args()
+
+
+def basic_parser(parser):
     parser.add_argument(
         "--arch",
         "-a",
@@ -39,7 +42,7 @@ def train_argparse(parser):
         choices=["l1", "l2", "smooth_l1", "ssim", "l2_ssim"],
     )
     parser.add_argument(
-        "--init",
+        "--nn-init-mode",
         type=str,
         default="kn",
         help="which init scheme to choose.",
@@ -51,7 +54,6 @@ def train_argparse(parser):
     parser.add_argument("--seed", type=int, default=42, help="random seed to use. default=2018")
     parser.add_argument("--resume", "-r", action="store_true", help="resume from checkpoint")
     parser.add_argument("--no-ropt", "-nro", action="store_true", help="not resume optimizer")
-    parser.add_argument("--chop", action="store_true", help="forward chop")
     parser.add_argument("--resumePath", "-rp", type=str, default=None, help="checkpoint to use.")
     parser.add_argument(
         "--datadir",
@@ -74,51 +76,9 @@ def train_argparse(parser):
         default="/data/weikaixuan/hsi/data/",
         help="directory to save model to",
     )
-    parser.add_argument("--clip", type=float, default=1e6)
     parser.add_argument("--log-freq", type=int, default=10, help="how frequently to log outputs")
-    parser.add_argument(
-        "--tensorboard", action="store_true", help="log with tensorboard and stdout"
-    )
     parser.add_argument("--no-cuda", action="store_true", help="log with tensorboard and stdout")
     parser.add_argument(
         "--comm-method", type=str, default="nccl-mpi", help="how to spawn processes"
     )
-
-    opt = parser.parse_args()
-    return opt
-
-
-def Visualize3D(data, meta=None):
-    import matplotlib.pyplot as plt
-    from matplotlib.widgets import Slider
-
-    if isinstance(data, torch.Tensor):
-        data = data.cpu().numpy()
-
-    data = np.squeeze(data)
-
-    # for ch in range(data.shape[0]): -> data[ch, ...]
-    data = utils.normalize(data, by_band=True, band_dim=0)
-
-    print(np.max(data), np.min(data))
-
-    plt.subplots_adjust(left=0.25, bottom=0.25)
-
-    frame = 0
-    # l = plt.imshow(data[frame,:,:])
-
-    imshow = plt.imshow(data[frame, :, :], cmap="gray")  # shows 256x256 image, i.e. 0th frame
-    # plt.colorbar()
-    axcolor = "lightgoldenrodyellow"
-    axframe = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
-    sframe = Slider(axframe, "Frame", 0, data.shape[0] - 1, valinit=0)
-
-    def update(val):
-        frame = int(np.around(sframe.val))
-        imshow.set_data(data[frame, :, :])
-        if meta is not None:
-            axframe.set_title(meta[frame])
-
-    sframe.on_changed(update)
-
-    plt.show()
+    return parser

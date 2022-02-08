@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from torch.cuda import amp
 
-from ...lowlevel import logging, utils
+from ..lowlevel import logging, utils
 
 __all__ = ["train"]
 
@@ -12,7 +12,7 @@ __all__ = ["train"]
 logger = logging.get_logger()
 
 
-def _train_loop(train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer, scaler):
+def _train_loop(train_loader, network, cla, epoch, optimizer, criterion, bandwise, scaler):
     train_loss = 0
     avg_loss = 0
     for batch_idx, (inputs, targets) in enumerate(train_loader):
@@ -53,17 +53,18 @@ def _train_loop(train_loader, network, cla, epoch, optimizer, criterion, bandwis
     return avg_loss
 
 
-def train(train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer=None):
-    logger.info(f"\nTrain Loop - Epoch: {epoch}")
+def train(
+    train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer=None, iterations=3
+):
+    logger.info(f"Train Loop - Epoch: {epoch}")
     network.train()
 
     scaler = amp.GradScaler()
-
-    _train_loop(train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer, scaler)
-    _train_loop(train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer, scaler)
-    avg_loss = _train_loop(
-        train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer, scaler
-    )
+    avg_loss = None
+    for it in range(iterations):
+        avg_loss = _train_loop(
+            train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer, scaler
+        )
 
     if writer is not None:
         writer.add_scalar(os.path.join(cla.prefix, "train_loss_epoch"), avg_loss, epoch)
@@ -96,9 +97,10 @@ def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, write
                 loss = criterion(outputs, targets)
                 loss_data += loss.item()
 
-            # data units: [batch, 1, bands, h, w]
+            # data units: [batch, bands, h, w]
             psnr = []
             for d in range(outputs.shape[0]):
+                # band dim assumes that the batch is > 1
                 psnr.append(
                     torch.mean(utils.peak_snr(outputs[d], targets[d], bandwise=True, band_dim=1))
                 )
@@ -106,11 +108,6 @@ def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, write
             psnr = sum(psnr) / float(len(psnr))
 
             ls.append(loss_data)
-            # snr = utils.peak_snr(outputs, targets, bandwise=True, band_dim=1)
-            # try:
-            #     psnr = torch.mean(psnr)
-            # except (RuntimeError, TypeError):
-            #     pass
 
             validate_loss += loss_data
             avg_loss = validate_loss / (batch_idx + 1)

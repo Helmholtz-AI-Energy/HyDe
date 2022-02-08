@@ -1,6 +1,5 @@
 import argparse
 import os
-from functools import partial
 from os.path import join
 
 import numpy as np
@@ -13,19 +12,20 @@ import torch.optim as optim
 import torchvision.transforms as transforms
 from kornia.losses import SSIMLoss
 from torch.utils.data import DataLoader
-from utils import train_argparse
 
-from ...lowlevel import logging
-from .. import comm
-from ..general_nn_utils import (
+from hyde.lowlevel import logging
+from hyde.nn import comm
+from hyde.nn import dataset_utils as ds_utils
+from hyde.nn import helper, training_utils
+from hyde.nn.general_nn_utils import (
     AddNoiseDeadline,
     AddNoiseImpulse,
     AddNoiseNonIIDdB,
     AddNoiseStripe,
     MultipleWeightedLosses,
 )
-from . import dataset_utils as ds_utils
-from . import helper, lmdb_dataset, models, training_utils
+from hyde.nn.parsers import train_argparse
+from hyde.nn.qrnn3d import lmdb_dataset, models
 
 logger = logging.get_logger()
 

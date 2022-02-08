@@ -61,7 +61,7 @@ def get_summary_writer(log_dir, prefix=None):
     return writer
 
 
-def init_params(net, init_type="kn"):
+def init_network(net, init_type="kn"):
     logger.info("use init scheme: %s" % init_type)
     if init_type != "edsr":
         for m in net.modules():
