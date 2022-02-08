@@ -206,7 +206,7 @@ def main():
         # 5, 10, 20, 30, 40, 50, blind
         # if epoch < 20:
         #     noise = 20
-        if epoch < -35:
+        if epoch < 20:
             noise = 34
         else:
             noise = None
@@ -267,7 +267,7 @@ def main():
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(
-                cla.save_dir, prefix, f"model_latest_seeded_{cla.loss}.pth"
+                cla.save_dir, prefix, f"seeded_w_const_noise_{cla.loss}.pth"
             )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
