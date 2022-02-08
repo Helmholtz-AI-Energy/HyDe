@@ -178,7 +178,7 @@ def main():
 
     helper.adjust_learning_rate(optimizer, cla.lr)
     # epoch_per_save = cla.save_freq
-    max_epochs = 50
+    max_epochs = 100
     best_val_loss, best_val_psnr = 100000, 0
     epochs_wo_best = 0
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.5)
@@ -195,13 +195,17 @@ def main():
         # 5, 10, 20, 30, 40, 50, blind
         # if epoch < 20:
         #     noise = 20
-        if epoch < -30:
-            noise = 40
+        if epoch < 40:
+            noise = 20
+        elif epoch < 60:
+            noise = 30
         else:
             noise = None
 
         # if epoch == 30:
         #    # RESET LR???
+        #    scheduler._reset()
+        #    helper.adjust_learning_rate(optimizer, cla.lr)
         #    helper.adjust_learning_rate(optimizer, cla.lr)
 
         # if epoch == 20:
@@ -261,11 +265,11 @@ def main():
             best_val_loss = ls
             epochs_wo_best = 0
 
-        if epochs_wo_best == 0 or epoch % 10 == 0:
+        if epochs_wo_best == 0 or (epoch + 1) % 10 == 0:
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(
-                cla.save_dir, prefix, f"seeded_w_const_noise_{cla.loss}.pth"
+                cla.save_dir, prefix, f"seeded_20-30db_noise_{cla.loss}.pth"
             )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
