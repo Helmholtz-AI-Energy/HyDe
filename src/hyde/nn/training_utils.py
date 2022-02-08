@@ -65,7 +65,15 @@ def train(
     avg_loss = None
     for it in range(iterations):
         avg_loss = _train_loop(
-            train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer, scaler
+            train_loader=train_loader,
+            network=network,
+            cla=cla,
+            epoch=epoch,
+            optimizer=optimizer,
+            criterion=criterion,
+            bandwise=bandwise,
+            scaler=scaler,
+            outer_iter=it,
         )
 
     if writer is not None:
