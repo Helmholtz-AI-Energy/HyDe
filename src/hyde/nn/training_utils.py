@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from torch.cuda import amp
 
-from ...lowlevel import logging, utils
+from hyde.lowlevel import logging, utils
 
 __all__ = ["train"]
 

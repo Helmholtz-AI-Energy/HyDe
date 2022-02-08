@@ -1,7 +1,6 @@
 import argparse
 import os
 import time
-from functools import partial
 from os.path import join
 
 import numpy as np
@@ -10,21 +9,19 @@ import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 import torch.nn as nn
 import torch.optim as optim
-import torchvision.transforms as transforms
 from kornia.losses import SSIMLoss
-from torch._six import string_classes
 from torch.utils.data import DataLoader
-from utils import train_argparse
 
-from hyde.lowlevel import logging, set_logger_to_rank0
+from hyde.lowlevel import logging
 from hyde.nn import comm
+from hyde.nn import dataset_utils as ds_utils
+from hyde.nn import helper, models, training_utils
 from hyde.nn.general_nn_utils import (
     AddGaussianNoise,
     AddGaussianNoiseBlind,
     MultipleWeightedLosses,
 )
-from hyde.nn.qrnn3d import dataset_utils as ds_utils
-from hyde.nn.qrnn3d import helper, models, training_utils
+from hyde.nn.parsers import qrnn_parser
 
 logger = logging.get_logger()
 
@@ -38,7 +35,7 @@ def main():
         description="QRNN3D Hyperspectral Image Denoising (Gaussian Noise)"
     )
     # cla == command line arguments
-    cla = train_argparse(parser)
+    cla = qrnn_parser(parser)
     logger.info(cla)
 
     # self.prefix = cla.prefix
@@ -85,7 +82,7 @@ def main():
         cla.rank = comm.get_rank()
         distributed = True
 
-        set_logger_to_rank0(logger, cla.rank)
+        comm.set_logger_to_rank0(logger, cla.rank)
 
         torch.backends.cudnn.benchmark = True
 
@@ -137,6 +134,7 @@ def main():
         torch.load(cla.resume_path, not cla.no_ropt)
     else:
         logger.info("==> Building model..")
+        helper.init(net, cla.nn_init_mode)
         logger.debug(net)
 
     # net = net.to(torch.float16)

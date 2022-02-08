@@ -31,6 +31,22 @@ from ..lowlevel import logging
 
 logger = logging.get_logger()
 
+__all__ = [
+    "get_local_rank",
+    "get_rank",
+    "set_logger_to_rank0",
+    "get_local_group",
+    "init",
+    "get_local_size",
+    "get_size",
+]
+
+
+def set_logger_to_rank0(logger, rank):
+    if rank != 0:
+        logger.propagate = False
+        logger.disabled = True
+
 
 def get_rank():
     """

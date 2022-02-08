@@ -10,8 +10,8 @@ import torch.distributed as dist
 from torch.utils.data import Dataset
 from torchvision import transforms
 
-from ...lowlevel import logging, utils
-from .. import general_nn_utils
+from ..lowlevel import logging, utils
+from . import general_nn_utils
 
 logger = logging.get_logger()
 
