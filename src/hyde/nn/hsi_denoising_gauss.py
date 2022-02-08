@@ -181,6 +181,7 @@ def main():
     max_epochs = 50
     best_val_loss, best_val_psnr = 100000, 0
     epochs_wo_best = 0
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min")
 
     for epoch in range(max_epochs):
         logger.info(f"\n\t --------- Start epoch {epoch} ---------\n")
@@ -199,14 +200,18 @@ def main():
         else:
             noise = None
 
-        if epoch == 20:
-            helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
-        elif epoch == 30:
+        if epoch == 30:
+            # RESET LR???
             helper.adjust_learning_rate(optimizer, cla.lr)
-        elif epoch == 35:
-            helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
-        elif epoch == 45:
-            helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
+
+        # if epoch == 20:
+        #     helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
+        # elif epoch == 30:
+        #     helper.adjust_learning_rate(optimizer, cla.lr)
+        # elif epoch == 35:
+        #     helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
+        # elif epoch == 45:
+        #     helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
         # elif epoch == 45:
         #     helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
 
@@ -219,7 +224,7 @@ def main():
 
         # if epoch == 70:
         #     helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
-
+        helper.display_learning_rate(optimizer)
         ttime = time.perf_counter()
         training_utils.train(
             train_loader, net, cla, epoch, optimizer, criterion, bandwise, writer=writer
@@ -243,9 +248,10 @@ def main():
         if epoch == 0:
             logger.info(f"Max mem alocated: {torch.cuda.max_memory_allocated(device=None)}")
 
+        scheduler.step(ls)
+
         epochs_wo_best += 1
 
-        helper.display_learning_rate(optimizer)
         # if (epoch % epoch_per_save == 0 and epoch > 0) or epoch == max_epochs - 1:
         if psnr > best_val_psnr:
             best_val_psnr = psnr
