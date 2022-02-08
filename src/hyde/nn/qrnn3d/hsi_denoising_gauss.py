@@ -184,7 +184,7 @@ def main():
     val_loader = DataLoader(
         val_dataset,
         batch_size=cla.batch_size,
-        shuffle=False,
+        shuffle=True,  # shuffle this dataset, we will fix the noise transforms
         num_workers=cla.workers,
         pin_memory=torch.cuda.is_available(),
     )
@@ -196,9 +196,9 @@ def main():
     epochs_wo_best = 0
 
     for epoch in range(max_epochs):
-        # torch.manual_seed(epoch)
-        # torch.cuda.manual_seed(epoch)
-        # np.random.seed(epoch)
+        torch.manual_seed(epoch)
+        torch.cuda.manual_seed(epoch)
+        np.random.seed(epoch)
         # TODO: change the transform to something harder at some point in the training?
         # if epoch == 10:
         #    icvl_64_31_TL_2.transform = harder_train_transform
@@ -243,6 +243,9 @@ def main():
         )
         ttime = time.perf_counter() - ttime
 
+        torch.manual_seed(0)
+        torch.cuda.manual_seed(0)
+        np.random.seed(0)
         vtime = time.perf_counter()
         psnr, ls = training_utils.validate(
             val_loader, "validate", net, cla, epoch, criterion, bandwise, writer=writer
