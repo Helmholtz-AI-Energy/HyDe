@@ -217,10 +217,10 @@ def main():
 
         if noise is not None:
             train_icvl.transform = AddGaussianNoise(noise)
-            logger.info(f"New noise level: {noise} dB")
+            logger.info(f"Noise level: {noise} dB")
         else:
             train_icvl.transform = AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=20)
-            logger.info("New noise level -> BLIND!")
+            logger.info("Noise level: BLIND!")
 
         # if epoch == 70:
         #     helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
@@ -246,7 +246,7 @@ def main():
         logger.info(f"Expected time remaing: {expected_time_remaining}")
 
         if epoch == 0:
-            logger.info(f"Max mem alocated: {torch.cuda.max_memory_allocated(device=None)}")
+            logger.debug(f"Max mem alocated: {torch.cuda.max_memory_allocated(device=None)}")
 
         scheduler.step(ls)
 

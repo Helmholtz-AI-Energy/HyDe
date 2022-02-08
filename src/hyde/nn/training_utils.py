@@ -58,7 +58,7 @@ def _train_loop(
 def train(
     train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer=None, iterations=3
 ):
-    logger.info(f"Train Loop - Epoch: {epoch}")
+    logger.info(f"Train:\tEpoch: {epoch}")
     network.train()
 
     scaler = amp.GradScaler()
@@ -85,7 +85,7 @@ def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, write
     validate_loss = 0
     total_psnr = 0
     ls, psnrs = [], []
-    logger.info(f"Validation: Epoch: {epoch} dataset name: {name}")
+    logger.info(f"Validation:\tEpoch: {epoch} dataset name: {name}")
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(valid_loader):
             if not cla.no_cuda and torch.cuda.is_available():
