@@ -58,7 +58,7 @@ def _train_loop(
 def train(
     train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer=None, iterations=3
 ):
-    logger.info(f"Train:\tEpoch: {epoch}")
+    logger.info(f"Train:\t\tEpoch: {epoch}")
     network.train()
 
     scaler = amp.GradScaler()

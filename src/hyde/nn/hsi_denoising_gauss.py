@@ -202,7 +202,7 @@ def main():
         else:
             noise = None
 
-        #if epoch == 40:
+        # if epoch == 30:
         #    # RESET LR???
         #    scheduler._reset()
         #    helper.adjust_learning_rate(optimizer, cla.lr)
