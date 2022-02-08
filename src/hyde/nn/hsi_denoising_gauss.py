@@ -134,7 +134,7 @@ def main():
 
     # AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=10),
 
-    crop_size = (512, 512)
+    crop_size = (256, 256)
 
     train_icvl = ds_utils.ICVLDataset(
         cla.datadir,
@@ -269,7 +269,7 @@ def main():
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(
-                cla.save_dir, prefix, f"seeded_20-30db_noise_{cla.loss}.pth"
+                cla.save_dir, prefix, f"small_batch_seeded_20-30db_noise_{cla.loss}.pth"
             )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
