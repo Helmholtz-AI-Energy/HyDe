@@ -13,14 +13,9 @@ from kornia.losses import SSIMLoss
 from torch.utils.data import DataLoader
 
 from hyde.lowlevel import logging
-from hyde.nn import comm
-from hyde.nn import dataset_utils as ds_utils
-from hyde.nn import helper, models, training_utils
-from hyde.nn.general_nn_utils import (
-    AddGaussianNoise,
-    AddGaussianNoiseBlind,
-    MultipleWeightedLosses,
-)
+from hyde.nn import MultipleWeightedLosses, comm, helper, models, training_utils
+from hyde.nn.datasets import dataset_utils as ds_utils
+from hyde.nn.datasets.transforms import AddGaussianNoise, AddGaussianNoiseBlind
 from hyde.nn.parsers import qrnn_parser
 
 logger = logging.get_logger()
@@ -31,9 +26,7 @@ def main():
     # return None
 
     """Training settings"""
-    parser = argparse.ArgumentParser(
-        description="QRNN3D Hyperspectral Image Denoising (Gaussian Noise)"
-    )
+    parser = argparse.ArgumentParser(description="Hyperspectral Image Denoising (Gaussian Noise)")
     # cla == command line arguments
     cla = qrnn_parser(parser)
     logger.info(cla)
@@ -134,7 +127,7 @@ def main():
         torch.load(cla.resume_path, not cla.no_ropt)
     else:
         logger.info("==> Building model..")
-        helper.init(net, cla.nn_init_mode)
+        helper.init_network(net, cla.nn_init_mode)
         logger.debug(net)
 
     # net = net.to(torch.float16)
@@ -194,6 +187,7 @@ def main():
     epochs_wo_best = 0
 
     for epoch in range(max_epochs):
+        logger.info(f"\n\t --------- Start epoch {epoch} ---------\n")
         torch.manual_seed(epoch)
         torch.cuda.manual_seed(epoch)
         np.random.seed(epoch)

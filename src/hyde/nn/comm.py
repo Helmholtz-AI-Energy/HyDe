@@ -32,13 +32,13 @@ from ..lowlevel import logging
 logger = logging.get_logger()
 
 __all__ = [
-    "get_local_rank",
-    "get_rank",
-    "set_logger_to_rank0",
     "get_local_group",
-    "init",
+    "get_local_rank",
     "get_local_size",
+    "get_rank",
     "get_size",
+    "init",
+    "set_logger_to_rank0",
 ]
 
 
