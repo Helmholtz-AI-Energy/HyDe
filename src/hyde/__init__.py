@@ -15,8 +15,8 @@ except PackageNotFoundError:  # pragma: no cover
 finally:
     del version, PackageNotFoundError
 
-from . import nn
 from .lowlevel import *
+from .nn import *
 from .spatial_domain import *
 from .transform_domain.forpdn import *
 from .transform_domain.hyminor import *
