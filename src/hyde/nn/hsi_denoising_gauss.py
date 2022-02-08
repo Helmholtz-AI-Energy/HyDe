@@ -269,7 +269,7 @@ def main():
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(
-                cla.save_dir, prefix, f"small_batch_seeded_20-30db_noise_{cla.loss}.pth"
+                cla.save_dir, prefix, f"sm_crop_seeded_inc_db_{cla.loss}.pth"
             )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path

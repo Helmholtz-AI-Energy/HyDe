@@ -150,13 +150,19 @@ class ICVLDataset(Dataset):
             self.base_transforms = transforms.Compose(
                 [
                     transforms.RandomCrop(crop_size),
-                    transforms.RandomApply(
-                        [
-                            hyde_transforms.RandRot90Transform(),
-                            transforms.RandomVerticalFlip(p=0.5),
-                        ],
-                        p=0.75,
+                    transforms.RandomAffine(
+                        degrees=90,
+                        scale=(1, 0.5, 0.25),
                     ),
+                    transforms.RandomVerticalFlip(p=0.5),
+                    transforms.RandomHorizontalFlip(p=0.5),
+                    # transforms.RandomApply(
+                    #     [
+                    #         hyde_transforms.RandRot90Transform(),
+                    #         transforms.RandomVerticalFlip(p=0.5),
+                    #     ],
+                    #     p=0.75,
+                    # ),
                 ]
             )
         else:
