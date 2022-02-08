@@ -139,7 +139,9 @@ class ICVLDataset(Dataset):
         # load all the data at the top
         self.loadfrom = []  # np.zeros(first, dtype=np.float32)
         for c, f in enumerate(self.files):
-            loaded, _ = utils.normalize(torch.tensor(np.asarray(np.load(f), dtype=np.float32)))
+            loaded, _ = utils.normalize(
+                torch.tensor(np.asarray(np.load(f), dtype=np.float32)), by_band=True
+            )
             self.loadfrom.append(loaded)
 
         self.loadfrom = tuple(self.loadfrom)

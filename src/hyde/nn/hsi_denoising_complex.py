@@ -1,77 +1,98 @@
 import argparse
 import os
+import time
 from os.path import join
 
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
+import torch.distributed as dist
 import torch.nn as nn
 import torch.optim as optim
-
-# import torchvision
 import torchvision.transforms as transforms
 from kornia.losses import SSIMLoss
 from torch.utils.data import DataLoader
 
 from hyde.lowlevel import logging
-from hyde.nn import comm
-from hyde.nn import dataset_utils as ds_utils
-from hyde.nn import helper, training_utils
-from hyde.nn.general_nn_utils import (
+from hyde.nn import MultipleWeightedLosses, comm, helper, models, training_utils
+from hyde.nn.datasets import dataset_utils as ds_utils
+from hyde.nn.datasets.transforms import (
     AddNoiseDeadline,
     AddNoiseImpulse,
     AddNoiseNonIIDdB,
     AddNoiseStripe,
-    MultipleWeightedLosses,
 )
-from hyde.nn.parsers import train_argparse
-from hyde.nn.qrnn3d import lmdb_dataset, models
+from hyde.nn.parsers import qrnn_parser
 
 logger = logging.get_logger()
 
 
 def main():
     """Training settings"""
-    parser = argparse.ArgumentParser(
-        description="QRNN3D Hyperspectral Image Denoising (Gaussian Noise)"
-    )
+    parser = argparse.ArgumentParser(description="Hyperspectral Image Denoising (Complex Noise)")
     # cla == command line arguments
-    cla = train_argparse(parser)
-    logger.debug(cla)
+    cla = qrnn_parser(parser)
+    logger.info(cla)
 
     # self.prefix = cla.prefix
     # parser.add_argument("--prefix", "-p", type=str, default="denoise", help="prefix")
-    prefix = cla.prefix
+    prefix = cla.arch
 
     # Engine.setup(self):
     basedir = join("checkpoints", cla.arch)
     if not os.path.exists(basedir):
         os.makedirs(basedir)
 
-    if torch.cuda.is_available:
-        cuda = True
-    device = "cuda" if cuda else "cpu"
-    # todo: if there are multiple devices, then launch torch distributed
-    #       get from MLPerf
-    logger.debug("Cuda Acess: %d" % cuda)
-    if cuda and not torch.cuda.is_available():
-        raise Exception("No GPU found, please run without --cuda")
+    if cla.no_cuda:
+        cuda = False
+    else:
+        cuda = torch.cuda.is_available()
+    logger.info("Cuda Acess: %d" % cuda)
 
     torch.manual_seed(cla.seed)
-    if cuda:
-        torch.cuda.manual_seed(cla.seed)
+    np.random.seed(cla.seed)
 
     """Model"""
     logger.info(f"=> creating model: {cla.arch}")
     net = models.__dict__[cla.arch]()
     # initialize parameters
     # init params will set the model params with a random distribution
-    helper.init_params(net, init_type=cla.init)  # disable for default initialization
-
+    # helper.init_params(net, init_type=cla.init)  # disable for default initialization
+    distributed = False
+    bandwise = net.bandwise
+    # world_size = 1
     if torch.cuda.device_count() > 1 and cuda:
-        group = comm.init(method="nccl-mpi")
-        net = nn.parallel.DistributedDataParallel(net, device_ids=cla.gpu_ids)
+        logger.info("Spawning torch groups for DDP")
+        group = comm.init(method=cla.comm_method)
+
+        loc_rank = dist.get_rank() % torch.cuda.device_count()
+        # world_size = dist.get_world_size()
+        device = torch.device("cuda", loc_rank)
+        logger.info(f"Default GPU: {device}")
+
+        net = models.__dict__[cla.arch]()
+        net = net.to(device)
         net = nn.SyncBatchNorm.convert_sync_batchnorm(net, group)
+        net = nn.parallel.DistributedDataParallel(net, device_ids=[device.index])
+        logger.info("Finished conversion to SyncBatchNorm")
+        cla.rank = comm.get_rank()
+        distributed = True
+
+        comm.set_logger_to_rank0(logger, cla.rank)
+
+        torch.backends.cudnn.benchmark = True
+
+    elif cuda:
+        torch.cuda.manual_seed(cla.seed)
+        device = torch.device("cuda", 0)
+        loc_rank = 0
+        cla.rank = 0
+    else:
+        device = torch.device("cpu")
+        loc_rank = None
+        cla.rank = 0
+
+    cla.device = device
 
     if cla.loss == "l2":
         criterion = nn.MSELoss()
@@ -83,14 +104,18 @@ def main():
         criterion = SSIMLoss(window_size=11, max_val=1)
     elif cla.loss == "l2_ssim":
         criterion = MultipleWeightedLosses(
-            [nn.MSELoss(), SSIMLoss(window_size=11, max_val=1)], weight=[1, 2.5e-3]
+            [nn.MSELoss(), SSIMLoss(window_size=11, max_val=1.0)], weight=[1, 2.5e-3]
+        )
+    else:
+        raise ValueError(
+            f"Loss function must be one of: [l2, l1, smooth_l1, ssim, l2_ssim], currently: {cla.loss}"
         )
 
     logger.info(criterion)
 
     if cuda:
-        net.to(device)
-        criterion = criterion.to(device)
+        net.cuda(loc_rank)
+        criterion = criterion.cuda(loc_rank)
 
     writer = None
     if cla.tensorboard:
@@ -105,11 +130,10 @@ def main():
         torch.load(cla.resume_path, not cla.no_ropt)
     else:
         logger.info("==> Building model..")
-        logger.info(net)
+        helper.init_network(net, cla.nn_init_mode)
+        logger.debug(net)
 
     cudnn.benchmark = True
-
-    tr_ds = lmdb_dataset.LMDBDataset(cla.dataroot, repeat=64)
 
     train_transform = transforms.Compose(
         [
@@ -119,60 +143,70 @@ def main():
             ),
         ]
     )
-    common_transforms = (transforms.RandomCrop((32, 32)),)
 
-    set_icvl_64_31_TL_1 = ds_utils.ICVLDataset(
-        tr_ds,
+    crop_size = (512, 512)
+
+    train_icvl = ds_utils.ICVLDataset(
+        cla.datadir,
+        common_transforms=None,
         transform=train_transform,
-        common_transforms=common_transforms,
+        crop_size=crop_size,
     )
+    if distributed:
+        train_sampler = torch.utils.data.distributed.DistributedSampler(train_icvl)
+    else:
+        train_sampler = None
+
     # worker_init_fn is in dataset -> just getting the seed
-    icvl_64_31_TL = DataLoader(
-        set_icvl_64_31_TL_1,
+    train_loader = DataLoader(
+        train_icvl,
         batch_size=cla.batch_size,
-        shuffle=True,
+        shuffle=True if train_sampler is None else False,
         num_workers=cla.workers,
         pin_memory=torch.cuda.is_available(),
-        worker_init_fn=None,
-        persistent_workers=True,
+        persistent_workers=False,
+        sampler=train_sampler,
     )
-    # -------------- validation loader -------------------------
 
-    """Test-Dev"""
+    # -------------- validation loader -------------------------
     basefolder = cla.val_datadir
 
-    val_dataset = ds_utils.ICVLDataset(
-        os.path.join(basefolder, "test"), transform=AddNoiseNonIIDdB(), val=True  # complex noise
+    val_dataset_noniid = ds_utils.ICVLDataset(
+        basefolder,
+        transform=AddNoiseNonIIDdB(max_power=40),  # blind gaussain noise
+        val=True,
+        crop_size=crop_size,
     )
 
-    val_loaders = [
-        DataLoader(
-            val_dataset,
-            batch_size=32,
-            shuffle=False,
-            num_workers=cla.workers,
-            pin_memory=torch.cuda.is_available(),
-        )
-    ]
-
-    val_dataset = ds_utils.ICVLDataset(
-        os.path.join(basefolder, "test"), transform=train_transform, val=True  # complex/mixed noise
+    val_loader_noniid = DataLoader(
+        val_dataset_noniid,
+        batch_size=cla.batch_size,
+        shuffle=True,  # shuffle this dataset, we will fix the noise transforms
+        num_workers=cla.workers,
+        pin_memory=torch.cuda.is_available(),
     )
 
-    val_loaders.append(
-        DataLoader(
-            val_dataset,
-            batch_size=32,
-            shuffle=False,
-            num_workers=cla.workers,
-            pin_memory=torch.cuda.is_available(),
-        )
+    val_dataset_mixed = ds_utils.ICVLDataset(
+        basefolder,
+        transform=train_transform,
+        val=True,
+        crop_size=crop_size,
+    )
+
+    val_loader_mixed = DataLoader(
+        val_dataset_mixed,
+        batch_size=cla.batch_size,
+        shuffle=True,  # shuffle this dataset, we will fix the noise transforms
+        num_workers=cla.workers,
+        pin_memory=torch.cuda.is_available(),
     )
 
     base_lr = cla.lr
     helper.adjust_learning_rate(optimizer, cla.lr)
     epoch_per_save = cla.save_freq
     max_epochs = 100
+    epochs_wo_best = 0
+    best_psnr_iid, best_psnr_mix, best_ls_iid, best_ls_mix = 0, 0, 100000, 100000
     for epoch in range(max_epochs):
         s = torch.random.seed()
         torch.cuda.manual_seed(s)
@@ -183,15 +217,80 @@ def main():
         elif epoch == 95:
             helper.adjust_learning_rate(optimizer, base_lr * 0.01)
 
-        training_utils.train(icvl_64_31_TL, net, cla, epoch, optimizer, criterion, writer=writer)
-        training_utils.validate(
-            val_loaders[0], "icvl-validate-noniid", net, cla, epoch, criterion, writer=writer
+        # training_utils.train(train_loader, net, cla, epoch, optimizer, criterion, writer=writer)
+        ttime = time.perf_counter()
+        training_utils.train(
+            train_loader,
+            net,
+            cla,
+            epoch,
+            optimizer,
+            criterion,
+            bandwise,
+            writer=writer,
+            iterations=3,
         )
-        training_utils.validate(
-            val_loaders[1], "icvl-validate-mixture", net, cla, epoch, criterion, writer=writer
+        ttime = time.perf_counter() - ttime
+
+        torch.manual_seed(0)
+        torch.cuda.manual_seed(0)
+        np.random.seed(0)
+        vtime = time.perf_counter()
+        psnr_noniid, ls_noniid = training_utils.validate(
+            val_loader_noniid,
+            "validate - non iid",
+            net,
+            cla,
+            epoch,
+            criterion,
+            bandwise,
+            writer=writer,
         )
+        psnr_mixture, ls_mixture = training_utils.validate(
+            val_loader_mixed,
+            "validate - mixture",
+            net,
+            cla,
+            epoch,
+            criterion,
+            bandwise,
+            writer=writer,
+        )
+        vtime = time.perf_counter() - vtime
+
+        expected_time_remaining = time.strftime(
+            "%H:%M:%S", time.gmtime((ttime + vtime) * (max_epochs - epoch))
+        )
+        logger.info(f"Expected time remaing: {expected_time_remaining}")
 
         helper.display_learning_rate(optimizer)
+
+        if psnr_noniid > best_psnr_iid:
+            best_psnr_iid = psnr_noniid
+            epochs_wo_best = 0
+
+        if ls_noniid < best_ls_iid:
+            best_ls_iid = ls_noniid
+            epochs_wo_best = 0
+
+        if psnr_mixture > best_psnr_mix:
+            best_psnr_mix = psnr_mixture
+            epochs_wo_best = 0
+
+        if ls_mixture < best_ls_mix:
+            best_ls_mix = ls_mixture
+            epochs_wo_best = 0
+
+        if epochs_wo_best == 0 or epoch % 10 == 0:
+            # best_val_psnr < psnr or best_val_psnr > ls:
+            logger.info("Saving current network...")
+            model_latest_path = os.path.join(
+                cla.save_dir, prefix, f"model_latest_seeded_{cla.loss}.pth"
+            )
+            training_utils.save_checkpoint(
+                cla, epoch, net, optimizer, model_out_path=model_latest_path
+            )
+
         if (epoch % epoch_per_save == 0 and epoch > 0) or epoch == max_epochs - 1:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(basedir, prefix, "model_latest.pth")

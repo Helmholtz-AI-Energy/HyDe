@@ -125,12 +125,11 @@ def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, write
             total_psnr += psnr
             avg_psnr = total_psnr / (batch_idx + 1)
 
-            if batch_idx % cla.log_freq == 0 and cla.rank == 0:
-                logger.info(f"Loss: {avg_loss} | PSNR: {avg_psnr}")
+            # if batch_idx % cla.log_freq == 0:
+            #     logger.info(f"Loss: {avg_loss} | PSNR: {avg_psnr}")
             # break
 
-    if cla.rank == 0:
-        logger.info(f"Final: Loss: {avg_loss} | PSNR: {avg_psnr}")
+    logger.info(f"Final: Loss: {avg_loss} | PSNR: {avg_psnr}")
 
     if writer is not None:
         writer.add_scalar(os.path.join(cla.prefix, name, "val_loss_epoch"), avg_loss, epoch)

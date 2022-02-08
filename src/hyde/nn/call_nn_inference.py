@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 
 from ..lowlevel import logging
-from . import qrnn3d
+from . import models
 
 logger = logging.get_logger()
 
@@ -13,12 +13,24 @@ class QRNNInference(nn.Module):
     def __init__(self, arch, pretrained_file, frozen=True):
         # get model
         super().__init__()
-        network = qrnn3d.models.__dict__[arch]()
+        network = models.__dict__[arch]()
         # load the pretrained weights
         logger.info(f"Loading model from: {pretrained_file}")
         assert os.path.isfile(pretrained_file), "Error: no checkpoint directory found!"
         checkpoint = torch.load(pretrained_file)
-        network.load_state_dict(checkpoint["net"])
+
+        try:
+            network.load_state_dict(checkpoint["net"])
+        except RuntimeError:
+            from collections import OrderedDict
+
+            new_state_dict = OrderedDict()
+            for k, v in checkpoint["net"].items():
+                name = k[7:]  # remove `module.`
+                new_state_dict[name] = v
+            # load params
+            network.load_state_dict(new_state_dict)
+
         self.network = network
         logger.debug(self.network)
         self.frozen = frozen

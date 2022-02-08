@@ -130,8 +130,6 @@ def main():
         helper.init_network(net, cla.nn_init_mode)
         logger.debug(net)
 
-    # net = net.to(torch.float16)
-
     cudnn.benchmark = True
 
     # AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=10),
@@ -161,8 +159,6 @@ def main():
     )
 
     # -------------- validation loader -------------------------
-
-    """Test-Dev"""
     basefolder = cla.val_datadir
 
     val_dataset = ds_utils.ICVLDataset(
