@@ -198,15 +198,15 @@ def main():
         # 5, 10, 20, 30, 40, 50, blind
         # if epoch < 20:
         #     noise = 20
-        if epoch < 20:
-            noise = 34
+        if epoch < 200:
+            noise = 40
         else:
             noise = None
 
-        if epoch == 20:
+        if epoch == 25:
             helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
-        elif epoch == 35:
-            helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
+        elif epoch == 40:
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
         # elif epoch == 45:
         #     helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
 
