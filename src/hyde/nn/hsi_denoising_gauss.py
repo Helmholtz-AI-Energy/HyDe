@@ -195,14 +195,14 @@ def main():
         # 5, 10, 20, 30, 40, 50, blind
         # if epoch < 20:
         #     noise = 20
-        if epoch < 30:
+        if epoch < -30:
             noise = 40
         else:
             noise = None
 
-        if epoch == 30:
-            # RESET LR???
-            helper.adjust_learning_rate(optimizer, cla.lr)
+        #if epoch == 30:
+        #    # RESET LR???
+        #    helper.adjust_learning_rate(optimizer, cla.lr)
 
         # if epoch == 20:
         #     helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
