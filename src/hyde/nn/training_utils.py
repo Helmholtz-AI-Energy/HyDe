@@ -131,7 +131,8 @@ def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, write
             # break
     if dist.is_initialized():
         # average all the results
-        red = torch.tensor([avg_psnr, avg_loss], device=cla.device)
+        sz = dist.get_world_size()
+        red = torch.tensor([avg_psnr, avg_loss], device=cla.device) / float(sz)
         dist.all_reduce(red)
         avg_psnr = red[0].item()
         avg_loss = red[1].item()
