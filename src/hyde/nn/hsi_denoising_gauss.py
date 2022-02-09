@@ -154,7 +154,7 @@ def main():
         shuffle=True if train_sampler is None else False,
         num_workers=cla.workers,
         pin_memory=torch.cuda.is_available(),
-        persistent_workers=False,
+        persistent_workers=True,
         sampler=train_sampler,
     )
 
@@ -167,13 +167,18 @@ def main():
         val=True,
         crop_size=crop_size,
     )
+    if distributed:
+        val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset)
+    else:
+        val_sampler = None
 
     val_loader = DataLoader(
         val_dataset,
         batch_size=cla.batch_size,
-        shuffle=True,  # shuffle this dataset, we will fix the noise transforms
+        shuffle=True if val_sampler is None else False,
         num_workers=cla.workers,
         pin_memory=torch.cuda.is_available(),
+        sampler=val_sampler,
     )
 
     helper.adjust_learning_rate(optimizer, cla.lr)

@@ -1,6 +1,7 @@
 import os
 
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 from torch.cuda import amp
 
@@ -128,6 +129,12 @@ def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, write
             # if batch_idx % cla.log_freq == 0:
             #     logger.info(f"Loss: {avg_loss} | PSNR: {avg_psnr}")
             # break
+    if dist.is_initialized():
+        # average all the results
+        red = torch.tensor([avg_psnr, avg_loss], device=cla.device)
+        dist.all_reduce(red)
+        avg_psnr = red[0].item()
+        avg_loss = red[1].item()
 
     logger.info(f"Final: Loss: {avg_loss} | PSNR: {avg_psnr}")
 
