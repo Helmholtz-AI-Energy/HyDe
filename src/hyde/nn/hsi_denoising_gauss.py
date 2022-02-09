@@ -178,13 +178,13 @@ def main():
 
     helper.adjust_learning_rate(optimizer, cla.lr)
     # epoch_per_save = cla.save_freq
-    max_epochs = 100
+    max_epochs = 150
     best_val_loss, best_val_psnr = 100000, 0
     epochs_wo_best = 0
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.5)
 
     for epoch in range(max_epochs):
-        logger.info(f"\n\t --------- Start epoch {epoch} ---------\n")
+        logger.info(f"\n    --------- Start epoch {epoch} of {max_epochs} ---------\n")
         torch.manual_seed(epoch)
         torch.cuda.manual_seed(epoch)
         np.random.seed(epoch)
@@ -193,14 +193,20 @@ def main():
         #    icvl_64_31_TL_2.transform = harder_train_transform
 
         # 5, 10, 20, 30, 40, 50, blind
-        # if epoch < 20:
-        #     noise = 20
-        if epoch < 40:
+        if epoch < 20:
+            noise = 10
+        elif epoch < 50:
             noise = 20
-        elif epoch < 60:
+        elif epoch < 70:
             noise = 30
+        elif epoch < 85:
+            noise = 10
+        elif epoch < 100:
+            noise = 40
+        elif epoch < 110:
+            noise = 10
         else:
-            noise = None
+            noise = 30
 
         # if epoch == 30:
         #    # RESET LR???
@@ -269,7 +275,7 @@ def main():
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(
-                cla.save_dir, prefix, f"sm_crop_seeded_inc_db_{cla.loss}.pth"
+                cla.save_dir, prefix, f"sm_crop_seeded_20-30-40-50_db_{cla.loss}.pth"
             )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path

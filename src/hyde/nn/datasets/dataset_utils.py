@@ -152,7 +152,7 @@ class ICVLDataset(Dataset):
                     transforms.RandomCrop(crop_size),
                     transforms.RandomAffine(
                         degrees=90,
-                        scale=(1, 0.5, 0.25),
+                        scale=(0.25, 1),
                     ),
                     transforms.RandomVerticalFlip(p=0.5),
                     transforms.RandomHorizontalFlip(p=0.5),
