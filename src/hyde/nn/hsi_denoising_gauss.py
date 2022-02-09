@@ -215,10 +215,10 @@ def main():
         #    icvl_64_31_TL_2.transform = harder_train_transform
 
         # 5, 10, 20, 30, 40, 50, blind
-        if epoch < -20:
-            noise = 10
-        # elif epoch < 30:
-        #     noise = 20
+        if epoch < 20:
+            noise = 30
+        #elif epoch < 30:
+        #    noise = 20
         # elif epoch < 40:
         #     noise = 30
         # elif epoch < 50:
@@ -228,11 +228,11 @@ def main():
         # elif epoch < 70:
         #     noise = 30
         else:
-            noise = 40
+            noise = None
 
-        # if epoch == 30:
-        #    # RESET LR???
-        #    scheduler._reset()
+        if epoch == 20:
+            # RESET LR???
+            scheduler._reset()
         #    helper.adjust_learning_rate(optimizer, cla.lr)
         #    helper.adjust_learning_rate(optimizer, cla.lr)
 
@@ -251,7 +251,13 @@ def main():
             train_icvl.transform = AddGaussianNoise(noise)
             logger.info(f"Noise level: {noise} dB")
         else:
-            train_icvl.transform = AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=20)
+            if 20 <= epoch < 50:
+                train_icvl.transform = AddGaussianNoiseBlind(max_sigma_db=20, min_sigma_db=10)
+            elif 50 <= epoch < 70:
+                train_icvl.transform = AddGaussianNoiseBlind(max_sigma_db=30, min_sigma_db=20)
+            else:
+                train_icvl.transform = AddGaussianNoiseBlind(max_sigma_db=36, min_sigma_db=20)
+
             logger.info("Noise level: BLIND!")
 
         # if epoch == 70:
@@ -297,7 +303,7 @@ def main():
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(
-                cla.save_dir, prefix, f"sm_crop_40db-100_{cla.loss}.pth"
+                cla.save_dir, prefix, f"no-autocast-sm_crop_blind-db-100_{cla.loss}.pth"
             )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
