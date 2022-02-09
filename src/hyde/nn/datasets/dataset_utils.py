@@ -151,11 +151,13 @@ class ICVLDataset(Dataset):
                 [
                     transforms.RandomCrop(crop_size),
                     transforms.RandomAffine(
-                        degrees=90,
-                        scale=(0.25, 1),
+                        degrees=180,
+                        scale=(0.2, 1),
+                        shear=20,
                     ),
                     transforms.RandomVerticalFlip(p=0.5),
                     transforms.RandomHorizontalFlip(p=0.5),
+                    transforms.RandomPerspective(),
                     # transforms.RandomApply(
                     #     [
                     #         hyde_transforms.RandRot90Transform(),
