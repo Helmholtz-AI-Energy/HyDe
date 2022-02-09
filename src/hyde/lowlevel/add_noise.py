@@ -145,7 +145,7 @@ def add_simulated_lines(signal: torch.Tensor, bands=(9, 15)) -> Tuple[torch.Tens
 
 
 def add_gaussian_noise_blind(signal, min_db, max_db, scale_factor: float = 1):
-    noise_db = (max_db * np.random.rand()) + min_db
+    noise_db = ((max_db - min_db) * np.random.rand()) + min_db
     return add_noise_db(signal, noise_db, verbose=False, scale_factor=scale_factor)
 
 
