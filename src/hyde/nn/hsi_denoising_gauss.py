@@ -246,9 +246,9 @@ def main():
         )
         ttime = time.perf_counter() - ttime
 
-        torch.manual_seed(0)
-        torch.cuda.manual_seed(0)
-        np.random.seed(0)
+        torch.manual_seed(cla.rank)
+        torch.cuda.manual_seed(cla.rank)
+        np.random.seed(cla.rank)
         vtime = time.perf_counter()
         psnr, ls = training_utils.validate(
             val_loader, "validate", net, cla, epoch, criterion, bandwise, writer=writer
