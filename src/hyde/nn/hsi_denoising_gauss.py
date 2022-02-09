@@ -124,8 +124,10 @@ def main():
     # """Resume previous model"""
     if cla.resume_path is not None:
         # Load checkpoint.
-        checkpoint = torch.load(cla.resume_path, not cla.no_ropt)
+        logger.info(f"Resuming training from {cla.resume_path}")
+        checkpoint = torch.load(cla.resume_path)
         if not cla.no_resume_opt:
+            logger.info("Loading optimizer from checkpoint file")
             optimizer.load_state_dict(checkpoint["optimizer"])
 
         try:
@@ -198,7 +200,7 @@ def main():
 
     helper.adjust_learning_rate(optimizer, cla.lr)
     # epoch_per_save = cla.save_freq
-    max_epochs = 150
+    max_epochs = 100
     best_val_loss, best_val_psnr = 100000, 0
     epochs_wo_best = 0
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.5)
@@ -213,20 +215,20 @@ def main():
         #    icvl_64_31_TL_2.transform = harder_train_transform
 
         # 5, 10, 20, 30, 40, 50, blind
-        if epoch < -20:
+        if epoch < 20:
             noise = 10
-        elif epoch < -50:
+        elif epoch < 30:
             noise = 20
-        elif epoch < -70:
+        elif epoch < 40:
             noise = 30
-        elif epoch < -85:
+        elif epoch < 50:
             noise = 10
-        elif epoch < -100:
+        elif epoch < 60:
             noise = 40
-        elif epoch < -110:
-            noise = 10
-        else:
+        elif epoch < 70:
             noise = 30
+        else:
+            noise = 20
 
         # if epoch == 30:
         #    # RESET LR???
@@ -295,7 +297,7 @@ def main():
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(
-                cla.save_dir, prefix, f"sm_crop_30db_{cla.loss}.pth"
+                cla.save_dir, prefix, f"sm_crop_30-50db-300_{cla.loss}.pth"
             )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
