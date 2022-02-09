@@ -122,9 +122,24 @@ def main():
     optimizer = optim.Adam(net.parameters(), lr=cla.lr, weight_decay=cla.wd, amsgrad=False)
 
     # """Resume previous model"""
-    if cla.resume:
+    if cla.resume_path is not None:
         # Load checkpoint.
-        torch.load(cla.resume_path, not cla.no_ropt)
+        checkpoint = torch.load(cla.resume_path, not cla.no_ropt)
+        if not cla.no_resume_opt:
+            optimizer.load_state_dict(checkpoint["optimizer"])
+
+        try:
+            net.load_state_dict(checkpoint["net"])
+        except RuntimeError:
+            from collections import OrderedDict
+
+            new_state_dict = OrderedDict()
+            for k, v in checkpoint["net"].items():
+                name = k[7:]  # remove `module.`
+                new_state_dict[name] = v
+            # load params
+            net.load_state_dict(new_state_dict)
+
     else:
         logger.info("==> Building model..")
         helper.init_network(net, cla.nn_init_mode)

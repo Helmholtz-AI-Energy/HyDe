@@ -53,8 +53,8 @@ def basic_parser(parser):
     )
     parser.add_argument("--seed", type=int, default=42, help="random seed to use. default=2018")
     parser.add_argument("--resume", "-r", action="store_true", help="resume from checkpoint")
-    parser.add_argument("--no-ropt", "-nro", action="store_true", help="not resume optimizer")
-    parser.add_argument("--resumePath", "-rp", type=str, default=None, help="checkpoint to use.")
+    parser.add_argument("--no-resume-opt", "-nro", action="store_true", help="not resume optimizer")
+    parser.add_argument("--resume_path", "-rp", type=str, default=None, help="checkpoint to use.")
     parser.add_argument(
         "--datadir",
         "-d",
