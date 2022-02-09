@@ -198,17 +198,17 @@ def main():
         #    icvl_64_31_TL_2.transform = harder_train_transform
 
         # 5, 10, 20, 30, 40, 50, blind
-        if epoch < 20:
+        if epoch < -20:
             noise = 10
-        elif epoch < 50:
+        elif epoch < -50:
             noise = 20
-        elif epoch < 70:
+        elif epoch < -70:
             noise = 30
-        elif epoch < 85:
+        elif epoch < -85:
             noise = 10
-        elif epoch < 100:
+        elif epoch < -100:
             noise = 40
-        elif epoch < 110:
+        elif epoch < -110:
             noise = 10
         else:
             noise = 30
@@ -280,7 +280,7 @@ def main():
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(
-                cla.save_dir, prefix, f"sm_crop_seeded_20-30-40-50_db_{cla.loss}.pth"
+                cla.save_dir, prefix, f"sm_crop_30db_{cla.loss}.pth"
             )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
