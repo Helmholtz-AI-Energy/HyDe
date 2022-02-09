@@ -32,19 +32,20 @@ def _train_loop(
                 loss.backward()
                 loss_data += loss.item()
         else:
-            #with amp.autocast():
-            outputs = network(inputs)
-            outputs = outputs.squeeze(1)
-            targets = targets.squeeze(1)
-            loss = criterion(outputs, targets)
-            #scaler.scale(loss).backward()
-            loss.backward()
-            loss_data += loss.item()
-
+            with amp.autocast():
+                outputs = network(inputs)
+                outputs = outputs.squeeze(1)
+                targets = targets.squeeze(1)
+                loss = criterion(outputs, targets)
+            scaler.scale(loss).backward()
+            #loss.backward()
+            #loss_data += loss.item()
+        
+        scaler.unscale_(optimizer)
         total_norm = nn.utils.clip_grad_norm_(network.parameters(), cla.clip)
-        #scaler.step(optimizer)
-        #scaler.update()
-        optimizer.step()
+        scaler.step(optimizer)
+        scaler.update()
+        #optimizer.step()
 
         train_loss += loss_data
         avg_loss = train_loss / (batch_idx + 1)

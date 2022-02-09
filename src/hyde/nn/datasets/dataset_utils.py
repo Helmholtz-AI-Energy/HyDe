@@ -140,7 +140,7 @@ class ICVLDataset(Dataset):
         self.loadfrom = []  # np.zeros(first, dtype=np.float32)
         for c, f in enumerate(self.files):
             loaded, _ = utils.normalize(
-                torch.tensor(np.asarray(np.load(f), dtype=np.float32)), by_band=True
+                torch.tensor(np.asarray(np.load(f), dtype=np.float32)), by_band=True, band_dim=0
             )
             self.loadfrom.append(loaded)
 
@@ -151,13 +151,13 @@ class ICVLDataset(Dataset):
                 [
                     transforms.RandomCrop(crop_size),
                     transforms.RandomAffine(
-                        degrees=180,
+                        degrees=170,
                         scale=(0.2, 1),
-                        shear=20,
+                        #shear=20,
                     ),
                     transforms.RandomVerticalFlip(p=0.5),
                     transforms.RandomHorizontalFlip(p=0.5),
-                    transforms.RandomPerspective(),
+                    #transforms.RandomPerspective(),
                     # transforms.RandomApply(
                     #     [
                     #         hyde_transforms.RandRot90Transform(),
