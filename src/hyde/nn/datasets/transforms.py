@@ -17,6 +17,7 @@ __all__ = [
     "AddNoiseMixed",
     "AddNoiseNonIIDdB",
     "AddNoiseStripe",
+    "RandChoice",
     "RandRot90Transform",
 ]
 
@@ -226,6 +227,27 @@ class AddNoiseComplex(AddNoiseMixed):
             ],
             num_bands=[0.33333, 0.33333, 0.33333],
         )
+
+
+class RandChoice:
+    def __init__(self, transforms, p=None):
+        self.transforms = transforms
+        self.p = p
+        if isinstance(p, (int, float)):
+            self.p = [p for _ in transforms]
+        # TODO: document me!
+        # this will apply equal probability to each transform
+
+    def __call__(self, x, *args):
+        if self.p is None:
+            # in this case, select 1 element of the list to call
+            # equal probability that it is no transform
+            i = random.randrange(len(self.transforms) + 1)
+            if i == len(self.transforms):
+                return x
+            return random.choice(self.transforms)(x, *args)
+        else:
+            return random.choices(self.transforms, weights=self.p)[0](x, *args)
 
 
 class RandRot90Transform:

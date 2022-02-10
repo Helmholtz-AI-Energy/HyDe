@@ -18,6 +18,8 @@ from hyde.nn.datasets import dataset_utils as ds_utils
 from hyde.nn.datasets.transforms import AddGaussianNoise, AddGaussianNoiseBlind
 from hyde.nn.parsers import qrnn_parser
 
+import random
+
 logger = logging.get_logger()
 
 
@@ -152,12 +154,14 @@ def main():
     # AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=10),
 
     crop_size = (256, 256)
+    band_norm = True
 
     train_icvl = ds_utils.ICVLDataset(
         cla.datadir,
         common_transforms=None,
         transform=AddGaussianNoise(15),
         crop_size=crop_size,
+        band_norm=band_norm,
     )
     if distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_icvl)
@@ -183,6 +187,7 @@ def main():
         transform=AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=10),  # blind gaussain noise
         val=True,
         crop_size=crop_size,
+        band_norm=band_norm,
     )
     if distributed:
         val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset)
@@ -206,19 +211,21 @@ def main():
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.1)
 
     for epoch in range(max_epochs):
-        logger.info(f"\t\t--------- Start epoch {epoch + 1} of {max_epochs} ---------\t")
-        torch.manual_seed(epoch)
-        torch.cuda.manual_seed(epoch)
-        np.random.seed(epoch)
+        logger.info(f"\t\t--------- Start epoch {epoch} of {max_epochs} ---------\t")
+        #s = torch.random.seed()
+        torch.manual_seed(epoch+100000)
+        torch.cuda.manual_seed(epoch+100000)
+        np.random.seed(epoch+100000)
         # TODO: change the transform to something harder at some point in the training?
         # if epoch == 10:
         #    icvl_64_31_TL_2.transform = harder_train_transform
 
         # 5, 10, 20, 30, 40, 50, blind
-        if epoch < 20:
-            noise = 20
-        elif epoch < 30:
-            noise = 40
+        #if epoch < 20:
+        #    noise = 20
+        if epoch < -30:
+            noise = random.randint(10, 45)
+            #noise = 34
         #elif epoch < -20:
         #    noise = 25
         #elif epoch < -40:
@@ -238,14 +245,14 @@ def main():
         #    helper.adjust_learning_rate(optimizer, cla.lr)
         #    helper.adjust_learning_rate(optimizer, cla.lr)
 
-        if epoch == 20:
-            helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
-        elif epoch == 30:
-            helper.adjust_learning_rate(optimizer, cla.lr)
-        elif epoch == 35:
-            helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
-        elif epoch == 45:
-            helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
+        #if epoch == 20:
+        #    helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
+        #elif epoch == 30:
+        #    helper.adjust_learning_rate(optimizer, cla.lr)
+        #elif epoch == 35:
+        #    helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
+        #elif epoch == 35:  #45:
+        #    helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
         #elif epoch == 45:
         #    helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
 
@@ -258,7 +265,7 @@ def main():
             #elif 50 <= epoch < 70:
             #    train_icvl.transform = AddGaussianNoiseBlind(max_sigma_db=30, min_sigma_db=20)
             #else:
-            train_icvl.transform = AddGaussianNoiseBlind(max_sigma_db=36, min_sigma_db=20)
+            train_icvl.transform = AddGaussianNoiseBlind(max_sigma_db=36, min_sigma_db=10) # 36/20
 
             logger.info("Noise level: BLIND!")
 
@@ -267,7 +274,7 @@ def main():
         helper.display_learning_rate(optimizer)
         ttime = time.perf_counter()
         training_utils.train(
-            train_loader, net, cla, epoch, optimizer, criterion, bandwise, writer=writer, iterations=5
+            train_loader, net, cla, epoch, optimizer, criterion, bandwise, writer=writer, iterations=10
         )
         ttime = time.perf_counter() - ttime
 
@@ -286,9 +293,9 @@ def main():
         logger.info(f"Expected time remaing: {expected_time_remaining}")
 
         if epoch == 0:
-            logger.debug(f"Max mem alocated: {torch.cuda.max_memory_allocated(device=None)}")
+            logger.info(f"Max mem alocated: {torch.cuda.max_memory_allocated(device=None)}")
 
-        #scheduler.step(ls)
+        scheduler.step(ls)
 
         epochs_wo_best += 1
 
@@ -305,7 +312,7 @@ def main():
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(
-                cla.save_dir, prefix, f"no-perspective-transform-w-up-50_{cla.loss}.pth"
+                cla.save_dir, prefix, f"blind-basic-centercrop-50_{cla.loss}.pth"
             )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path

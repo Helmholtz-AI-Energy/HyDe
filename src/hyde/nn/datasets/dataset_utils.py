@@ -129,6 +129,7 @@ class ICVLDataset(Dataset):
         common_transforms=None,
         transform=None,
         val=False,
+        band_norm=True,
     ):
         super(ICVLDataset, self).__init__()
         datadir = Path(datadir)
@@ -140,7 +141,7 @@ class ICVLDataset(Dataset):
         self.loadfrom = []  # np.zeros(first, dtype=np.float32)
         for c, f in enumerate(self.files):
             loaded, _ = utils.normalize(
-                torch.tensor(np.asarray(np.load(f), dtype=np.float32)), by_band=True, band_dim=0
+                torch.tensor(np.load(f), dtype=torch.float32), by_band=band_norm, band_dim=0
             )
             self.loadfrom.append(loaded)
 
@@ -149,26 +150,35 @@ class ICVLDataset(Dataset):
         if not val:
             self.base_transforms = transforms.Compose(
                 [
-                    transforms.RandomCrop(crop_size),
-                    transforms.RandomAffine(
-                        degrees=170,
-                        scale=(0.2, 1),
-                        #shear=20,
-                    ),
+                    #transforms.RandomCrop(crop_size),
+                    transforms.CenterCrop(crop_size),
+                    #transforms.RandomAffine(
+                    #    degrees=170,
+                    #    scale=(0.2, 1),
+                    #    shear=20,
+                    #),
                     transforms.RandomVerticalFlip(p=0.5),
-                    transforms.RandomHorizontalFlip(p=0.5),
+                    hyde_transforms.RandRot90Transform(),
+                    #transforms.RandomHorizontalFlip(p=0.5),
                     #transforms.RandomPerspective(),
-                    # transforms.RandomApply(
-                    #     [
-                    #         hyde_transforms.RandRot90Transform(),
-                    #         transforms.RandomVerticalFlip(p=0.5),
-                    #     ],
-                    #     p=0.75,
-                    # ),
+                    #hyde_transforms.RandChoice(  #RandomApply(
+                    #    [
+                            #hyde_transforms.RandRot90Transform(),
+                            #transforms.RandomVerticalFlip(p=0.5),
+                            #transforms.RandomAffine(
+                            #    degrees=170,
+                            #    scale=(0.2, 1),
+                            #    shear=20,
+                            #),
+                            #transforms.RandomHorizontalFlip(p=0.5),
+                            #transforms.RandomPerspective(),
+                    #    ],
+                    #    p=None, #0.5,
+                    #),
                 ]
             )
         else:
-            self.base_transforms = transforms.RandomCrop(crop_size)
+            self.base_transforms = transforms.CenterCrop(crop_size)  # RandomCrop(crop_size)
 
         self.target_transform = target_transform
         self.common_transforms = common_transforms

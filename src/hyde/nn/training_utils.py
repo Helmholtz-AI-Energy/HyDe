@@ -39,10 +39,11 @@ def _train_loop(
                 loss = criterion(outputs, targets)
             scaler.scale(loss).backward()
             #loss.backward()
-            #loss_data += loss.item()
+            loss_data += loss.item()
         
-        scaler.unscale_(optimizer)
-        total_norm = nn.utils.clip_grad_norm_(network.parameters(), cla.clip)
+        #scaler.unscale_(optimizer)
+        #total_norm = nn.utils.clip_grad_norm_(network.parameters(), cla.clip)
+        total_norm = None
         scaler.step(optimizer)
         scaler.update()
         #optimizer.step()
