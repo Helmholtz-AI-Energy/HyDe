@@ -223,9 +223,8 @@ def main():
         # 5, 10, 20, 30, 40, 50, blind
         #if epoch < 20:
         #    noise = 20
-        if epoch < -30:
-            noise = random.randint(10, 45)
-            #noise = 34
+        if epoch < 30:
+            noise = 34
         #elif epoch < -20:
         #    noise = 25
         #elif epoch < -40:
@@ -245,16 +244,16 @@ def main():
         #    helper.adjust_learning_rate(optimizer, cla.lr)
         #    helper.adjust_learning_rate(optimizer, cla.lr)
 
-        #if epoch == 20:
-        #    helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
-        #elif epoch == 30:
-        #    helper.adjust_learning_rate(optimizer, cla.lr)
-        #elif epoch == 35:
-        #    helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
-        #elif epoch == 35:  #45:
-        #    helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
-        #elif epoch == 45:
-        #    helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
+        if epoch == 20:
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
+        elif epoch == 30:
+            helper.adjust_learning_rate(optimizer, cla.lr)
+        elif epoch == 35:
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
+        elif epoch == 35:  #45:
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
+        elif epoch == 45:
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
 
         if noise is not None:
             train_icvl.transform = AddGaussianNoise(noise)
@@ -295,7 +294,7 @@ def main():
         if epoch == 0:
             logger.info(f"Max mem alocated: {torch.cuda.max_memory_allocated(device=None)}")
 
-        scheduler.step(ls)
+        #scheduler.step(ls)
 
         epochs_wo_best += 1
 
@@ -312,7 +311,7 @@ def main():
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(
-                cla.save_dir, prefix, f"blind-basic-centercrop-50_{cla.loss}.pth"
+                cla.save_dir, prefix, f"old-qrnn-blind-basic-centercrop-trad50-sigmoid_{cla.loss}.pth"
             )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path

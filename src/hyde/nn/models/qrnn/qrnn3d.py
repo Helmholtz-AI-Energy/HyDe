@@ -406,6 +406,7 @@ class QRNNREDC3D(nn.Module):
         out = out + xs.pop()
         out = self.reconstructor(out)
         out = out + xs.pop()
+        out = torch.sigmoid(out)
         return out
 
 

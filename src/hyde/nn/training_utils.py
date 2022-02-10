@@ -36,6 +36,9 @@ def _train_loop(
                 outputs = network(inputs)
                 outputs = outputs.squeeze(1)
                 targets = targets.squeeze(1)
+                
+                #outputs = torch.clamp(outputs, min=0., max=1.)
+
                 loss = criterion(outputs, targets)
             scaler.scale(loss).backward()
             #loss.backward()
