@@ -34,38 +34,58 @@ class QRNN3DLayer(nn.Module):
         h_ = (1 - f) * z if h is None else f * h + (1 - f) * z
         return h_
 
+    # def forward(self, inputs, reverse=False):
+    #     h = None
+    #     Z, F = self._conv_step(inputs)
+    #     # out_sh = list(Z[0].shape)
+    #     # out_sh.insert(0, 2)
+    #     out = None
+    #     ln_h = len(Z.split(1, 2))
+    #     if not reverse:
+    #         for c, (z, f) in enumerate(zip(Z.split(1, 2), F.split(1, 2))):  # split along timestep
+    #             h = self._rnn_step(z, f, h)
+    #             if out is None:
+    #                 out_sh = list(h.shape)
+    #                 out_sh[2] = ln_h
+    #                 out = torch.zeros(out_sh, device=inputs.device, dtype=inputs.dtype)
+    #             out[:, :, c : c + 1] = h
+    #             # h_time.append(h)
+    #     else:
+    #         for c, (z, f) in enumerate(
+    #             (zip(reversed(Z.split(1, 2)), reversed(F.split(1, 2))))
+    #         ):  # split along timestep
+    #             h = self._rnn_step(z, f, h)
+    #             # h_time.insert(0, h)
+    #             if out is None:
+    #                 out_sh = list(h.shape)
+    #                 out_sh[2] = ln_h
+    #                 out = torch.zeros(out_sh, device=inputs.device, dtype=inputs.dtype)
+    #             idx = out.shape[2] - 1 - c
+    #             out[:, :, idx : idx + 1] = h
+    #
+    #     # return concatenated hidden states
+    #     # out = torch.cat(h_time, dim=2)
+    #     return out
     def forward(self, inputs, reverse=False):
         h = None
         Z, F = self._conv_step(inputs)
-        # out_sh = list(Z[0].shape)
-        # out_sh.insert(0, 2)
-        out = None
-        ln_h = len(Z.split(1, 2))
+        h_time = []
+
         if not reverse:
-            for c, (z, f) in enumerate(zip(Z.split(1, 2), F.split(1, 2))):  # split along timestep
+            for time, (z, f) in enumerate(
+                zip(Z.split(1, 2), F.split(1, 2))
+            ):  # split along timestep
                 h = self._rnn_step(z, f, h)
-                if out is None:
-                    out_sh = list(h.shape)
-                    out_sh[2] = ln_h
-                    out = torch.zeros(out_sh, device=inputs.device, dtype=inputs.dtype)
-                out[:, :, c : c + 1] = h
-                # h_time.append(h)
+                h_time.append(h)
         else:
-            for c, (z, f) in enumerate(
+            for time, (z, f) in enumerate(
                 (zip(reversed(Z.split(1, 2)), reversed(F.split(1, 2))))
             ):  # split along timestep
                 h = self._rnn_step(z, f, h)
-                # h_time.insert(0, h)
-                if out is None:
-                    out_sh = list(h.shape)
-                    out_sh[2] = ln_h
-                    out = torch.zeros(out_sh, device=inputs.device, dtype=inputs.dtype)
-                idx = out.shape[2] - 1 - c
-                out[:, :, idx : idx + 1] = h
+                h_time.insert(0, h)
 
         # return concatenated hidden states
-        # out = torch.cat(h_time, dim=2)
-        return out
+        return torch.cat(h_time, dim=2)
 
     def extra_repr(self):
         return "act={}".format(self.act)
