@@ -205,55 +205,70 @@ def main():
 
     helper.adjust_learning_rate(optimizer, cla.lr)
     # epoch_per_save = cla.save_freq
-    max_epochs = 50
+    max_epochs = 150
     best_val_loss, best_val_psnr = 100000, 0
     epochs_wo_best = 0
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.1)
 
     for epoch in range(max_epochs):
-        logger.info(f"\t\t--------- Start epoch {epoch} of {max_epochs} ---------\t")
+        logger.info(f"\t\t--------- Start epoch {epoch} of {max_epochs - 1} ---------\t")
         #s = torch.random.seed()
-        torch.manual_seed(epoch+100000)
-        torch.cuda.manual_seed(epoch+100000)
-        np.random.seed(epoch+100000)
+        torch.manual_seed(epoch+2018)
+        torch.cuda.manual_seed(epoch+2018)
+        np.random.seed(epoch+2018)
         # TODO: change the transform to something harder at some point in the training?
         # if epoch == 10:
         #    icvl_64_31_TL_2.transform = harder_train_transform
 
         # 5, 10, 20, 30, 40, 50, blind
-        #if epoch < 20:
-        #    noise = 20
         if epoch < 30:
-            noise = 34
-        #elif epoch < -20:
-        #    noise = 25
-        #elif epoch < -40:
-        #    noise = 30
-        #elif epoch < -50:
+            noise = 40
+        #elif epoch < 10:
         #    noise = 10
-        #elif epoch < 55:
-        #    noise = 40
-        #elif epoch < -60:
+        #elif epoch < 15:
         #    noise = 20
+        #elif epoch < 25:
+        #    noise = 30
+        #elif epoch < 30:
+        #    noise = 35
+        #elif epoch < 50:
+        #    noise = 40
         else:
             noise = None
 
-        #if epoch == 60:
+        noise = None
+
+        #if epoch == 50:
         #    # RESET LR???
         #    scheduler._reset()
         #    helper.adjust_learning_rate(optimizer, cla.lr)
         #    helper.adjust_learning_rate(optimizer, cla.lr)
+        # LR warmup
+        if epoch == 0:
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.0001)
+        elif epoch == 1:
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.001)
+        elif epoch == 2:
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
+        elif epoch == 3:
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
+        elif epoch == 4:
+            helper.adjust_learning_rate(optimizer, cla.lr * 1)
 
-        if epoch == 20:
+        if epoch == 120:
             helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
-        elif epoch == 30:
-            helper.adjust_learning_rate(optimizer, cla.lr)
-        elif epoch == 35:
-            helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
-        elif epoch == 35:  #45:
+        if epoch == 140:
             helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
-        elif epoch == 45:
-            helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
+        #elif epoch == 30:
+        #    helper.adjust_learning_rate(optimizer, cla.lr)
+        #elif epoch == 35:
+        #    helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
+        #elif epoch == 35:  #45:
+        #    helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
+        #elif epoch == 45:
+        #    helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
+        #elif epoch == 50:
+        #    helper.adjust_learning_rate(optimizer, cla.lr * 1)
 
         if noise is not None:
             train_icvl.transform = AddGaussianNoise(noise)
@@ -264,7 +279,7 @@ def main():
             #elif 50 <= epoch < 70:
             #    train_icvl.transform = AddGaussianNoiseBlind(max_sigma_db=30, min_sigma_db=20)
             #else:
-            train_icvl.transform = AddGaussianNoiseBlind(max_sigma_db=36, min_sigma_db=10) # 36/20
+            train_icvl.transform = AddGaussianNoiseBlind(max_sigma_db=42, min_sigma_db=10) # 36/20
 
             logger.info("Noise level: BLIND!")
 
@@ -273,7 +288,7 @@ def main():
         helper.display_learning_rate(optimizer)
         ttime = time.perf_counter()
         training_utils.train(
-            train_loader, net, cla, epoch, optimizer, criterion, bandwise, writer=writer, iterations=10
+            train_loader, net, cla, epoch, optimizer, criterion, bandwise, writer=writer, iterations=16
         )
         ttime = time.perf_counter() - ttime
 
@@ -311,7 +326,7 @@ def main():
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(
-                cla.save_dir, prefix, f"old-qrnn-blind-basic-centercrop-trad50-sigmoid_{cla.loss}.pth"
+                cla.save_dir, prefix, f"centercrop-allchoices-blind120-clamped-all_lrwarmup-{cla.loss}.pth"
             )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path

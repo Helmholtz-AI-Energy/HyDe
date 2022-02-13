@@ -1,4 +1,5 @@
 import random
+from itertools import combinations
 from typing import List
 
 import numpy as np
@@ -230,22 +231,40 @@ class AddNoiseComplex(AddNoiseMixed):
 
 
 class RandChoice:
-    def __init__(self, transforms, p=None):
+    def __init__(self, transforms, p=None, combos=False):
         self.transforms = transforms
         self.p = p
         if isinstance(p, (int, float)):
             self.p = [p for _ in transforms]
         # TODO: document me!
         # this will apply equal probability to each transform
+        self.combos = []
+        for i in range(1, len(self.transforms)+1):
+            self.combos.extend(list(combinations(self.transforms, i)))
+        self.use_combos = combos
+
 
     def __call__(self, x, *args):
+        if self.use_combos:
+            trfms = self.combos
+        else:
+            trfms = self.transforms
+
         if self.p is None:
             # in this case, select 1 element of the list to call
             # equal probability that it is no transform
-            i = random.randrange(len(self.transforms) + 1)
-            if i == len(self.transforms):
+            i = random.randrange(len(trfms) + 1)
+            if i == len(trfms):
                 return x
-            return random.choice(self.transforms)(x, *args)
+
+            if not self.use_combos:
+                return random.choice(self.transforms)(x, *args)
+            
+            sel_trfm = random.choice(trfms)
+            for tf in sel_trfm:
+                x = tf(x, *args)
+            return x
+            #return random.choice(self.transforms)(x, *args)
         else:
             return random.choices(self.transforms, weights=self.p)[0](x, *args)
 

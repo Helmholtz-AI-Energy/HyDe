@@ -386,6 +386,8 @@ class QRNNREDC3D(nn.Module):
         else:
             self.reconstructor = reconstructor(channels, in_channels, bias=True, bn=bn, act=act)
 
+        #self.end_fn = nn.Hardsigmoid()  # 
+
     def forward(self, x):
         xs = [x]
         gc.enable()
@@ -406,7 +408,10 @@ class QRNNREDC3D(nn.Module):
         out = out + xs.pop()
         out = self.reconstructor(out)
         out = out + xs.pop()
-        out = torch.sigmoid(out)
+        #out = 1. / (1. + torch.exp(5. + (-10. * out)))
+        #out = nn.functional.relu(out)
+        out = torch.clamp(out, min=0., max=1.)
+        #out = self.end_fn(out)
         return out
 
 

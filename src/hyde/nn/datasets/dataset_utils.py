@@ -155,26 +155,28 @@ class ICVLDataset(Dataset):
                     #transforms.RandomAffine(
                     #    degrees=170,
                     #    scale=(0.2, 1),
-                    #    shear=20,
+                    #    #shear=20,
                     #),
-                    transforms.RandomVerticalFlip(p=0.5),
-                    hyde_transforms.RandRot90Transform(),
+                    #transforms.RandomVerticalFlip(p=0.5),
+                    #hyde_transforms.RandRot90Transform(),
                     #transforms.RandomHorizontalFlip(p=0.5),
                     #transforms.RandomPerspective(),
-                    #hyde_transforms.RandChoice(  #RandomApply(
-                    #    [
+                    hyde_transforms.RandChoice(  #RandomApply(
+                        [
+                            hyde_transforms.RandRot90Transform(),
                             #hyde_transforms.RandRot90Transform(),
-                            #transforms.RandomVerticalFlip(p=0.5),
+                            transforms.RandomVerticalFlip(p=0.9),
                             #transforms.RandomAffine(
-                            #    degrees=170,
-                            #    scale=(0.2, 1),
+                            #    degrees=180,
+                            #    scale=(0.1, 1),
                             #    shear=20,
                             #),
-                            #transforms.RandomHorizontalFlip(p=0.5),
-                            #transforms.RandomPerspective(),
-                    #    ],
-                    #    p=None, #0.5,
-                    #),
+                            transforms.RandomHorizontalFlip(p=0.9),
+                            #transforms.RandomPerspective(p=0.88),
+                        ],
+                        p=None, #0.5,
+                        combos=True,
+                    ),
                 ]
             )
         else:
