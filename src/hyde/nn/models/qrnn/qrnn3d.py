@@ -341,6 +341,7 @@ class QRNNREDC3D(nn.Module):
         bn=True,
         act="tanh",
         plain=False,
+        clamp=False,
     ):
         super(QRNNREDC3D, self).__init__()
         assert sample_idx is None or isinstance(sample_idx, list)
@@ -386,32 +387,28 @@ class QRNNREDC3D(nn.Module):
         else:
             self.reconstructor = reconstructor(channels, in_channels, bias=True, bn=bn, act=act)
 
-        #self.end_fn = nn.Hardsigmoid()  # 
+        self.clamp = clamp
 
     def forward(self, x):
         xs = [x]
         gc.enable()
         out = self.feature_extractor(xs[0])
-        # print("finished feature extractor")
         gc.collect()
 
         xs.append(out)
         if self.enable_ad:
             out, reverse = self.encoder(out, xs, reverse=False)
-            # print("after encoder")
             gc.collect()
             out = self.decoder(out, xs, reverse=(reverse))
-            # print("after decoder")
         else:
             out = self.encoder(out, xs)
             out = self.decoder(out, xs)
         out = out + xs.pop()
         out = self.reconstructor(out)
         out = out + xs.pop()
-        #out = 1. / (1. + torch.exp(5. + (-10. * out)))
-        #out = nn.functional.relu(out)
-        out = torch.clamp(out, min=0., max=1.)
-        #out = self.end_fn(out)
+
+        if self.clamp:
+            out = torch.clamp(out, min=0.0, max=1.0)
         return out
 
 

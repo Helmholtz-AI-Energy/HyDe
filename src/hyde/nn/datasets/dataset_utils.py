@@ -150,31 +150,20 @@ class ICVLDataset(Dataset):
         if not val:
             self.base_transforms = transforms.Compose(
                 [
-                    #transforms.RandomCrop(crop_size),
                     transforms.CenterCrop(crop_size),
-                    #transforms.RandomAffine(
-                    #    degrees=170,
-                    #    scale=(0.2, 1),
-                    #    #shear=20,
-                    #),
-                    #transforms.RandomVerticalFlip(p=0.5),
-                    #hyde_transforms.RandRot90Transform(),
-                    #transforms.RandomHorizontalFlip(p=0.5),
-                    #transforms.RandomPerspective(),
-                    hyde_transforms.RandChoice(  #RandomApply(
+                    hyde_transforms.RandChoice(
                         [
                             hyde_transforms.RandRot90Transform(),
-                            #hyde_transforms.RandRot90Transform(),
                             transforms.RandomVerticalFlip(p=0.9),
-                            #transforms.RandomAffine(
-                            #    degrees=180,
-                            #    scale=(0.1, 1),
-                            #    shear=20,
-                            #),
+                            # transforms.RandomAffine(
+                            #     degrees=180,
+                            #     scale=(0.1, 1),
+                            #     shear=20,
+                            # ),
                             transforms.RandomHorizontalFlip(p=0.9),
-                            #transforms.RandomPerspective(p=0.88),
+                            # transforms.RandomPerspective(p=0.88),
                         ],
-                        p=None, #0.5,
+                        p=None,  # 0.5,
                         combos=True,
                     ),
                 ]

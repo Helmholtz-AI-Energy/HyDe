@@ -37,20 +37,13 @@ def _train_loop(
                 outputs = outputs.squeeze(1)
                 targets = targets.squeeze(1)
 
-                #if epoch > 49:
-                #    outputs = torch.clamp(outputs, min=0, max=1)
-
                 loss = criterion(outputs, targets)
             scaler.scale(loss).backward()
-            #loss.backward()
             loss_data += loss.item()
-        
-        #scaler.unscale_(optimizer)
-        #total_norm = nn.utils.clip_grad_norm_(network.parameters(), cla.clip)
+
         total_norm = None
         scaler.step(optimizer)
         scaler.update()
-        #optimizer.step()
 
         train_loss += loss_data
         avg_loss = train_loss / (batch_idx + 1)
@@ -132,9 +125,6 @@ def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, write
             total_psnr += psnr
             avg_psnr = total_psnr / (batch_idx + 1)
 
-            # if batch_idx % cla.log_freq == 0:
-            #     logger.info(f"Loss: {avg_loss} | PSNR: {avg_psnr}")
-            # break
     if dist.is_initialized():
         # average all the results
         sz = dist.get_world_size()

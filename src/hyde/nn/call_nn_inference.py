@@ -10,7 +10,7 @@ logger = logging.get_logger()
 
 
 class QRNNInference(nn.Module):
-    def __init__(self, arch, pretrained_file, frozen=True):
+    def __init__(self, arch: str, pretrained_file, frozen=True):
         # get model
         super().__init__()
         network = models.__dict__[arch]()
@@ -32,6 +32,8 @@ class QRNNInference(nn.Module):
             network.load_state_dict(new_state_dict)
 
         self.network = network
+        if "qrnn" in arch:
+            self.network.clamp = True
         logger.debug(self.network)
         self.frozen = frozen
         self.network.eval()
