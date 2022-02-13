@@ -15,6 +15,8 @@ class MemNet(nn.Module):
         self.freeze_bn_affine = True
 
     def forward(self, x):
+        if x.ndim == 5:
+            x = x.squeeze(1)
         residual = x
         out = self.feature_extractor(x)
         ys = [out]

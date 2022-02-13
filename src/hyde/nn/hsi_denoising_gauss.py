@@ -152,6 +152,8 @@ def main():
 
     crop_size = (256, 256)
     band_norm = True
+    num_bands = 10 if cla.arch in "hsidenet" else -1
+
 
     train_icvl = ds_utils.ICVLDataset(
         cla.datadir,
@@ -159,6 +161,7 @@ def main():
         transform=AddGaussianNoise(15),
         crop_size=crop_size,
         band_norm=band_norm,
+        num_bands=num_bands,
     )
     if distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_icvl)
@@ -185,6 +188,7 @@ def main():
         val=True,
         crop_size=crop_size,
         band_norm=band_norm,
+        num_bands=num_bands,
     )
     if distributed:
         val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset)
@@ -234,7 +238,7 @@ def main():
         if epoch == 140:
             helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
 
-        if cla.arch in "qrnn":
+        if epoch == 50 and cla.arch in "qrnn":
             net.clamp = True
 
         if noise is not None:
@@ -293,7 +297,7 @@ def main():
         if epochs_wo_best == 0 or (epoch + 1) % 10 == 0:
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
-            model_latest_path = os.path.join(cla.save_dir, prefix, f"current_model-{cla.loss}.pth")
+            model_latest_path = os.path.join(cla.save_dir, prefix, f"current_model_gauss-{cla.loss}.pth")
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
             )

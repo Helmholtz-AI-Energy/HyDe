@@ -130,6 +130,7 @@ class ICVLDataset(Dataset):
         transform=None,
         val=False,
         band_norm=True,
+        num_bands=-1,
     ):
         super(ICVLDataset, self).__init__()
         datadir = Path(datadir)
@@ -176,12 +177,16 @@ class ICVLDataset(Dataset):
         self.length = len(self.files)
 
         self.transform = transform
+        self.num_bands = num_bands
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, idx):
         img = self.loadfrom[idx].unsqueeze(0)
+        
+        if self.num_bands > 0:
+            img = img[:, :self.num_bands]
 
         img = self.base_transforms(img)
 

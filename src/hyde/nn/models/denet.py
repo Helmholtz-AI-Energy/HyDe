@@ -50,9 +50,12 @@ class DeNet(nn.Module):
         #   self._initialize_weights()
 
     def forward(self, x):
-        y = x
+        #y = x
+        if x.ndim == 5:
+            x = x.squeeze(1)
+        
         out = self.denet(x)
-        return y - out
+        return out #y - out
 
     def _initialize_weights(self):
         print("===> Start initializing weights")
