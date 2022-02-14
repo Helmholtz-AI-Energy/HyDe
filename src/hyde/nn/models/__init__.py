@@ -27,7 +27,7 @@ def memnet():
 
 
 def memnet3d():
-    net = MemNet(31, 64, 6, 6, conv3d=True)
+    net = MemNet(1, 32, 2, 2, conv3d=True)  # other running one -> 1, 64, 3, 2
     net.use_2dconv = False
     net.bandwise = False
     return net

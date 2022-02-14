@@ -201,5 +201,7 @@ class ICVLDataset(Dataset):
 
         if self.target_transform is not None:
             target = self.target_transform(target)
-
+        #print('end dataset getitem', img.dtype)
+        img = img.to(dtype=torch.float)
+        target = target.to(dtype=torch.float)
         return img, target

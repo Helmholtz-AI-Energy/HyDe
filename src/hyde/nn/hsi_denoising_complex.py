@@ -144,7 +144,7 @@ def main():
         ]
     )
 
-    crop_size = (512, 512)
+    crop_size = (256, 256)
 
     train_icvl = ds_utils.ICVLDataset(
         cla.datadir,
@@ -310,12 +310,12 @@ def main():
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
             )
 
-        if (epoch % epoch_per_save == 0 and epoch > 0) or epoch == max_epochs - 1:
-            logger.info("Saving current network...")
-            model_latest_path = os.path.join(basedir, prefix, "model_latest.pth")
-            training_utils.save_checkpoint(
-                cla, epoch, net, optimizer, model_out_path=model_latest_path
-            )
+        #if (epoch % epoch_per_save == 0 and epoch > 0) or epoch == max_epochs - 1:
+        #    logger.info("Saving current network...")
+        #    model_latest_path = os.path.join(basedir, prefix, "model_latest.pth")
+        #    training_utils.save_checkpoint(
+        #        cla, epoch, net, optimizer, model_out_path=model_latest_path
+        #    )
 
 
 if __name__ == "__main__":

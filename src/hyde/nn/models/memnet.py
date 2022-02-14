@@ -6,6 +6,8 @@ import torch.nn as nn
 class MemNet(nn.Module):
     def __init__(self, in_channels, channels, num_memblock, num_resblock, conv3d=False):
         super(MemNet, self).__init__()
+        if conv3d:
+            in_channels = 1
         self.feature_extractor = BNReLUConv(in_channels, channels, conv3d=conv3d)
         self.reconstructor = BNReLUConv(channels, in_channels, conv3d=conv3d)
         self.dense_memory = nn.ModuleList(
@@ -13,9 +15,10 @@ class MemNet(nn.Module):
         )
         self.freeze_bn = True
         self.freeze_bn_affine = True
+        self.conv3d = conv3d
 
     def forward(self, x):
-        if x.ndim == 5:
+        if x.ndim == 5 and not self.conv3d:
             x = x.squeeze(1)
         residual = x
         out = self.feature_extractor(x)
