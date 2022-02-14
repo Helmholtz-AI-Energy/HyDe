@@ -160,9 +160,11 @@ def main():
     train_transform = transforms.Compose(
         [
             AddNoiseNonIIDdB(),
-            #transforms.RandomApply(
+            # transforms.RandomApply(
             RandChoice(
-                [AddNoiseImpulse(), AddNoiseStripe(), AddNoiseDeadline()], p=0.75, combos=True,
+                [AddNoiseImpulse(), AddNoiseStripe(), AddNoiseDeadline()],
+                p=0.75,
+                combos=True,
             ),
         ]
     )
@@ -224,9 +226,9 @@ def main():
         pin_memory=torch.cuda.is_available(),
     )
 
-    base_lr = cla.lr
+    # base_lr = cla.lr
     helper.adjust_learning_rate(optimizer, cla.lr)
-    epoch_per_save = 10  #cla.save_freq
+    # epoch_per_save = 10  # cla.save_freq
     max_epochs = 150
     epochs_wo_best = 0
     best_psnr_iid, best_psnr_mix, best_ls_iid, best_ls_mix = 0, 0, 100000, 100000
@@ -236,7 +238,7 @@ def main():
         torch.cuda.manual_seed(epoch + 2018)
         np.random.seed(epoch + 2018)
 
-        noise = None
+        # noise = None
 
         if epoch < 5:
             # lr warmup
@@ -333,7 +335,7 @@ def main():
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
             )
 
-        #if (epoch % epoch_per_save == 0 and epoch > 0) or epoch == max_epochs - 1:
+        # if (epoch % epoch_per_save == 0 and epoch > 0) or epoch == max_epochs - 1:
         #    logger.info("Saving current network...")
         #    model_latest_path = os.path.join(basedir, prefix, "model_latest.pth")
         #    training_utils.save_checkpoint(

@@ -174,7 +174,6 @@ def add_noise_on_bands(signal, bands, noise_fn, noise_fn_args=None, band_dim=-1,
         all_bands = np.random.permutation(range(b))
 
     pos = 0
-    print(bands, noise_fn)
     if 0 < bands <= 1:
         bands = int(bands * b)
     bands = all_bands[pos : pos + bands]
