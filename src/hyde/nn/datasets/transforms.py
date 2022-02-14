@@ -3,6 +3,7 @@ from itertools import combinations
 from typing import List
 
 import numpy as np
+import torch
 import torchvision.transforms.functional as TF
 
 from ...lowlevel import add_noise, logging
@@ -117,6 +118,7 @@ class AddNoiseMixed(object):
     def __call__(self, img):
         b = img.shape[-3]
         all_bands = np.random.permutation(range(b))
+
         pos = 0
         for noise_maker, num_band in zip(self.noise_bank, self.num_bands):
             if 0 < num_band <= 1:
@@ -151,6 +153,8 @@ class _AddNoiseImpulse(object):
         flipped = np.random.choice([True, False], size=image.shape, p=[p, 1 - p])
         salted = np.random.choice([True, False], size=image.shape, p=[q, 1 - q])
         peppered = ~salted
+        flipped = torch.tensor(flipped, dtype=torch.bool, device=out.device)
+        salted = torch.tensor(salted, dtype=torch.bool, device=out.device)
         out[flipped & salted] = 1
         out[flipped & peppered] = 0
         return out
@@ -173,10 +177,17 @@ class _AddNoiseStripe(object):
             np.floor(self.min_amount * W), np.floor(self.max_amount * W), len(bands)
         )
         for i, n in zip(bands, num_stripe):
+            sl = [
+                slice(None),
+            ] * img.ndim
             loc = np.random.permutation(range(W))
             loc = loc[:n]
             stripe = np.random.uniform(0, 1, size=(len(loc),)) * 0.5 - 0.25
-            img[i, :, loc] -= np.reshape(stripe, (-1, 1))
+            stripe = torch.tensor(stripe, dtype=img.dtype, device=img.device)
+            # img[i, :, loc] -= np.reshape(stripe, (-1, 1))
+            sl[-3] = i
+            sl[-1] = loc
+            img[sl] -= torch.reshape(stripe, (-1, 1))
         return img
 
 
@@ -197,9 +208,14 @@ class _AddNoiseDeadline(object):
             np.ceil(self.min_amount * W), np.ceil(self.max_amount * W), len(bands)
         )
         for i, n in zip(bands, num_deadline):
+            sl = [
+                slice(None),
+            ] * img.ndim
             loc = np.random.permutation(range(W))
             loc = loc[:n]
-            img[i, :, loc] = 0
+            sl[-3] = i
+            sl[-1] = torch.tensor(loc, dtype=torch.long, device=img.device)
+            img[sl] *= 0
         return img
 
 
@@ -239,10 +255,9 @@ class RandChoice:
         # TODO: document me!
         # this will apply equal probability to each transform
         self.combos = []
-        for i in range(1, len(self.transforms)+1):
+        for i in range(1, len(self.transforms) + 1):
             self.combos.extend(list(combinations(self.transforms, i)))
         self.use_combos = combos
-
 
     def __call__(self, x, *args):
         if self.use_combos:
@@ -259,12 +274,12 @@ class RandChoice:
 
             if not self.use_combos:
                 return random.choice(self.transforms)(x, *args)
-            
+
             sel_trfm = random.choice(trfms)
             for tf in sel_trfm:
                 x = tf(x, *args)
             return x
-            #return random.choice(self.transforms)(x, *args)
+            # return random.choice(self.transforms)(x, *args)
         else:
             return random.choices(self.transforms, weights=self.p)[0](x, *args)
 
