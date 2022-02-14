@@ -134,7 +134,7 @@ class _AddNoiseImpulse(object):
     add impulse noise to the given numpy array (B,H,W)
     """
 
-    def __init__(self, amounts, s_vs_p=0.5):
+    def __init__(self, amounts=(0.1, 0.3, 0.5, 0.7), s_vs_p=0.5):
         # s_vs_p is a probability and not a noise amount (its fine as is)
         self.amounts = np.array(amounts)
         self.s_vs_p = s_vs_p

@@ -21,6 +21,7 @@ from hyde.nn.datasets.transforms import (
     AddNoiseImpulse,
     AddNoiseNonIIDdB,
     AddNoiseStripe,
+    RandChoice,
 )
 from hyde.nn.parsers import qrnn_parser
 
@@ -125,9 +126,30 @@ def main():
     optimizer = optim.Adam(net.parameters(), lr=cla.lr, weight_decay=cla.wd, amsgrad=False)
 
     # """Resume previous model"""
+    start_epoch = 0
     if cla.resume:
         # Load checkpoint.
-        torch.load(cla.resume_path, not cla.no_ropt)
+        # torch.load(cla.resume_path, not cla.no_ropt)
+        logger.info(f"Resuming training from {cla.resume_path}")
+        checkpoint = torch.load(cla.resume_path)
+        if not cla.no_resume_opt:
+            logger.info("Loading optimizer from checkpoint file")
+            optimizer.load_state_dict(checkpoint["optimizer"])
+
+        try:
+            net.load_state_dict(checkpoint["net"])
+        except RuntimeError:
+            from collections import OrderedDict
+
+            new_state_dict = OrderedDict()
+            for k, v in checkpoint["net"].items():
+                name = k[7:]  # remove `module.`
+                new_state_dict[name] = v
+            # load params
+            net.load_state_dict(new_state_dict)
+        if cla.resume_training:
+            start_epoch = checkpoint["epoch"]
+
     else:
         logger.info("==> Building model..")
         helper.init_network(net, cla.nn_init_mode)
@@ -138,8 +160,9 @@ def main():
     train_transform = transforms.Compose(
         [
             AddNoiseNonIIDdB(),
-            transforms.RandomApply(
-                [AddNoiseImpulse(), AddNoiseStripe(), AddNoiseDeadline()], p=0.25
+            #transforms.RandomApply(
+            RandChoice(
+                [AddNoiseImpulse(), AddNoiseStripe(), AddNoiseDeadline()], p=0.75, combos=True,
             ),
         ]
     )
@@ -207,7 +230,7 @@ def main():
     max_epochs = 150
     epochs_wo_best = 0
     best_psnr_iid, best_psnr_mix, best_ls_iid, best_ls_mix = 0, 0, 100000, 100000
-    for epoch in range(max_epochs):
+    for epoch in range(start_epoch, max_epochs):
         logger.info(f"\t\t--------- Start epoch {epoch} of {max_epochs - 1} ---------\t")
         torch.manual_seed(epoch + 2018)
         torch.cuda.manual_seed(epoch + 2018)

@@ -122,7 +122,8 @@ def main():
 
     """Optimization Setup"""
     optimizer = optim.Adam(net.parameters(), lr=cla.lr, weight_decay=cla.wd, amsgrad=False)
-
+    
+    start_epoch = 0
     # """Resume previous model"""
     if cla.resume_path is not None:
         # Load checkpoint.
@@ -143,6 +144,8 @@ def main():
                 new_state_dict[name] = v
             # load params
             net.load_state_dict(new_state_dict)
+        if cla.resume_training:
+            start_epoch = checkpoint["epoch"]
 
     else:
         logger.info("==> Building model..")
@@ -210,7 +213,7 @@ def main():
     best_val_loss, best_val_psnr = 100000, 0
     epochs_wo_best = 0
 
-    for epoch in range(max_epochs):
+    for epoch in range(start_epoch, max_epochs):
         logger.info(f"\t\t--------- Start epoch {epoch} of {max_epochs - 1} ---------\t")
         torch.manual_seed(epoch + 2018)
         torch.cuda.manual_seed(epoch + 2018)
@@ -298,7 +301,7 @@ def main():
         if epochs_wo_best == 0 or (epoch + 1) % 10 == 0:
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
-            model_latest_path = os.path.join(cla.save_dir, prefix, f"small_model_gauss_3d-randomcrop-{cla.loss}-32.pth")
+            model_latest_path = os.path.join(cla.save_dir, prefix, f"small_model_gauss_3d-randomcrop-{cla.loss}-64.pth")
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
             )
