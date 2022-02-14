@@ -151,16 +151,18 @@ def add_gaussian_noise_blind(signal, min_db, max_db, scale_factor: float = 1):
 
 def add_non_iid_noise_db(signal, max_power, scale_factor=1.0):
     try:
+        bwsigmas = torch.rand(signal.shape[0], 1, 1) * max_power
+        bwsigmas = bwsigmas.to(device=signal.device, dtype=signal.dtype)
+        nz = torch.randn(*signal.shape, device=signal.device, dtype=signal.dtype)
+        noise = nz * bwsigmas / scale_factor
+    except TypeError:  # torch version
         bwsigmas = np.random.rand(signal.shape[0], 1, 1) * max_power
         noise = np.random.randn(*signal.shape) * bwsigmas / scale_factor
-    except TypeError:  # torch version
-        bwsigmas = torch.rand(signal.shape[0], 1, 1) * max_power
-        noise = torch.randn(*signal.shape) * bwsigmas / scale_factor
 
     return signal + noise
 
 
-def add_noise_on_bands(signal, bands, noise_fn, noise_fn_args=None, band_dim=-1):
+def add_noise_on_bands(signal, bands, noise_fn, noise_fn_args=None, band_dim=-1, inplace=True):
     if noise_fn_args is None:
         noise_fn_args = dict()
 
@@ -176,11 +178,14 @@ def add_noise_on_bands(signal, bands, noise_fn, noise_fn_args=None, band_dim=-1)
         bands = int(bands * b)
     bands = all_bands[pos : pos + bands]
     pos += bands
-    img = noise_fn(signal, bands, band_dim=band_dim, **noise_fn_args)
+    sig = signal if inplace else signal.clone()
+    img = noise_fn(sig, bands, band_dim=band_dim, **noise_fn_args)
     return img
 
 
-def add_noise_impulse(signal, bands, amounts=(0.1, 0.3, 0.5, 0.7), salt_vs_pepper=0.5, band_dim=-1):
+def add_noise_impulse(
+    signal, bands, amounts=(0.1, 0.3, 0.5, 0.7), salt_vs_pepper=0.5, band_dim=-1, inplace=True
+):
     return add_noise_on_bands(
         signal,
         bands,
@@ -190,6 +195,7 @@ def add_noise_impulse(signal, bands, amounts=(0.1, 0.3, 0.5, 0.7), salt_vs_peppe
             "salt_vs_pepper": salt_vs_pepper,
         },
         band_dim=band_dim,
+        inplace=inplace,
     )
 
 
@@ -200,7 +206,8 @@ def __add_noise_impulse(
     sl = [
         slice(None),
     ] * signal.ndim
-    bwamounts = amounts[torch.randint(high=len(amounts), shape=(len(bands),), device=signal.device)]
+    # bwamounts = torch.tensor(amounts)[torch.randint(high=len(amounts), shape=(len(bands),), device=signal.device)]
+    bwamounts = [amounts[i.item()] for i in torch.randint(high=len(amounts), size=(len(bands),))]
     for i, amount in zip(bands, bwamounts):
         # out = signal[i, ...]
         sl[band_dim] = i
@@ -219,7 +226,7 @@ def __add_noise_impulse(
     return signal
 
 
-def add_noise_stripe(signal, bands, min_amount, max_amount, band_dim=-1):
+def add_noise_stripe(signal, bands, min_amount, max_amount, band_dim=-1, inplace=True):
     return add_noise_on_bands(
         signal,
         bands,
@@ -229,6 +236,7 @@ def add_noise_stripe(signal, bands, min_amount, max_amount, band_dim=-1):
             "max_amount": max_amount,
         },
         band_dim=band_dim,
+        inplace=inplace,
     )
 
 
@@ -255,13 +263,13 @@ def __add_noise_stripe(signal, bands, min_amount, max_amount, band_dim=-1):
         loc = loc[:n]
         sl[band_dim] = i
         sl[w_dim] = loc
-        stripe = torch.rand_like(loc) * 0.5 - 0.25
-        signal[sl] -= torch.reshape(stripe, (-1, 1))
+        stripe = torch.rand_like(loc, dtype=signal.dtype, device=signal.device)
+        signal[sl] -= stripe * 0.5 - 0.25
 
     return signal
 
 
-def add_noise_deadline(signal, bands, min_amount, max_amount, band_dim=-1):
+def add_noise_deadline(signal, bands, min_amount, max_amount, band_dim=-1, inplace=True):
     return add_noise_on_bands(
         signal,
         bands,
@@ -271,6 +279,7 @@ def add_noise_deadline(signal, bands, min_amount, max_amount, band_dim=-1):
             "max_amount": max_amount,
         },
         band_dim=band_dim,
+        inplace=inplace,
     )
 
 

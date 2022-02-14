@@ -141,27 +141,31 @@ class _AddNoiseImpulse(object):
 
     def __call__(self, img, bands):
         # bands = np.random.permutation(range(img.shape[0]))[:self.num_band]
-        bwamounts = self.amounts[np.random.randint(0, len(self.amounts), len(bands))]
-        for i, amount in zip(bands, bwamounts):
-            sl = [slice(None), ] * img.ndim
-            sl[-3] = i
-            self.add_noise(img[tuple(sl)], amount=amount, salt_vs_pepper=self.s_vs_p)
-        return img.to(torch.float)
+        return add_noise.add_noise_impulse(
+            img, bands, amounts=self.amounts, salt_vs_pepper=self.s_vs_p, band_dim=-3
+        )
 
-    def add_noise(self, image, amount, salt_vs_pepper):
-        out = image  # torch.zeros_like(image).to(torch.bool)
-        p = amount
-        q = salt_vs_pepper
-        flipped = np.random.choice([True, False], size=image.shape, p=[p, 1 - p])
-        salted = np.random.choice([True, False], size=image.shape, p=[q, 1 - q])
-        peppered = ~salted
-        flipped = torch.tensor(flipped, dtype=torch.bool, device=out.device)
-        salted = torch.tensor(salted, dtype=torch.bool, device=out.device)
-        m1 = (flipped & salted).to(torch.bool)
-        m0 = (flipped & peppered).to(torch.bool)
-        out[m1] = 1.
-        out[m0] = 0.
-        return out
+    #     # bwamounts = self.amounts[np.random.randint(0, len(self.amounts), len(bands))]
+    #     # for i, amount in zip(bands, bwamounts):
+    #     #     sl = [slice(None), ] * img.ndim
+    #     #     sl[-3] = i
+    #     #     self.add_noise(img[tuple(sl)], amount=amount, salt_vs_pepper=self.s_vs_p)
+    #     # return img.to(torch.float)
+    #
+    # def add_noise(self, image, amount, salt_vs_pepper):
+    #     out = image  # torch.zeros_like(image).to(torch.bool)
+    #     p = amount
+    #     q = salt_vs_pepper
+    #     flipped = np.random.choice([True, False], size=image.shape, p=[p, 1 - p])
+    #     salted = np.random.choice([True, False], size=image.shape, p=[q, 1 - q])
+    #     peppered = ~salted
+    #     flipped = torch.tensor(flipped, dtype=torch.bool, device=out.device)
+    #     salted = torch.tensor(salted, dtype=torch.bool, device=out.device)
+    #     m1 = (flipped & salted).to(torch.bool)
+    #     m0 = (flipped & peppered).to(torch.bool)
+    #     out[m1] = 1.
+    #     out[m0] = 0.
+    #     return out
 
 
 class _AddNoiseStripe(object):
@@ -175,26 +179,27 @@ class _AddNoiseStripe(object):
         self.max_amount = max_amount
 
     def __call__(self, img, bands):
-        B, H, W = img.shape[-3:]
-        # bands = np.random.permutation(range(img.shape[0]))[:len(bands)]
-        num_stripe = np.random.randint(
-            np.floor(self.min_amount * W), np.floor(self.max_amount * W), len(bands)
+        return add_noise.add_noise_stripe(
+            img, bands, min_amount=self.min_amount, max_amount=self.max_amount, band_dim=-3
         )
-        for i, n in zip(bands, num_stripe):
-            sl = [
-                slice(None),
-            ] * img.ndim
-            loc = np.random.permutation(range(W))
-            loc = loc[:n]
-            #stripe = np.random.uniform(0, 1, size=(len(loc),)) * 0.5 - 0.25
-            #stripe = torch.tensor(stripe, dtype=img.dtype, device=img.device)
-            stripe = torch.rand(img[tuple(sl)].shape, dtype=img.dtype, device=img.device) * 0.5 - 0.25
-            # img[i, :, loc] -= np.reshape(stripe, (-1, 1))
-            sl[-3] = i
-            sl[-1] = loc
-            stripe = torch.rand(img[tuple(sl)].shape, dtype=img.dtype, device=img.device) * 0.5 - 0.25
-            img[tuple(sl)] -= stripe  # torch.reshape(stripe, img[tuple(sl)].shape)
-        return img.to(img.dtype)
+        # B, H, W = img.shape[-3:]
+        # # bands = np.random.permutation(range(img.shape[0]))[:len(bands)]
+        # num_stripe = np.random.randint(
+        #     np.floor(self.min_amount * W), np.floor(self.max_amount * W), len(bands)
+        # )
+        # for i, n in zip(bands, num_stripe):
+        #     sl = [
+        #         slice(None),
+        #     ] * img.ndim
+        #     loc = np.random.permutation(range(W))
+        #     loc = loc[:n]
+        #     # stripe = np.random.uniform(0, 1, size=(len(loc),)) * 0.5 - 0.25
+        #     # img[i, :, loc] -= np.reshape(stripe, (-1, 1))
+        #     sl[-3] = i
+        #     sl[-1] = loc
+        #     stripe = torch.rand(img[tuple(sl)].shape, dtype=img.dtype, device=img.device) * 0.5 - 0.25
+        #     img[tuple(sl)] -= stripe
+        # return img.to(img.dtype)
 
 
 class _AddNoiseDeadline(object):
@@ -208,21 +213,26 @@ class _AddNoiseDeadline(object):
         self.max_amount = max_amount
 
     def __call__(self, img, bands):
-        B, H, W = img.shape[-3:]
-        # bands = np.random.permutation(range(img.shape[0]))[:len(bands)]
-        num_deadline = np.random.randint(
-            np.ceil(self.min_amount * W), np.ceil(self.max_amount * W), len(bands)
+        return add_noise.add_noise_deadline(
+            img, bands, min_amount=self.min_amount, max_amount=self.max_amount, band_dim=-3
         )
-        for i, n in zip(bands, num_deadline):
-            sl = [
-                slice(None),
-            ] * img.ndim
-            loc = np.random.permutation(range(W))
-            loc = loc[:n]
-            sl[-3] = i
-            sl[-1] = torch.tensor(loc, dtype=torch.long, device=img.device)
-            img[tuple(sl)] *= 0
-        return img.to(img.dtype)
+        # B, H, W = img.shape[-3:]
+        # # bands = np.random.permutation(range(img.shape[0]))[:len(bands)]
+        # # num_deadline = np.random.randint(
+        # #     np.ceil(self.min_amount * W), np.ceil(self.max_amount * W), len(bands)
+        # # )
+        # num_deadline = torch.randint(int(self.min_amount * W), int(self.max_amount * W), tuple(len(bands)))
+        # for i, n in zip(bands, num_deadline):
+        #     sl = [
+        #         slice(None),
+        #     ] * img.ndim
+        #     # loc = np.random.permutation(range(W))
+        #     loc = torch.arange(W)[torch.randperm(W)]
+        #     loc = loc[:n]
+        #     sl[-3] = i
+        #     sl[-1] = loc.tolist()
+        #     img[tuple(sl)] *= 0
+        # return img.to(img.dtype)
 
 
 class AddNoiseImpulse(AddNoiseMixed):
