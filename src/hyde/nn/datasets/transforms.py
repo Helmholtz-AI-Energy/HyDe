@@ -115,7 +115,7 @@ class AddNoiseMixed(object):
         self.num_bands = num_bands
 
     def __call__(self, img):
-        b = img.shape[0]
+        b = img.shape[-3]
         all_bands = np.random.permutation(range(b))
         pos = 0
         for noise_maker, num_band in zip(self.noise_bank, self.num_bands):
@@ -167,7 +167,7 @@ class _AddNoiseStripe(object):
         self.max_amount = max_amount
 
     def __call__(self, img, bands):
-        B, H, W = img.shape
+        B, H, W = img.shape[-3:]
         # bands = np.random.permutation(range(img.shape[0]))[:len(bands)]
         num_stripe = np.random.randint(
             np.floor(self.min_amount * W), np.floor(self.max_amount * W), len(bands)
@@ -191,7 +191,7 @@ class _AddNoiseDeadline(object):
         self.max_amount = max_amount
 
     def __call__(self, img, bands):
-        B, H, W = img.shape
+        B, H, W = img.shape[-3:]
         # bands = np.random.permutation(range(img.shape[0]))[:len(bands)]
         num_deadline = np.random.randint(
             np.ceil(self.min_amount * W), np.ceil(self.max_amount * W), len(bands)

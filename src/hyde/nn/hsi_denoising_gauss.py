@@ -297,7 +297,7 @@ def main():
         if epochs_wo_best == 0 or (epoch + 1) % 10 == 0:
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
-            model_latest_path = os.path.join(cla.save_dir, prefix, f"small_model_gauss_3d-{cla.loss}.pth")
+            model_latest_path = os.path.join(cla.save_dir, prefix, f"small_model_gauss_3d-randomcrop-{cla.loss}.pth")
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
             )

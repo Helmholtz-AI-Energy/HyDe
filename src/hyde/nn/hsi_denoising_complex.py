@@ -203,7 +203,7 @@ def main():
 
     base_lr = cla.lr
     helper.adjust_learning_rate(optimizer, cla.lr)
-    epoch_per_save = cla.save_freq
+    epoch_per_save = 10  #cla.save_freq
     max_epochs = 150
     epochs_wo_best = 0
     best_psnr_iid, best_psnr_mix, best_ls_iid, best_ls_mix = 0, 0, 100000, 100000
@@ -316,3 +316,7 @@ def main():
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
             )
+
+
+if __name__ == "__main__":
+    main()
