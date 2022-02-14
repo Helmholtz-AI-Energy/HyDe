@@ -26,8 +26,9 @@ def memnet():
     return net
 
 
-def hsidenet():
-    net = DeNet(in_channels=10)
+def hsidenet():   
+    #net = DeNet(in_channels=10)
+    net = DeNet(in_channels=1)
     net.use_2dconv = True
     net.bandwise = False
     return net

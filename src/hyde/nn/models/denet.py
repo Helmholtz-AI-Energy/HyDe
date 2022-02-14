@@ -9,7 +9,7 @@ class DeNet(nn.Module):
         out_channels = 64
         # add CR
         layers.append(
-            nn.Conv2d(
+            nn.Conv3d(  # nn.Conv2d(
                 in_channels=in_channels,
                 out_channels=out_channels,
                 kernel_size=kernel_size,
@@ -26,7 +26,7 @@ class DeNet(nn.Module):
             elif dilation == 2:
                 padding = 2
             layers.append(
-                nn.Conv2d(
+                nn.Conv3d(  #nn.Conv2d(
                     in_channels=in_channels,
                     out_channels=out_channels,
                     kernel_size=kernel_size,
@@ -35,14 +35,15 @@ class DeNet(nn.Module):
                     bias=False,
                 )
             )
-            layers.append(nn.BatchNorm2d(num_features=out_channels))
+            layers.append(nn.BatchNorm3d(num_features=out_channels))  #BatchNorm2d(num_features=out_channels))
             layers.append(nn.ReLU(inplace=True))
             in_channels = out_channels
 
         # add C
         layers.append(
-            nn.Conv2d(
-                in_channels=64, out_channels=10, kernel_size=kernel_size, padding=1, bias=False
+            nn.Conv3d(  # nn.Conv2d(
+                in_channels=64, out_channels=1, #in_channels, 
+                kernel_size=kernel_size, padding=1, bias=False
             )
         )
         self.denet = nn.Sequential(*layers)
@@ -51,8 +52,8 @@ class DeNet(nn.Module):
 
     def forward(self, x):
         #y = x
-        if x.ndim == 5:
-            x = x.squeeze(1)
+        #if x.ndim == 5:
+        #    x = x.squeeze(1)
         
         out = self.denet(x)
         return out #y - out
@@ -74,19 +75,19 @@ each tuple unit: [out_channels, dilation]
 """
 cfg = (
     [64, 1],
-    [64, 1],
-    [64, 1],
+#    [64, 1],
+#    [64, 1],
     [128, 1],
-    [128, 1],
-    [128, 1],
+#    [128, 1],
+#    [128, 1],
     [256, 2],
-    [256, 2],
-    [256, 2],
+#    [256, 2],
+#    [256, 2],
     [128, 1],
-    [128, 1],
-    [128, 1],
+#    [128, 1],
+#    [128, 1],
     [64, 1],
-    [64, 1],
-    [64, 1],
+#    [64, 1],
+#    [64, 1],
     [64, 1],
 )

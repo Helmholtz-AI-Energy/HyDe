@@ -150,9 +150,9 @@ def main():
 
     cudnn.benchmark = True
 
-    crop_size = (256, 256)
+    crop_size = (128, 128)
     band_norm = True
-    num_bands = 10 if cla.arch in "hsidenet" else -1
+    num_bands = -1 #10 if cla.arch in "hsidenet" else -1
 
 
     train_icvl = ds_utils.ICVLDataset(
@@ -297,7 +297,7 @@ def main():
         if epochs_wo_best == 0 or (epoch + 1) % 10 == 0:
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
-            model_latest_path = os.path.join(cla.save_dir, prefix, f"current_model_gauss-{cla.loss}.pth")
+            model_latest_path = os.path.join(cla.save_dir, prefix, f"current_model_gauss_3d-{cla.loss}.pth")
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
             )
