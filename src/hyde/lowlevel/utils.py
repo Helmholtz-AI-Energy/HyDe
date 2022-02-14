@@ -20,6 +20,7 @@ __all__ = [
     "normalize",
     "peak_snr",
     "rescale_wo_shift",
+    "sam",
     "scale_wo_shift",
     "snr",
     "soft_threshold",
