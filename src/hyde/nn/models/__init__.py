@@ -26,12 +26,20 @@ def memnet():
     return net
 
 
-def hsidenet():   
-    #net = DeNet(in_channels=10)
+def memnet3d():
+    net = MemNet(31, 64, 6, 6, conv3d=True)
+    net.use_2dconv = False
+    net.bandwise = False
+    return net
+
+
+def hsidenet():
+    # net = DeNet(in_channels=10)
     net = DeNet(in_channels=31)
     net.use_2dconv = True
     net.bandwise = False
     return net
+
 
 def denet3d():
     net = DeNetLite3D()
