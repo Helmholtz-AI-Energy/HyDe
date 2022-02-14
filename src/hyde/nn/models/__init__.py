@@ -1,4 +1,4 @@
-from .denet import DeNet
+from .denet import DeNet, DeNetLite3D
 from .memnet import MemNet
 from .qrnn import QRNNREDC3D, REDC3D, ResQRNN3D
 
@@ -28,7 +28,14 @@ def memnet():
 
 def hsidenet():   
     #net = DeNet(in_channels=10)
-    net = DeNet(in_channels=1)
+    net = DeNet(in_channels=31)
     net.use_2dconv = True
     net.bandwise = False
+    return net
+
+def denet3d():
+    net = DeNetLite3D()
+    net.use_2dconv = False
+    net.bandwise = False
+
     return net

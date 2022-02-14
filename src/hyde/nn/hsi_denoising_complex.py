@@ -204,18 +204,37 @@ def main():
     base_lr = cla.lr
     helper.adjust_learning_rate(optimizer, cla.lr)
     epoch_per_save = cla.save_freq
-    max_epochs = 100
+    max_epochs = 150
     epochs_wo_best = 0
     best_psnr_iid, best_psnr_mix, best_ls_iid, best_ls_mix = 0, 0, 100000, 100000
     for epoch in range(max_epochs):
-        s = torch.random.seed()
-        torch.cuda.manual_seed(s)
-        np.random.seed(s)
+        logger.info(f"\t\t--------- Start epoch {epoch} of {max_epochs - 1} ---------\t")
+        torch.manual_seed(epoch + 2018)
+        torch.cuda.manual_seed(epoch + 2018)
+        np.random.seed(epoch + 2018)
 
-        if epoch == 85:
-            helper.adjust_learning_rate(optimizer, base_lr * 0.1)
-        elif epoch == 95:
-            helper.adjust_learning_rate(optimizer, base_lr * 0.01)
+        noise = None
+
+        if epoch < 5:
+            # lr warmup
+            helper.adjust_learning_rate(optimizer, cla.lr * 10 ** (epoch - 4))
+
+        # LR warmup
+        if epoch == 0:
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.0001)
+        elif epoch == 1:
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.001)
+        elif epoch == 2:
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
+        elif epoch == 3:
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
+        elif epoch == 4:
+            helper.adjust_learning_rate(optimizer, cla.lr * 1)
+
+        if epoch == 120:
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
+        if epoch == 140:
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
 
         # training_utils.train(train_loader, net, cla, epoch, optimizer, criterion, writer=writer)
         ttime = time.perf_counter()
@@ -228,13 +247,13 @@ def main():
             criterion,
             bandwise,
             writer=writer,
-            iterations=3,
+            iterations=20,
         )
         ttime = time.perf_counter() - ttime
 
-        torch.manual_seed(0)
-        torch.cuda.manual_seed(0)
-        np.random.seed(0)
+        torch.manual_seed(cla.rank)
+        torch.cuda.manual_seed(cla.rank)
+        np.random.seed(cla.rank)
         vtime = time.perf_counter()
         psnr_noniid, ls_noniid = training_utils.validate(
             val_loader_noniid,
@@ -285,7 +304,7 @@ def main():
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(
-                cla.save_dir, prefix, f"model_latest_seeded_{cla.loss}.pth"
+                cla.save_dir, prefix, f"model_latest_complex_{cla.loss}.pth"
             )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
