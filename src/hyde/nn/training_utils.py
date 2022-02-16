@@ -36,7 +36,6 @@ def _train_loop(
                 outputs = network(inputs)
                 outputs = outputs.squeeze(1)
                 targets = targets.squeeze(1)
-                #print(outputs.shape, targets.shape)
                 loss = criterion(outputs, targets)
             scaler.scale(loss).backward()
             loss_data += loss.item()

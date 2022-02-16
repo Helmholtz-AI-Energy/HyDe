@@ -53,7 +53,7 @@ def main():
     """Model"""
     logger.info(f"=> creating model: {cla.arch}")
     net = models.__dict__[cla.arch]()
-    #logger.info(net)
+    # logger.info(net)
     # initialize parameters
     # init params will set the model params with a random distribution
     # helper.init_params(net, init_type=cla.init)  # disable for default initialization
@@ -122,7 +122,7 @@ def main():
 
     """Optimization Setup"""
     optimizer = optim.Adam(net.parameters(), lr=cla.lr, weight_decay=cla.wd, amsgrad=False)
-    
+
     start_epoch = 0
     # """Resume previous model"""
     if cla.resume_path is not None:
@@ -156,8 +156,7 @@ def main():
 
     crop_size = (256, 256)
     band_norm = True
-    num_bands = -1 #10 if cla.arch in "hsidenet" else -1
-
+    num_bands = -1  # 10 if cla.arch in "hsidenet" else -1
 
     train_icvl = ds_utils.ICVLDataset(
         cla.datadir,
@@ -242,7 +241,7 @@ def main():
         if epoch == 140:
             helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
 
-        if epoch == 50 and cla.arch in "qrnn":
+        if epoch == 50 and "qrnn" in cla.arch:
             net.clamp = True
 
         if noise is not None:
@@ -301,7 +300,9 @@ def main():
         if epochs_wo_best == 0 or (epoch + 1) % 10 == 0:
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
-            model_latest_path = os.path.join(cla.save_dir, prefix, f"small_model_gauss_3d-randomcrop-{cla.loss}-64.pth")
+            model_latest_path = os.path.join(
+                cla.save_dir, prefix, f"small_model_gauss_3d-randomcrop-{cla.loss}-64.pth"
+            )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
             )

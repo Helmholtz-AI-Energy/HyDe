@@ -244,22 +244,25 @@ def main():
             # lr warmup
             helper.adjust_learning_rate(optimizer, cla.lr * 10 ** (epoch - 4))
 
-        # LR warmup
-        if epoch == 0:
-            helper.adjust_learning_rate(optimizer, cla.lr * 0.0001)
-        elif epoch == 1:
-            helper.adjust_learning_rate(optimizer, cla.lr * 0.001)
-        elif epoch == 2:
-            helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
-        elif epoch == 3:
-            helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
-        elif epoch == 4:
-            helper.adjust_learning_rate(optimizer, cla.lr * 1)
+        # # LR warmup
+        # if epoch == 0:
+        #     helper.adjust_learning_rate(optimizer, cla.lr * 0.0001)
+        # elif epoch == 1:
+        #     helper.adjust_learning_rate(optimizer, cla.lr * 0.001)
+        # elif epoch == 2:
+        #     helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
+        # elif epoch == 3:
+        #     helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
+        # elif epoch == 4:
+        #     helper.adjust_learning_rate(optimizer, cla.lr * 1)
 
         if epoch == 120:
             helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
         if epoch == 140:
             helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
+
+        if epoch == 50 and "qrnn" in cla.arch:
+            net.clamp = True
 
         # training_utils.train(train_loader, net, cla, epoch, optimizer, criterion, writer=writer)
         ttime = time.perf_counter()

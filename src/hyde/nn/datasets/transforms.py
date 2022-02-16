@@ -45,7 +45,7 @@ class AddGaussianNoise(object):
     def __call__(self, img):
         # noise = np.random.randn(*img.shape) * self.sigma_ratio
         return add_noise.add_noise_db(
-            img, self.sigma_db, scale_factor=self.scale_factor, verbose=False
+            img, self.sigma_db, scale_factor=self.scale_factor, verbose=True
         )
 
 
@@ -133,16 +133,21 @@ class AddNoiseImpulse(object):
     add impulse noise to the given numpy array (B,H,W)
     """
 
-    def __init__(self, amounts=(0.1, 0.3, 0.5, 0.7), s_vs_p=0.5, bands=0.333333):
+    def __init__(self, amounts=(0.1, 0.3, 0.5, 0.7), s_vs_p=0.5, bands=0.333333, band_dim=-3):
         # s_vs_p is a probability and not a noise amount (its fine as is)
         self.amounts = np.array(amounts)
         self.s_vs_p = s_vs_p
         self.bands = bands
+        self.band_dim = band_dim
 
     def __call__(self, img):
         # bands = np.random.permutation(range(img.shape[0]))[:self.num_band]
         return add_noise.add_noise_impulse(
-            img, self.bands, amounts=self.amounts, salt_vs_pepper=self.s_vs_p, band_dim=-3
+            img,
+            self.bands,
+            amounts=self.amounts,
+            salt_vs_pepper=self.s_vs_p,
+            band_dim=self.band_dim,
         )
 
     #     # bwamounts = self.amounts[np.random.randint(0, len(self.amounts), len(bands))]
@@ -173,16 +178,21 @@ class AddNoiseStripe(object):
     add stripe noise to the given numpy array (B,H,W)
     """
 
-    def __init__(self, min_amount=0.05, max_amount=0.15, bands=0.3333333):
+    def __init__(self, min_amount=0.05, max_amount=0.15, bands=0.3333333, band_dim=-3):
         # noise_bank=[_AddNoiseStripe(0.05, 0.15)], num_bands=[0.33333]
         assert max_amount > min_amount
         self.min_amount = min_amount
         self.max_amount = max_amount
         self.bands = bands
+        self.band_dim = band_dim
 
     def __call__(self, img):
         return add_noise.add_noise_stripe(
-            img, self.bands, min_amount=self.min_amount, max_amount=self.max_amount, band_dim=-3
+            img,
+            self.bands,
+            min_amount=self.min_amount,
+            max_amount=self.max_amount,
+            band_dim=self.band_dim,
         )
         # B, H, W = img.shape[-3:]
         # # bands = np.random.permutation(range(img.shape[0]))[:len(bands)]
@@ -209,15 +219,20 @@ class AddNoiseDeadline(object):
     add deadline noise to the given numpy array (B,H,W)
     """
 
-    def __init__(self, min_amount=0.05, max_amount=0.15, bands=0.3333333):
+    def __init__(self, min_amount=0.05, max_amount=0.15, bands=0.3333333, band_dim=-3):
         assert max_amount > min_amount
         self.min_amount = min_amount
         self.max_amount = max_amount
         self.bands = bands
+        self.band_dim = band_dim
 
     def __call__(self, img):
         return add_noise.add_noise_deadline(
-            img, self.bands, min_amount=self.min_amount, max_amount=self.max_amount, band_dim=-3
+            img,
+            self.bands,
+            min_amount=self.min_amount,
+            max_amount=self.max_amount,
+            band_dim=self.band_dim,
         )
         # B, H, W = img.shape[-3:]
         # # bands = np.random.permutation(range(img.shape[0]))[:len(bands)]

@@ -149,7 +149,7 @@ class DWTForward(torch.nn.Module):
             padding scheme
     """
 
-    def __init__(self, J=1, wave="db1", padding_method="zero"):
+    def __init__(self, J=1, wave="db1", padding_method="zero", device="cpu"):
         super().__init__()
         if isinstance(wave, str):
             wave = pywt.Wavelet(wave)
@@ -165,7 +165,7 @@ class DWTForward(torch.nn.Module):
                 h0_row, h1_row = wave[2], wave[3]
 
         # Prepare the filters
-        filts = lowlevel.prep_filt_afb2d(h0_col, h1_col, h0_row, h1_row)
+        filts = lowlevel.prep_filt_afb2d(h0_col, h1_col, h0_row, h1_row, device=device)
         self.register_buffer("h0_col", filts[0])
         self.register_buffer("h1_col", filts[1])
         self.register_buffer("h0_row", filts[2])
@@ -343,7 +343,7 @@ def construct_2d_from_filters(low, highs):
     filter_starts = []
 
     for i in reversed(range(len(highs))):
-        filter_starts.append(highs[i][:, :, 0].shape[-1])
+        filter_starts.append((highs[i][:, :, 0].shape[-2], highs[i][:, :, 0].shape[-1]))
         for j in range(3):
             hold = highs[i][:, :, j].squeeze().permute((1, 2, 0))
             ret_2d.append(hold.reshape((hold.shape[0] * hold.shape[1], hold.shape[2])))
@@ -366,18 +366,18 @@ def construct_filters_from_2d(matrix, filter_starts, decomp_level):
 
     """
     exp = filter_starts[0]
-    low = matrix[: exp ** 2].reshape((exp, exp, matrix.shape[-1]))
+    low = matrix[: exp[0] * exp[1]].reshape((exp[0], exp[1], matrix.shape[-1]))
     low = low.permute(2, 0, 1).unsqueeze(0)
     highs = []
-    last_end = exp ** 2
+    last_end = exp[0] * exp[1]
     for lvl in range(decomp_level):
         exp = filter_starts[lvl]
         lp_list = [None, None, None]
         for i in range(1, 4):
-            next_end = last_end + exp ** 2
+            next_end = last_end + (exp[0] * exp[1])
             lp_list[i - 1] = (
                 matrix[last_end:next_end]
-                .reshape((exp, exp, matrix.shape[-1]))
+                .reshape((exp[0], exp[1], matrix.shape[-1]))
                 .permute(2, 0, 1)
                 .unsqueeze(0)
                 .unsqueeze(2)
