@@ -188,22 +188,22 @@ def benchmark(file_loc, method, device, output, original):
 
 
 if __name__ == "__main__":
-    # parser = argparse.ArgumentParser(description="HyDe Benchmarking")
-    # cla = hyde.nn.parsers.benchmark_parser(parser)
-    # print(cla)
-    # logger.info(cla)
-    # # generate_noisy_images(base_image="/mnt/ssd/hyde/houston.mat", save_loc="/mnt/ssd/hyde/")
-    # benchmark(
-    #     file_loc=cla.data_dir,
-    #     method=cla.method,
-    #     device=cla.device,
-    #     output=cla.output_dir,
-    #     original=cla.original_image,
-    # )
+    parser = argparse.ArgumentParser(description="HyDe Benchmarking")
+    cla = hyde.nn.parsers.benchmark_parser(parser)
+    print(cla)
+    logger.info(cla)
+    # generate_noisy_images(base_image="/mnt/ssd/hyde/houston.mat", save_loc="/mnt/ssd/hyde/")
     benchmark(
-        "/mnt/ssd/hyde/",
-        method="FORPDN_SURE",
-        device="cuda",
-        output=None,
-        original="/mnt/ssd/hyde/houston.mat",
+        file_loc=cla.data_dir,
+        method=cla.method,
+        device=cla.device,
+        output=cla.output_dir,
+        original=cla.original_image,
     )
+    # benchmark(
+    #     "/mnt/ssd/hyde/",
+    #     method="FORPDN_SURE",
+    #     device="cuda",
+    #     output=None,
+    #     original="/mnt/ssd/hyde/houston.mat",
+    # )
