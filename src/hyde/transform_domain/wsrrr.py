@@ -77,7 +77,13 @@ class WSRRR(torch.nn.Module):
         # testing the reshape and inverse stuff
         eps = 1e-30
         # this gets the median of the FIRST high level filters
-        omega = torch.median(torch.abs(v_dwt_2d[filter_starts[-1] ** 2 :]), dim=0)[0] / 0.6745 + eps
+        omega = (
+            torch.median(torch.abs(v_dwt_2d[filter_starts[-1][0] * filter_starts[-1][1] :]), dim=0)[
+                0
+            ]
+            / 0.6745
+            + eps
+        )
         # % Covariance matrix
         # Omega_1=permute(sigma(:).^2,[3,2,1]);
         # Omega=repmat(Omega_1,[nx1,ny1,1]);

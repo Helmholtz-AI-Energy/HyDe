@@ -91,16 +91,12 @@ class HyMiNoR(torch.nn.Module):
         u, s, v = torch.linalg.svd(hold.to(torch.float64), full_matrices=False)
         v = torch.conj(v.T)
 
-        magic = torch.chain_matmul(
-            v,
-            torch.diag(1.0 / (mu1 + mu2 * s)),
-            torch.conj(u.T),
-        ).to(base_dtype)
+        magic = (v @ torch.diag(1.0 / (mu1 + mu2 * s)) @ torch.conj(u.T)).to(base_dtype)
 
         for i in range(its):
             # subminimization problems
             hold1 = -mu1 * (v1 - hyres_reshaped_t - l1)
-            hold2 = mu2 * utils.diff_dim0_replace_last_row((v2 - l2))
+            hold2 = mu2 * utils.diff_dim0_replace_last_row(v2 - l2)
             # X=Majic*(-mu1*(V1-Y-L1)+mu2*Dvt(V2-L2));
             xx = magic @ (hold1 + hold2)
 

@@ -61,6 +61,7 @@ def generate_noisy_images(base_image, save_loc, noise_type="gaussian"):
 max_houston = 65517.0
 
 gaussian_noise_removers_args = {
+    "HyMiNoR": {"lam": 10.0, "iterations": 50},
     "FORPDN_SURE": {
         "s_int_st": torch.tensor([0, 0, 0, 0]),
         "s_int_step": torch.tensor([0.001, 0.01, 0.1, 1]),
@@ -70,7 +71,6 @@ gaussian_noise_removers_args = {
         "scale_const": max_houston,
         "wavelet_level": 6,
     },
-    "HyMiNoR": {"lam": 10.0, "iterations": 50},
     "HyRes": {},
     "OTVCA": {"features": 6, "num_itt": 10, "lam": 0.01},
     "WSRRR": {"rank": 10},
@@ -107,14 +107,21 @@ def benchmark(file_loc, method, device, output, original):
         method_call = hyde.NNInference(arch=method, pretrained_file=nn_noise_removers[method])
         nn = True
     # TODO: load and update the pandas dict with the results
-    # out = Path(output)
+    output = Path(output)
     og = sio.loadmat(original)["houston"]
-    og = og.reshape(og.shape, order="F")
+    og = og.reshape(og.shape)
+
+    import cProfile
+    import io
+    import pstats
+    from pstats import SortKey
+
     # print(og)
     original_im = torch.from_numpy(og.astype(np.float32)).to(device=device)
-    out_df = pd.DataFrame(columns=["noise", "method", "device", "psnr", "sam", "time"])
+    # out_df = pd.DataFrame(columns=["noise", "method", "device", "psnr", "sam", "time"])
+    out_df = None
     # print(original_im.mean(-1))
-    for noise in [20, 30, 40]:
+    for noise in [20, 30]:  # , 40
         # todo: see if the file exists
         working_dir = Path(file_loc) / str(noise)
         psnrs, sads, times = [], [], []
@@ -125,6 +132,11 @@ def benchmark(file_loc, method, device, output, original):
             dat_i = torch.from_numpy(dat_i).to(device=device, dtype=torch.float)
             # 2. start timer
             t0 = time.perf_counter()
+
+            # pr = cProfile.Profile()
+            # number_trials = 1
+            # pr.enable()
+
             if nn:
                 kwargs = gaussian_noise_removers_args["nn"]
                 is2d = method in nn_noise_removers["2d-models"]
@@ -136,7 +148,18 @@ def benchmark(file_loc, method, device, output, original):
                 res = method_call(dat_i, **kwargs)
             else:
                 res = method_call(dat_i)
+
+            # pr.disable()
+            # s = io.StringIO()
+            # sortby = SortKey.TIME
+            # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+            # ps.print_stats(30)
+            # print(s.getvalue())
+
             t1 = time.perf_counter() - t0
+
+            if isinstance(res, tuple):
+                res = res[0]
             psnr = hyde.peak_snr(res, original_im)
             # print((original_im).mean(-1))
             sam = hyde.sam(res, original_im).mean()
@@ -146,14 +169,15 @@ def benchmark(file_loc, method, device, output, original):
             print(f"file: {fil} time: {t1}, psnr: {psnr}, sam: {sam}")
             gc.collect()
             torch.cuda.empty_cache()
-            # break
+            if c == 1:
+                break
 
         times = np.array(times)
         psnrs = np.array(psnrs)
         sads = np.array(sads)
 
         tsorted = times.argsort()
-        good_idxs = tsorted[1:-1]
+        good_idxs = tsorted  # [1:-1]
 
         times = times[good_idxs]
         psnrs = psnrs[good_idxs]
@@ -171,20 +195,23 @@ def benchmark(file_loc, method, device, output, original):
         }
 
         # save the results
-        ret_df = pd.Series(pd_dict)
-        out_df = out_df.append(ret_df, ignore_index=True)
-        # print(ret_df)
+        ret_df = pd.DataFrame(pd_dict, index=[0], columns=list(pd_dict.keys()))
+        if out_df is None:
+            out_df = pd.DataFrame(pd_dict, index=[0], columns=list(pd_dict.keys()))
+        else:
+            out_df = pd.concat([out_df, ret_df], ignore_index=True, axis=0)
+        # print(out_df)
 
-    print(ret_df)
-    # noise_out = output / "python-benchmarks.csv"
-    # if not noise_out.exists():
-    #     ret_df.to_csv(noise_out)
-    #
-    # else:
-    #     # load the existing DF and append to the bottom of it
-    #     existing = pd.read_csv(noise_out)
-    #     new = existing.append(ret_df, ignore_index=True)
-    #     new.to_csv(noise_out)
+    # print(ret_df)
+    noise_out = output / "python-benchmarks.csv"
+    if not noise_out.exists():
+        out_df.to_csv(noise_out)
+
+    else:
+        # load the existing DF and append to the bottom of it
+        existing = pd.read_csv(noise_out)
+        new = pd.concat([existing, out_df], ignore_index=True, axis=0)
+        new.to_csv(noise_out)
 
 
 if __name__ == "__main__":
@@ -200,10 +227,12 @@ if __name__ == "__main__":
         output=cla.output_dir,
         original=cla.original_image,
     )
-    # benchmark(
-    #     "/mnt/ssd/hyde/",
-    #     method="FORPDN_SURE",
-    #     device="cuda",
-    #     output=None,
-    #     original="/mnt/ssd/hyde/houston.mat",
-    # )
+    # for method in gaussian_noise_removers_args:
+    #     print(method)
+    #     benchmark(
+    #         "/mnt/ssd/hyde/",
+    #         method=method,
+    #         device="cpu",
+    #         output="/mnt/ssd/hyde/",
+    #         original="/mnt/ssd/hyde/houston.mat",
+    #     )
