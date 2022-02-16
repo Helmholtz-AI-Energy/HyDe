@@ -107,10 +107,15 @@ def benchmark(file_loc, method, device, output, original):
         method_call = hyde.NNInference(arch=method, pretrained_file=nn_noise_removers[method])
         nn = True
     # TODO: load and update the pandas dict with the results
-    # out = Path(output)
+    output = Path(output)
     og = sio.loadmat(original)["houston"]
     og = og.reshape(og.shape, order="F")
     # print(og)
+
+    #import cProfile, pstats, io
+    #from pstats import SortKey
+
+
     original_im = torch.from_numpy(og.astype(np.float32)).to(device=device)
     out_df = pd.DataFrame(columns=["noise", "method", "device", "psnr", "sam", "time"])
     # print(original_im.mean(-1))
@@ -119,12 +124,18 @@ def benchmark(file_loc, method, device, output, original):
         working_dir = Path(file_loc) / str(noise)
         psnrs, sads, times = [], [], []
         for c, fil in enumerate(working_dir.iterdir()):  # data loading and method for each file
+            print(c, fil)
             # 1. load data + convert to torch
             dat_i = sio.loadmat(fil)
             dat_i = dat_i["houston"]
             dat_i = torch.from_numpy(dat_i).to(device=device, dtype=torch.float)
             # 2. start timer
             t0 = time.perf_counter()
+
+            # pr = cProfile.Profile()
+            # number_trials = 1
+            # pr.enable()
+
             if nn:
                 kwargs = gaussian_noise_removers_args["nn"]
                 is2d = method in nn_noise_removers["2d-models"]
@@ -136,7 +147,19 @@ def benchmark(file_loc, method, device, output, original):
                 res = method_call(dat_i, **kwargs)
             else:
                 res = method_call(dat_i)
+            
+            #pr.disable()
+            #s = io.StringIO()
+            #sortby = SortKey.TIME
+            #ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+            #ps.print_stats(30)
+            #print(s.getvalue())
+
             t1 = time.perf_counter() - t0
+
+            if isinstance(res, tuple):
+                res = res[0]
+
             psnr = hyde.peak_snr(res, original_im)
             # print((original_im).mean(-1))
             sam = hyde.sam(res, original_im).mean()
@@ -169,25 +192,33 @@ def benchmark(file_loc, method, device, output, original):
             "sam": sads.mean(),
             "time": times.mean(),
         }
-
         # save the results
-        ret_df = pd.Series(pd_dict)
-        out_df = out_df.append(ret_df, ignore_index=True)
-        # print(ret_df)
+        ret_df = pd.DataFrame(pd_dict, index=[0], columns=list(pd_dict.keys()))
+        if out_df is None:
+            out_df = pd.DataFrame(pd_dict, index=[0], columns=list(pd_dict.keys()))
+        else:
+            out_df = pd.concat([out_df, ret_df], ignore_index=True, axis=0)
+        # print(out_df)
 
-    print(ret_df)
-    # noise_out = output / "python-benchmarks.csv"
-    # if not noise_out.exists():
-    #     ret_df.to_csv(noise_out)
-    #
-    # else:
-    #     # load the existing DF and append to the bottom of it
-    #     existing = pd.read_csv(noise_out)
-    #     new = existing.append(ret_df, ignore_index=True)
-    #     new.to_csv(noise_out)
+    # print(ret_df)
+    noise_out = output / "python-benchmarks.csv"
+    if not noise_out.exists():
+        out_df.to_csv(noise_out)
+
+    else:
+        # load the existing DF and append to the bottom of it
+        existing = pd.read_csv(noise_out)
+        new = pd.concat([existing, out_df], ignore_index=True, axis=0)
+        new.to_csv(noise_out)
 
 
 if __name__ == "__main__":
+    import os
+    print(os.sched_getaffinity(0))
+    torch.set_num_threads(24)
+    print(torch.__config__.parallel_info())
+
+
     parser = argparse.ArgumentParser(description="HyDe Benchmarking")
     cla = hyde.nn.parsers.benchmark_parser(parser)
     print(cla)
