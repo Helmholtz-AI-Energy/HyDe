@@ -28,7 +28,7 @@ class WSRRR(torch.nn.Module):
 
         self.padding_method = padding_method
 
-        self.dwt_forward = dwt3d.DWTForwardOverwrite(
+        self.dwt_forward = dwt3d.DWTForward(
             decomp_level,
             self.wavelet_name,
             self.padding_method,
@@ -56,7 +56,7 @@ class WSRRR(torch.nn.Module):
         """
         if x.device != self.device:
             self.device = x.device
-            self.dwt_forward = dwt3d.DWTForwardOverwrite(
+            self.dwt_forward = dwt3d.DWTForward(
                 self.decomp_level,
                 self.wavelet_name,
                 self.padding_method,
@@ -70,7 +70,7 @@ class WSRRR(torch.nn.Module):
         og_rows, og_cols, og_channels = x.shape
 
         # % Noise Variance Estimation
-        _, v_dwt_low, v_dwt_highs = self.dwt_forward.forward(x.permute((2, 0, 1)).unsqueeze(0))
+        v_dwt_low, v_dwt_highs = self.dwt_forward.forward(x.permute((2, 0, 1)).unsqueeze(0))
         # out shape is N x C x H x W
         v_dwt_2d, filter_starts = dwt3d.construct_2d_from_filters(low=v_dwt_low, highs=v_dwt_highs)
 
@@ -88,7 +88,7 @@ class WSRRR(torch.nn.Module):
         # % D^T*Y is fixed through the derivation it is better to be calculated out
         # % of the loop
         # [WY_tilda,s1,s2]=twoDWTon3Ddata(Omega.^-.5.*Y,L,qmf,'FWT_PO_1D_2D_3D_fast');
-        _, wy_tilda_low, wy_tilda_highs = self.dwt_forward(inp.permute((2, 0, 1)).unsqueeze(0))
+        wy_tilda_low, wy_tilda_highs = self.dwt_forward(inp.permute((2, 0, 1)).unsqueeze(0))
 
         wy_tilda_2d, wy_filter_starts = dwt3d.construct_2d_from_filters(
             low=wy_tilda_low, highs=wy_tilda_highs

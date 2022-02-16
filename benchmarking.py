@@ -16,6 +16,7 @@ from hyde.nn.datasets.transforms import (  # AddNoiseDeadline,; AddNoiseImpulse,
 
 logger = logging.get_logger()
 
+import gc
 import time
 
 import pandas as pd
@@ -112,7 +113,6 @@ def benchmark(file_loc, method, device, output, original):
     # print(og)
     original_im = torch.from_numpy(og.astype(np.float32)).to(device=device)
     out_df = pd.DataFrame(columns=["noise", "method", "device", "psnr", "sam", "time"])
-    print(out_df)
     # print(original_im.mean(-1))
     for noise in [20, 30, 40]:
         # todo: see if the file exists
@@ -144,6 +144,8 @@ def benchmark(file_loc, method, device, output, original):
             psnrs.append(psnr.item())
             sads.append(sam.item())
             print(f"file: {fil} time: {t1}, psnr: {psnr}, sam: {sam}")
+            gc.collect()
+            torch.cuda.empty_cache()
             # break
 
         times = np.array(times)
@@ -174,28 +176,34 @@ def benchmark(file_loc, method, device, output, original):
         # print(ret_df)
 
     print(ret_df)
-    noise_out = output / "python-benchmarks.csv"
-    if not noise_out.exists():
-        ret_df.to_csv(noise_out)
-
-    else:
-        # load the existing DF and append to the bottom of it
-        existing = pd.read_csv(noise_out)
-        new = existing.append(ret_df, ignore_index=True)
-        new.to_csv(noise_out)
+    # noise_out = output / "python-benchmarks.csv"
+    # if not noise_out.exists():
+    #     ret_df.to_csv(noise_out)
+    #
+    # else:
+    #     # load the existing DF and append to the bottom of it
+    #     existing = pd.read_csv(noise_out)
+    #     new = existing.append(ret_df, ignore_index=True)
+    #     new.to_csv(noise_out)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="HyDe Benchmarking")
-    cla = hyde.nn.parsers.benchmark_parser(parser)
-    print(cla)
-    logger.info(cla)
-    # generate_noisy_images(base_image="/mnt/ssd/hyde/houston.mat", save_loc="/mnt/ssd/hyde/")
+    # parser = argparse.ArgumentParser(description="HyDe Benchmarking")
+    # cla = hyde.nn.parsers.benchmark_parser(parser)
+    # print(cla)
+    # logger.info(cla)
+    # # generate_noisy_images(base_image="/mnt/ssd/hyde/houston.mat", save_loc="/mnt/ssd/hyde/")
+    # benchmark(
+    #     file_loc=cla.data_dir,
+    #     method=cla.method,
+    #     device=cla.device,
+    #     output=cla.output_dir,
+    #     original=cla.original_image,
+    # )
     benchmark(
-        file_loc=cla.data_dir,
-        method=cla.method,
-        device=cla.device,
-        output=cla.output_dir,
-        original=cla.original_image,
+        "/mnt/ssd/hyde/",
+        method="FORPDN_SURE",
+        device="cuda",
+        output=None,
+        original="/mnt/ssd/hyde/houston.mat",
     )
-    # "/mnt/ssd/hyde/", method="HyRes", device="cuda", output=None, original="/mnt/ssd/hyde/houston.mat")
