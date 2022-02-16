@@ -1,4 +1,5 @@
-import models
+from . import models
+#import models
 
 __all__ = ["qrnn_parser"]
 
@@ -96,3 +97,5 @@ def benchmark_parser(parser):
     parser.add_argument("--data-dir", type=str, help="location of the noisy images")
     parser.add_argument("--output-dir", type=str, help="location of the output csv")
     parser.add_argument("--original-image", type=str, help="location of the original file")
+    
+    return parser.parse_args()

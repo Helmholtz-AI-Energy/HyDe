@@ -741,18 +741,22 @@ def symmetric_pad(tens: torch.Tensor, n: Union[int, Iterable]) -> torch.Tensor:
 
     if tens.ndim > 1:
         # get edge of left side
-        og_edge_flp = padded[:, n[-4] + 1 : n[-4] * 2 + 1].flip(dims=[1])
-        padded[:, : n[-4]] = og_edge_flp
+        if n[-4] != 0:
+            og_edge_flp = padded[:, n[-4] + 1 : n[-4] * 2 + 1].flip(dims=[1])
+            padded[:, : n[-4]] = og_edge_flp
         # right side
-        og_edge_flp = padded[:, -n[-3] * 2 - 1 : -n[-3] - 1].flip(dims=[1])
-        padded[:, -n[-3] :] = og_edge_flp
+        if n[-3] != 0:
+            og_edge_flp = padded[:, -n[-3] * 2 - 1 : -n[-3] - 1].flip(dims=[1])
+            padded[:, -n[-3] :] = og_edge_flp
 
-    og_edge_flp = padded[n[-2] + 1 : n[-2] * 2 + 1].flip(dims=[0])
-    padded[: n[-2]] = og_edge_flp
-    # top
-    og_edge_flp = padded[-n[-1] * 2 - 1 : -n[-1] - 1].flip(dims=[0])
-    padded[-n[-1] :] = og_edge_flp
-    # bottom
+    if n[-2] != 0:
+        og_edge_flp = padded[n[-2] + 1 : n[-2] * 2 + 1].flip(dims=[0])
+        padded[: n[-2]] = og_edge_flp
+        # top
+    if n[-1] != 0:
+        og_edge_flp = padded[-n[-1] * 2 - 1 : -n[-1] - 1].flip(dims=[0])
+        padded[-n[-1] :] = og_edge_flp
+        # bottom
     return padded
 
 

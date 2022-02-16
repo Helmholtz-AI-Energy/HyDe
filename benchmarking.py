@@ -188,6 +188,7 @@ def benchmark(file_loc, method, device, output, original):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="HyDe Benchmarking")
     cla = hyde.nn.parsers.benchmark_parser(parser)
+    print(cla)
     logger.info(cla)
     # generate_noisy_images(base_image="/mnt/ssd/hyde/houston.mat", save_loc="/mnt/ssd/hyde/")
     benchmark(
