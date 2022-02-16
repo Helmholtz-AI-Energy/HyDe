@@ -140,10 +140,12 @@ class ICVLDataset(Dataset):
 
         # load all the data at the top
         self.loadfrom = []  # np.zeros(first, dtype=np.float32)
+        self.band_norm = band_norm
         for c, f in enumerate(self.files):
             loaded, _ = utils.normalize(
                 torch.tensor(np.load(f), dtype=torch.float32), by_band=band_norm, band_dim=0
             )
+            #loaded = torch.tensor(np.load(f), dtype=torch.float32)
             self.loadfrom.append(loaded)
 
         self.loadfrom = tuple(self.loadfrom)
@@ -201,6 +203,10 @@ class ICVLDataset(Dataset):
 
         if self.target_transform is not None:
             target = self.target_transform(target)
+        
+        #img, _ = utils.normalize(img, by_band=self.band_norm, band_dim=-3)
+        #target, _ = utils.normalize(target, by_band=self.band_norm, band_dim=-3)
+
         #print('end dataset getitem', img.dtype)
         img = img.to(dtype=torch.float)
         target = target.to(dtype=torch.float)

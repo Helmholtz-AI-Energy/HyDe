@@ -3,6 +3,7 @@ import os
 import time
 from os.path import join
 
+import random
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
@@ -52,6 +53,7 @@ def main():
 
     torch.manual_seed(cla.seed)
     np.random.seed(cla.seed)
+    random.seed(cla.seed)
 
     """Model"""
     logger.info(f"=> creating model: {cla.arch}")
@@ -163,7 +165,7 @@ def main():
             # transforms.RandomApply(
             RandChoice(
                 [AddNoiseImpulse(), AddNoiseStripe(), AddNoiseDeadline()],
-                p=0.75,
+                p=None,  # 0.75,
                 combos=True,
             ),
         ]
@@ -237,6 +239,7 @@ def main():
         torch.manual_seed(epoch + 2018)
         torch.cuda.manual_seed(epoch + 2018)
         np.random.seed(epoch + 2018)
+        random.seed(epoch + 2018)
 
         # noise = None
 
@@ -244,17 +247,27 @@ def main():
             # lr warmup
             helper.adjust_learning_rate(optimizer, cla.lr * 10 ** (epoch - 4))
 
-        # # LR warmup
-        # if epoch == 0:
-        #     helper.adjust_learning_rate(optimizer, cla.lr * 0.0001)
-        # elif epoch == 1:
-        #     helper.adjust_learning_rate(optimizer, cla.lr * 0.001)
-        # elif epoch == 2:
-        #     helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
-        # elif epoch == 3:
-        #     helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
-        # elif epoch == 4:
-        #     helper.adjust_learning_rate(optimizer, cla.lr * 1)
+        if epoch < -20:  # Only Non-iid
+            train_icvl.transform = AddNoiseNonIIDdB()
+        elif epoch < -40:
+            train_icvl.transform = transforms.Compose([AddNoiseNonIIDdB(), AddNoiseImpulse()])
+        elif epoch < -50:
+            train_icvl.transform = transforms.Compose([AddNoiseNonIIDdB(), AddNoiseStripe()])
+        elif epoch < -60:
+            train_icvl.transform = transforms.Compose([AddNoiseNonIIDdB(), AddNoiseDeadline()])
+        else:
+            train_icvl.transform = transforms.Compose(
+                [
+                    AddNoiseNonIIDdB(),
+                    # transforms.RandomApply(
+                    RandChoice(
+                        [AddNoiseImpulse(), AddNoiseStripe(), AddNoiseDeadline()],
+                        p=None,
+                        combos=True,
+                    ),
+                ]
+            )
+
 
         if epoch == 120:
             helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
@@ -275,13 +288,14 @@ def main():
             criterion,
             bandwise,
             writer=writer,
-            iterations=20,
+            iterations=30,
         )
         ttime = time.perf_counter() - ttime
 
         torch.manual_seed(cla.rank)
         torch.cuda.manual_seed(cla.rank)
         np.random.seed(cla.rank)
+        random.seed(cla.rank)
         vtime = time.perf_counter()
         psnr_noniid, ls_noniid = training_utils.validate(
             val_loader_noniid,
@@ -328,11 +342,11 @@ def main():
             best_ls_mix = ls_mixture
             epochs_wo_best = 0
 
-        if epochs_wo_best == 0 or epoch % 10 == 0:
+        if epochs_wo_best == 0 or (epoch + 1) % 10 == 0:
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(
-                cla.save_dir, prefix, f"model_latest_complex_{cla.loss}.pth"
+                cla.save_dir, prefix, f"model_latest_complex_long-{cla.loss}.pth"
             )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path

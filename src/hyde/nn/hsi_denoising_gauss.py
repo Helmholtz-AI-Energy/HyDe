@@ -156,7 +156,8 @@ def main():
 
     crop_size = (256, 256)
     band_norm = True
-    num_bands = -1  # 10 if cla.arch in "hsidenet" else -1
+    num_bands = -1 #10 if cla.arch in "hsidenet" else -1
+    scale_factor = 255
 
     train_icvl = ds_utils.ICVLDataset(
         cla.datadir,
@@ -187,7 +188,7 @@ def main():
 
     val_dataset = ds_utils.ICVLDataset(
         basefolder,
-        transform=AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=10),  # blind gaussain noise
+        transform=AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=10, scale_factor=scale_factor),  # blind gaussain noise
         val=True,
         crop_size=crop_size,
         band_norm=band_norm,
@@ -224,31 +225,16 @@ def main():
             # lr warmup
             helper.adjust_learning_rate(optimizer, cla.lr * 10 ** (epoch - 4))
 
-        # LR warmup
-        if epoch == 0:
-            helper.adjust_learning_rate(optimizer, cla.lr * 0.0001)
-        elif epoch == 1:
-            helper.adjust_learning_rate(optimizer, cla.lr * 0.001)
-        elif epoch == 2:
-            helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
-        elif epoch == 3:
-            helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
-        elif epoch == 4:
-            helper.adjust_learning_rate(optimizer, cla.lr * 1)
-
         if epoch == 120:
             helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
         if epoch == 140:
             helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
 
-        if epoch == 50 and "qrnn" in cla.arch:
-            net.clamp = True
-
         if noise is not None:
             train_icvl.transform = AddGaussianNoise(noise)
             logger.info(f"Noise level: {noise} dB")
         else:
-            train_icvl.transform = AddGaussianNoiseBlind(max_sigma_db=42, min_sigma_db=10)  # 36/20
+            train_icvl.transform = AddGaussianNoiseBlind(max_sigma_db=42, min_sigma_db=10, scale_factor=scale_factor)  # 36/20
 
             logger.info("Noise level: BLIND!")
 
@@ -300,9 +286,7 @@ def main():
         if epochs_wo_best == 0 or (epoch + 1) % 10 == 0:
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
-            model_latest_path = os.path.join(
-                cla.save_dir, prefix, f"small_model_gauss_3d-randomcrop-{cla.loss}-64.pth"
-            )
+            model_latest_path = os.path.join(cla.save_dir, prefix, f"current-network-gaussian-{cla.loss}-short.pth")
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
             )
