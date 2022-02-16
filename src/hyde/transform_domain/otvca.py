@@ -36,9 +36,8 @@ class OTVCA(torch.nn.Module):
         self,
         x: torch.Tensor,
         features: int,
-        num_itt: int = 200,
+        num_itt: int = 10,
         lam: float = 0.01,
-        rescale: bool = True,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Denoise an image `x` using the HyRes algorithm.
@@ -55,9 +54,6 @@ class OTVCA(torch.nn.Module):
         lam: float, optional
             Tuning parameter; Default is 0.01 for normalized HSI
             the value passed to the denoising algorithm is 1/lam
-        rescale: bool, optional
-            if true: rescale the image to the original scale. Otherwise, the output will
-            be between 0 and 1.
 
         Returns
         -------

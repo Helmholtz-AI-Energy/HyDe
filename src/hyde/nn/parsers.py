@@ -88,3 +88,11 @@ def basic_parser(parser):
         "--comm-method", type=str, default="nccl-mpi", help="how to spawn processes"
     )
     return parser
+
+
+def benchmark_parser(parser):
+    parser.add_argument("--method", type=str, help="Denoisnig method")
+    parser.add_argument("--device", type=str, help="Device to use")
+    parser.add_argument("--data-dir", type=str, help="location of the noisy images")
+    parser.add_argument("--output-dir", type=str, help="location of the output csv")
+    parser.add_argument("--original-image", type=str, help="location of the original file")

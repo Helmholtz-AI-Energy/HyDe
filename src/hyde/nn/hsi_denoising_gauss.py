@@ -53,7 +53,7 @@ def main():
     """Model"""
     logger.info(f"=> creating model: {cla.arch}")
     net = models.__dict__[cla.arch]()
-    #logger.info(net)
+    # logger.info(net)
     # initialize parameters
     # init params will set the model params with a random distribution
     # helper.init_params(net, init_type=cla.init)  # disable for default initialization
@@ -122,7 +122,7 @@ def main():
 
     """Optimization Setup"""
     optimizer = optim.Adam(net.parameters(), lr=cla.lr, weight_decay=cla.wd, amsgrad=False)
-    
+
     start_epoch = 0
     # """Resume previous model"""
     if cla.resume_path is not None:
@@ -229,9 +229,6 @@ def main():
             helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
         if epoch == 140:
             helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
-
-        #if epoch == 50 and cla.arch in "qrnn":
-        #    net.clamp = True
 
         if noise is not None:
             train_icvl.transform = AddGaussianNoise(noise)

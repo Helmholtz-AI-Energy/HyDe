@@ -400,7 +400,6 @@ def normalize(
     """
     out = torch.zeros_like(image)
     if by_band:
-        # todo: remove the ignore_zeros command!! + make smarted (avoid for loop)
         mins, maxs = [], []
         for b in range(image.shape[band_dim]):
             sl = [
@@ -528,7 +527,8 @@ def sam(noise: torch.Tensor, reference: torch.Tensor) -> torch.Tensor:
         # case 2: matrices -> return a MxN if MxNxC is given
         numer = torch.sum(noise * reference, dim=-1)
         denom = torch.linalg.norm(noise, dim=-1) * torch.linalg.norm(reference, dim=-1)
-    return torch.arccos(numer / denom)
+    eps = torch.finfo(denom.dtype).eps
+    return torch.arccos(numer / (denom + eps))
 
 
 def scale_wo_shift(
@@ -596,7 +596,7 @@ def snr(noisy: torch.Tensor, ref_signal: torch.Tensor) -> Tuple[torch.Tensor, to
         # Therefore PSNR have no importance.
         psnr = 0
     else:
-        max_pixel = 255
+        max_pixel = ref_signal.max()
         psnr = 20 * torch.log10(max_pixel / mse.sqrt())
     return snr, psnr
 
@@ -731,11 +731,13 @@ def symmetric_pad(tens: torch.Tensor, n: Union[int, Iterable]) -> torch.Tensor:
     padded = pad(tens, n, "constant", 0.0)
     if tens.ndim > 2:
         # get edge of left side
-        og_edge_flp = padded[:, :, n[-6] + 1 : n[-6] * 2 + 1].flip(dims=[1])
-        padded[:, : n[-6]] = og_edge_flp
+        if n[-6] != 0:
+            og_edge_flp = padded[:, :, n[-6] + 1 : n[-6] * 2 + 1].flip(dims=[2])
+            padded[:, :, : n[-6]] = og_edge_flp
         # right side
-        og_edge_flp = padded[:, -n[-5] * 2 - 1 : -n[-5] - 1].flip(dims=[1])
-        padded[:, -n[-5] :] = og_edge_flp
+        if n[-5] != 0:
+            og_edge_flp = padded[:, :, -n[-5] * 2 - 1 : -n[-5] - 1].flip(dims=[2])
+            padded[:, :, -n[-5] :] = og_edge_flp
 
     if tens.ndim > 1:
         # get edge of left side
@@ -751,7 +753,6 @@ def symmetric_pad(tens: torch.Tensor, n: Union[int, Iterable]) -> torch.Tensor:
     og_edge_flp = padded[-n[-1] * 2 - 1 : -n[-1] - 1].flip(dims=[0])
     padded[-n[-1] :] = og_edge_flp
     # bottom
-
     return padded
 
 
