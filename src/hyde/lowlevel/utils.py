@@ -156,7 +156,7 @@ def custom_pca_image(img: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     return v_pca, pc
 
 
-def diff(x: torch.Tensor, n: int = 1, dim: int = 0) -> torch.Tensor:
+def diff(x: torch.Tensor, n: int = 1, dim=0) -> torch.Tensor:
     """
     Find the differences in x. This will return a torch.Tensor of the same shape as `x`
     with the requisite number of zeros added to the end (`n`).
@@ -185,7 +185,6 @@ def diff(x: torch.Tensor, n: int = 1, dim: int = 0) -> torch.Tensor:
     return y
 
 
-@torch.jit.script
 def diff_dim0_replace_last_row(x: torch.Tensor) -> torch.Tensor:
     """
     Find the single row differences in x and then put the second to last row as the last row in
@@ -602,7 +601,6 @@ def snr(noisy: torch.Tensor, ref_signal: torch.Tensor) -> Tuple[torch.Tensor, to
     return snr, psnr
 
 
-@torch.jit.script
 def soft_threshold(x: torch.Tensor, threshold: float) -> torch.Tensor:
     """
     Calculate the soft threshold of an input
@@ -618,14 +616,11 @@ def soft_threshold(x: torch.Tensor, threshold: float) -> torch.Tensor:
     -------
     torch.Tensor with the soft threshold result
     """
-    hld = x.abs() - threshold
-    # y = torch.where(hld > 0, hld, torch.tensor(0.0, dtype=x.dtype, device=x.device))
+    y = x.abs() - threshold
+    # y = torch.where(y > 0, y, torch.tensor(0.0, dtype=x.dtype, device=x.device))
+    y[y <= 0] = 0
 
-    mask = hld <= 0
-    y = hld
-    y[mask] = 0
-
-    y /= (y + threshold) * x
+    y = y / (y + threshold) * x
     return y
 
 
@@ -707,7 +702,8 @@ def sure_soft_modified_lr2(
 
     x_t = x ** 2 - t ** 2
     # MATLAB: x_t=max(x_t,0) -> this replaces the things below 0 with 0
-    x_t = torch.where(x_t > 0, x_t, torch.tensor(0.0, dtype=x.dtype, device=x.device))
+    # x_t = torch.where(x_t > 0, x_t, torch.tensor(0.0, dtype=x.dtype, device=x.device))
+    x_t[x_t <= 0] = 0
 
     sure1 = torch.sum(2 * abv_zero - x_t, dim=0)
     min_sure, min_idx = torch.min(sure1, dim=0)

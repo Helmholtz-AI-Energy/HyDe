@@ -51,15 +51,8 @@ class HyRes(torch.nn.Module):
 
         self.padding_method = padding_method
 
-        self.dwt_forward = dwt3d.DWTForward(
-            decomp_level,
-            self.wavelet_name,
-            self.padding_method,
-            device=self.device,
-        )
-        self.dwt_inverse = dwt3d.DWTInverse(
-            wave=self.wavelet_name, padding_method=self.padding_method, device=self.device
-        )
+        self.dwt_forward = None
+        self.dwt_inverse = None
 
     def forward(self, x: torch.Tensor):
         """
@@ -74,17 +67,16 @@ class HyRes(torch.nn.Module):
         -------
         denoised_image : torch.Tensor
         """
-        if x.device != self.device:
-            self.device = x.device
-            self.dwt_forward = dwt3d.DWTForward(
-                self.decomp_level,
-                self.wavelet_name,
-                self.padding_method,
-                device=self.device,
-            )
-            self.dwt_inverse = dwt3d.DWTInverse(
-                wave=self.wavelet_name, padding_method=self.padding_method, device=self.device
-            )
+        self.device = x.device
+        self.dwt_forward = dwt3d.DWTForwardOverwrite(
+            self.decomp_level,
+            self.wavelet_name,
+            self.padding_method,
+            device=self.device,
+        )
+        self.dwt_inverse = dwt3d.DWTInverse(
+            wave=self.wavelet_name, padding_method=self.padding_method, device=self.device
+        )
         # need to have the dims be (num images (1), C_in, H_in, W_in) for twave ops
         # current order: rows, columns, bands (H, W, C) -> permute tuple (2, 0, 1)
         og_rows, og_cols, og_channels = x.shape
@@ -108,10 +100,6 @@ class HyRes(torch.nn.Module):
                     2 ** self.decomp_level - (og_rows % 2 ** self.decomp_level),
                 ],
             )
-        # if og_cols % (2 ** self.decomp_level) != 0:
-        #     x = utils.symmetric_pad(
-        #         x, [0, 0, 0, 2 ** self.decomp_level - (og_cols % 2 ** self.decomp_level), 0, 0]
-        #     )
 
         padded_shape = tuple(x.shape)
 
@@ -136,7 +124,9 @@ class HyRes(torch.nn.Module):
         pc = pc.to(torch.float)  # no-op if already float
 
         # pc -> h x w x c
-        v_dwt_lows, v_dwt_highs = self.dwt_forward.forward(pc.permute((2, 0, 1)).unsqueeze(0))
+        v_dwt_full, v_dwt_lows, v_dwt_highs = self.dwt_forward.forward(
+            pc.permute((2, 0, 1)).unsqueeze(0)
+        )
         v_dwt_permed, v_dwt_filter_starts = dwt3d.construct_2d_from_filters(
             low=v_dwt_lows, highs=v_dwt_highs
         )
@@ -161,12 +151,9 @@ class HyRes(torch.nn.Module):
             if rank > 1 and min_sure[rank] > min_sure[rank - 1]:
                 break
 
-        v_dwt_lows, v_dwt_highs = dwt3d.construct_filters_from_2d(
-            matrix=v_dwt_permed[:, :rank],
-            filter_starts=v_dwt_filter_starts,
-            decomp_level=self.decomp_level,
-        )
-        y_est_sure_model_y = self.dwt_inverse((v_dwt_lows, v_dwt_highs))
+        inv_lows = v_dwt_lows[:, :rank]
+        inv_highs = [asdf[:, :rank] for asdf in v_dwt_highs]
+        y_est_sure_model_y = self.dwt_inverse((inv_lows, inv_highs))
 
         # y_est_sure_model_y -> n x c x h x w  -> perm back: squeeze -> 1, 2, 0 (h, w, c)
         y_est_sure_model_y = y_est_sure_model_y.squeeze().permute((1, 2, 0))

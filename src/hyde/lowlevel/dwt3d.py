@@ -120,16 +120,16 @@ class DWTForwardOverwrite(torch.nn.Module):
                 ll, self.h0_col, self.h1_col, self.h0_row, self.h1_row, padding_method
             )
 
-            s = ll.shape[-2]
+            s = ll.shape[-2:]
             if full is None:  # first iteration
                 full_shape = list(ll.shape)
                 full_shape[-1] *= 2
                 full_shape[-2] *= 2
                 full = torch.zeros(full_shape, device=ll.device, dtype=ll.dtype)
-            full[:, :, :s, :s] = ll
-            full[:, :, :s, s : s * 2] = high[:, :, 0]
-            full[:, :, s : s * 2, :s] = high[:, :, 1]
-            full[:, :, s : s * 2, s : s * 2] = high[:, :, 2]
+            full[:, :, : s[0], : s[1]] = ll
+            full[:, :, : s[0], s[1] : s[1] * 2] = high[:, :, 0]
+            full[:, :, s[0] : s[0] * 2, : s[1]] = high[:, :, 1]
+            full[:, :, s[0] : s[0] * 2, s[1] : s[1] * 2] = high[:, :, 2]
 
             yh.append(high)
 
