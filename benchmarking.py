@@ -111,17 +111,17 @@ def benchmark(file_loc, method, device, output, original):
     og = sio.loadmat(original)["houston"]
     og = og.reshape(og.shape)
 
-    import cProfile
-    import io
-    import pstats
-    from pstats import SortKey
+    # import cProfile
+    # import io
+    # import pstats
+    # from pstats import SortKey
 
     # print(og)
     original_im = torch.from_numpy(og.astype(np.float32)).to(device=device)
     # out_df = pd.DataFrame(columns=["noise", "method", "device", "psnr", "sam", "time"])
     out_df = None
     # print(original_im.mean(-1))
-    for noise in [20, 30]:  # , 40
+    for noise in [20, 30, 40]:
         # todo: see if the file exists
         working_dir = Path(file_loc) / str(noise)
         psnrs, sads, times = [], [], []
@@ -169,8 +169,8 @@ def benchmark(file_loc, method, device, output, original):
             print(f"file: {fil} time: {t1}, psnr: {psnr}, sam: {sam}")
             gc.collect()
             torch.cuda.empty_cache()
-            if c == 1:
-                break
+            # if c == 1:
+            #     break
 
         times = np.array(times)
         psnrs = np.array(psnrs)
@@ -232,7 +232,7 @@ if __name__ == "__main__":
     #     benchmark(
     #         "/mnt/ssd/hyde/",
     #         method=method,
-    #         device="cpu",
+    #         device="cuda",
     #         output="/mnt/ssd/hyde/",
     #         original="/mnt/ssd/hyde/houston.mat",
     #     )
