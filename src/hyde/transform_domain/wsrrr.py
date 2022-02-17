@@ -106,7 +106,7 @@ class WSRRR(torch.nn.Module):
         thresh = torch.zeros((rank + 1, self.decomp_level + 2), dtype=x.dtype, device=x.device)
         wx = torch.zeros((wy_tilda_2d.shape[0], v.shape[1]), dtype=x.dtype, device=x.device)
 
-        stop = filter_starts[0] ** 2
+        stop = filter_starts[0][0] * filter_starts[0][1]  # ** 2
         # anything which cuts at `stop` gets the low filters from the DWT decomposition
         for cc in range(200):
             # W=WY_tilda*V;
@@ -122,9 +122,9 @@ class WSRRR(torch.nn.Module):
 
                 # the next loop applies thresholding to the high parts of the filters
                 for j in range(self.decomp_level):
-                    st = wy_filter_starts[j] ** 2
+                    st = wy_filter_starts[j][0] * wy_filter_starts[j][1]  # ** 2
                     try:
-                        sp = wy_filter_starts[j + 1] ** 2
+                        sp = wy_filter_starts[j + 1][0] * wy_filter_starts[j+1][1]  # ** 2
                     except IndexError:
                         sp = None
                     idx = slice(st, sp)

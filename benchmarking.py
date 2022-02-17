@@ -208,13 +208,13 @@ def benchmark(file_loc, method, device, output, original):
     # print(ret_df)
     noise_out = output / "python-benchmarks.csv"
     if not noise_out.exists():
-        out_df.to_csv(noise_out)
+        out_df.to_csv(noise_out, index=False)
         print(out_df)
     else:
         # load the existing DF and append to the bottom of it
         existing = pd.read_csv(noise_out)
         new = pd.concat([existing, out_df], ignore_index=True, axis=0)
-        new.to_csv(noise_out)
+        new.to_csv(noise_out, index=False)
         print(new)
 
 
