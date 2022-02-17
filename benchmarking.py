@@ -117,6 +117,10 @@ def benchmark(file_loc, method, device, output, original):
     # from pstats import SortKey
 
     # print(og)
+
+    # import cProfile, pstats, io
+    # from pstats import SortKey
+
     original_im = torch.from_numpy(og.astype(np.float32)).to(device=device)
     # out_df = pd.DataFrame(columns=["noise", "method", "device", "psnr", "sam", "time"])
     out_df = None
@@ -126,6 +130,7 @@ def benchmark(file_loc, method, device, output, original):
         working_dir = Path(file_loc) / str(noise)
         psnrs, sads, times = [], [], []
         for c, fil in enumerate(working_dir.iterdir()):  # data loading and method for each file
+            print(c, fil)
             # 1. load data + convert to torch
             dat_i = sio.loadmat(fil)
             dat_i = dat_i["houston"]
@@ -160,6 +165,7 @@ def benchmark(file_loc, method, device, output, original):
 
             if isinstance(res, tuple):
                 res = res[0]
+
             psnr = hyde.peak_snr(res, original_im)
             # print((original_im).mean(-1))
             sam = hyde.sam(res, original_im).mean()
@@ -169,8 +175,6 @@ def benchmark(file_loc, method, device, output, original):
             print(f"file: {fil} time: {t1}, psnr: {psnr}, sam: {sam}")
             gc.collect()
             torch.cuda.empty_cache()
-            # if c == 1:
-            #     break
 
         times = np.array(times)
         psnrs = np.array(psnrs)
@@ -193,7 +197,6 @@ def benchmark(file_loc, method, device, output, original):
             "sam": sads.mean(),
             "time": times.mean(),
         }
-
         # save the results
         ret_df = pd.DataFrame(pd_dict, index=[0], columns=list(pd_dict.keys()))
         if out_df is None:
@@ -206,15 +209,22 @@ def benchmark(file_loc, method, device, output, original):
     noise_out = output / "python-benchmarks.csv"
     if not noise_out.exists():
         out_df.to_csv(noise_out)
-
+        print(out_df)
     else:
         # load the existing DF and append to the bottom of it
         existing = pd.read_csv(noise_out)
         new = pd.concat([existing, out_df], ignore_index=True, axis=0)
         new.to_csv(noise_out)
+        print(new)
 
 
 if __name__ == "__main__":
+    import os
+
+    print(os.sched_getaffinity(0))
+    torch.set_num_threads(24)
+    print(torch.__config__.parallel_info())
+
     parser = argparse.ArgumentParser(description="HyDe Benchmarking")
     cla = hyde.nn.parsers.benchmark_parser(parser)
     print(cla)
