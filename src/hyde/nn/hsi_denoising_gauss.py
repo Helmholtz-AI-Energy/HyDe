@@ -10,7 +10,14 @@ import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 import torch.nn as nn
 import torch.optim as optim
-from kornia.losses import SSIMLoss
+from kornia.losses import (
+    DiceLoss,
+    FocalLoss,
+    PSNRLoss,
+    SSIMLoss,
+    TotalVariation,
+    TverskyLoss,
+)
 from torch.utils.data import DataLoader
 
 from hyde.lowlevel import logging
@@ -105,6 +112,17 @@ def main():
         criterion = MultipleWeightedLosses(
             [nn.MSELoss(), SSIMLoss(window_size=11, max_val=1.0)], weight=[1, 2.5e-3]
         )
+    elif cla.loss == "psnr":
+        criterion = PSNRLoss(20)
+    elif cla.loss == "tv":
+        criterion = TotalVariation()
+    elif cla.loss == "dice":
+        criterion = DiceLoss()
+    # elif cla.loss == "tversky":
+    #     criterion = TverskyLoss
+    # elif cla.loss == "focal":
+    #     criterion = FocalLoss
+
     else:
         raise ValueError(
             f"Loss function must be one of: [l2, l1, smooth_l1, ssim, l2_ssim], currently: {cla.loss}"
@@ -156,8 +174,7 @@ def main():
 
     crop_size = (256, 256)
     band_norm = True
-    num_bands = -1 #10 if cla.arch in "hsidenet" else -1
-    scale_factor = 255
+    scale_factor = 255  # max os ICVL dataset
 
     train_icvl = ds_utils.ICVLDataset(
         cla.datadir,
@@ -165,7 +182,6 @@ def main():
         transform=AddGaussianNoise(15),
         crop_size=crop_size,
         band_norm=band_norm,
-        num_bands=num_bands,
     )
     if distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_icvl)
@@ -188,11 +204,12 @@ def main():
 
     val_dataset = ds_utils.ICVLDataset(
         basefolder,
-        transform=AddGaussianNoiseBlind(max_sigma_db=40, min_sigma_db=10, scale_factor=scale_factor),  # blind gaussain noise
+        transform=AddGaussianNoiseBlind(
+            max_sigma_db=40, min_sigma_db=10, scale_factor=scale_factor
+        ),  # blind gaussain noise
         val=True,
         crop_size=crop_size,
         band_norm=band_norm,
-        num_bands=num_bands,
     )
     if distributed:
         val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset)
@@ -218,8 +235,12 @@ def main():
         torch.manual_seed(epoch + 2018)
         torch.cuda.manual_seed(epoch + 2018)
         np.random.seed(epoch + 2018)
+        random.seed(epoch + 2018)
 
-        noise = None
+        if epoch < 100:
+            noise = 40
+        else:
+            noise = None
 
         if epoch < 5:
             # lr warmup
@@ -234,7 +255,9 @@ def main():
             train_icvl.transform = AddGaussianNoise(noise)
             logger.info(f"Noise level: {noise} dB")
         else:
-            train_icvl.transform = AddGaussianNoiseBlind(max_sigma_db=42, min_sigma_db=10, scale_factor=scale_factor)  # 36/20
+            train_icvl.transform = AddGaussianNoiseBlind(
+                max_sigma_db=42, min_sigma_db=10, scale_factor=scale_factor
+            )  # 36/20
 
             logger.info("Noise level: BLIND!")
 
@@ -258,6 +281,8 @@ def main():
         torch.manual_seed(cla.rank)
         torch.cuda.manual_seed(cla.rank)
         np.random.seed(cla.rank)
+        random.seed(cla.rank)
+
         vtime = time.perf_counter()
         psnr, ls = training_utils.validate(
             val_loader, "validate", net, cla, epoch, criterion, bandwise, writer=writer
@@ -286,7 +311,9 @@ def main():
         if epochs_wo_best == 0 or (epoch + 1) % 10 == 0:
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
-            model_latest_path = os.path.join(cla.save_dir, prefix, f"current-network-gaussian-{cla.loss}-short.pth")
+            model_latest_path = os.path.join(
+                cla.save_dir, prefix, f"current-network-gaussian-{cla.loss}-short.pth"
+            )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
             )

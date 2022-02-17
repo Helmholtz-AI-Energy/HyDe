@@ -3,9 +3,10 @@ from itertools import combinations
 from typing import List
 
 import numpy as np
+import torch
 import torchvision.transforms.functional as TF
 
-from ...lowlevel import add_noise, logging
+from ...lowlevel import add_noise, logging, utils
 
 logger = logging.get_logger()
 
@@ -19,6 +20,7 @@ __all__ = [
     "AddNoiseNonIIDdB",
     "AddNoiseStripe",
     "RandChoice",
+    "RandomBandPerm",
     "RandRot90Transform",
 ]
 
@@ -150,28 +152,6 @@ class AddNoiseImpulse(object):
             band_dim=self.band_dim,
         )
 
-    #     # bwamounts = self.amounts[np.random.randint(0, len(self.amounts), len(bands))]
-    #     # for i, amount in zip(bands, bwamounts):
-    #     #     sl = [slice(None), ] * img.ndim
-    #     #     sl[-3] = i
-    #     #     self.add_noise(img[tuple(sl)], amount=amount, salt_vs_pepper=self.s_vs_p)
-    #     # return img.to(torch.float)
-    #
-    # def add_noise(self, image, amount, salt_vs_pepper):
-    #     out = image  # torch.zeros_like(image).to(torch.bool)
-    #     p = amount
-    #     q = salt_vs_pepper
-    #     flipped = np.random.choice([True, False], size=image.shape, p=[p, 1 - p])
-    #     salted = np.random.choice([True, False], size=image.shape, p=[q, 1 - q])
-    #     peppered = ~salted
-    #     flipped = torch.tensor(flipped, dtype=torch.bool, device=out.device)
-    #     salted = torch.tensor(salted, dtype=torch.bool, device=out.device)
-    #     m1 = (flipped & salted).to(torch.bool)
-    #     m0 = (flipped & peppered).to(torch.bool)
-    #     out[m1] = 1.
-    #     out[m0] = 0.
-    #     return out
-
 
 class AddNoiseStripe(object):
     """
@@ -194,24 +174,6 @@ class AddNoiseStripe(object):
             max_amount=self.max_amount,
             band_dim=self.band_dim,
         )
-        # B, H, W = img.shape[-3:]
-        # # bands = np.random.permutation(range(img.shape[0]))[:len(bands)]
-        # num_stripe = np.random.randint(
-        #     np.floor(self.min_amount * W), np.floor(self.max_amount * W), len(bands)
-        # )
-        # for i, n in zip(bands, num_stripe):
-        #     sl = [
-        #         slice(None),
-        #     ] * img.ndim
-        #     loc = np.random.permutation(range(W))
-        #     loc = loc[:n]
-        #     # stripe = np.random.uniform(0, 1, size=(len(loc),)) * 0.5 - 0.25
-        #     # img[i, :, loc] -= np.reshape(stripe, (-1, 1))
-        #     sl[-3] = i
-        #     sl[-1] = loc
-        #     stripe = torch.rand(img[tuple(sl)].shape, dtype=img.dtype, device=img.device) * 0.5 - 0.25
-        #     img[tuple(sl)] -= stripe
-        # return img.to(img.dtype)
 
 
 class AddNoiseDeadline(object):
@@ -234,37 +196,6 @@ class AddNoiseDeadline(object):
             max_amount=self.max_amount,
             band_dim=self.band_dim,
         )
-        # B, H, W = img.shape[-3:]
-        # # bands = np.random.permutation(range(img.shape[0]))[:len(bands)]
-        # # num_deadline = np.random.randint(
-        # #     np.ceil(self.min_amount * W), np.ceil(self.max_amount * W), len(bands)
-        # # )
-        # num_deadline = torch.randint(int(self.min_amount * W), int(self.max_amount * W), tuple(len(bands)))
-        # for i, n in zip(bands, num_deadline):
-        #     sl = [
-        #         slice(None),
-        #     ] * img.ndim
-        #     # loc = np.random.permutation(range(W))
-        #     loc = torch.arange(W)[torch.randperm(W)]
-        #     loc = loc[:n]
-        #     sl[-3] = i
-        #     sl[-1] = loc.tolist()
-        #     img[tuple(sl)] *= 0
-        # return img.to(img.dtype)
-
-
-#
-#
-# class AddNoiseComplex(AddNoiseMixed):
-#     def __init__(self):
-#         super().__init__(
-#             noise_bank=[
-#                 _AddNoiseStripe(0.05, 0.15),
-#                 _AddNoiseDeadline(0.05, 0.15),
-#                 _AddNoiseImpulse([0.1, 0.3, 0.5, 0.7]),
-#             ],
-#             num_bands=[0.33333, 0.33333, 0.33333],
-#         )
 
 
 class RandChoice:
@@ -303,6 +234,23 @@ class RandChoice:
             # return random.choice(self.transforms)(x, *args)
         else:
             return random.choices(self.transforms, weights=self.p)[0](x, *args)
+
+
+class RandomBandPerm(object):
+    # crop an image in 3 dimensions, (also crop the bands)
+    def __init__(self, bands=10):
+        self.bands = bands
+
+    def __call__(self, image):
+        # assume that the image is larger than the crop size
+        # order: [1, bands, height, width]
+        bands = torch.randperm(image.shape[-3], device=image.device)
+        bands = bands[: self.bands]
+        sl = [
+            slice(None),
+        ] * image.ndim
+        sl[-3] = bands
+        return image[sl]
 
 
 class RandRot90Transform:

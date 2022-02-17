@@ -130,7 +130,6 @@ class ICVLDataset(Dataset):
         transform=None,
         val=False,
         band_norm=True,
-        num_bands=-1,
     ):
         super(ICVLDataset, self).__init__()
         datadir = Path(datadir)
@@ -142,10 +141,11 @@ class ICVLDataset(Dataset):
         self.loadfrom = []  # np.zeros(first, dtype=np.float32)
         self.band_norm = band_norm
         for c, f in enumerate(self.files):
+            # the images are already in [bands, height, width]
             loaded, _ = utils.normalize(
                 torch.tensor(np.load(f), dtype=torch.float32), by_band=band_norm, band_dim=0
             )
-            #loaded = torch.tensor(np.load(f), dtype=torch.float32)
+            # loaded = torch.tensor(np.load(f), dtype=torch.float32)
             self.loadfrom.append(loaded)
 
         self.loadfrom = tuple(self.loadfrom)
@@ -153,9 +153,9 @@ class ICVLDataset(Dataset):
         if not val:
             self.base_transforms = transforms.Compose(
                 [
-                    #transforms.CenterCrop(crop_size),
+                    # transforms.CenterCrop(crop_size),
                     transforms.RandomCrop(crop_size),
-
+                    hyde_transforms.RandomBandPerm(10),
                     hyde_transforms.RandChoice(
                         [
                             hyde_transforms.RandRot90Transform(),
@@ -181,16 +181,15 @@ class ICVLDataset(Dataset):
         self.length = len(self.files)
 
         self.transform = transform
-        self.num_bands = num_bands
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, idx):
         img = self.loadfrom[idx].unsqueeze(0)
-        
+
         if self.num_bands > 0:
-            img = img[:, :self.num_bands]
+            img = img[:, : self.num_bands]
 
         img = self.base_transforms(img)
 
@@ -203,11 +202,7 @@ class ICVLDataset(Dataset):
 
         if self.target_transform is not None:
             target = self.target_transform(target)
-        
-        #img, _ = utils.normalize(img, by_band=self.band_norm, band_dim=-3)
-        #target, _ = utils.normalize(target, by_band=self.band_norm, band_dim=-3)
 
-        #print('end dataset getitem', img.dtype)
         img = img.to(dtype=torch.float)
         target = target.to(dtype=torch.float)
         return img, target
