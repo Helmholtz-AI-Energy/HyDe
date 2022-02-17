@@ -124,7 +124,7 @@ class WSRRR(torch.nn.Module):
                 for j in range(self.decomp_level):
                     st = wy_filter_starts[j][0] * wy_filter_starts[j][1]  # ** 2
                     try:
-                        sp = wy_filter_starts[j + 1][0] * wy_filter_starts[j+1][1]  # ** 2
+                        sp = wy_filter_starts[j + 1][0] * wy_filter_starts[j + 1][1]  # ** 2
                     except IndexError:
                         sp = None
                     idx = slice(st, sp)
@@ -150,7 +150,7 @@ class WSRRR(torch.nn.Module):
 
         d_w_vt = self.dwt_inverse((dwt_inv_low, dwt_inv_highs))
         d_w_vt = d_w_vt.squeeze().permute((1, 2, 0))
-
+        d_w_vt = d_w_vt[: omega.shape[0], : omega.shape[1], : omega.shape[2]]
         xx = omega * d_w_vt
         xx = xx[:og_rows, :og_cols, :og_channels]
 
