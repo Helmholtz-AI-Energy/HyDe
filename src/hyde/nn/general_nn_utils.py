@@ -3,7 +3,7 @@ from typing import Tuple
 import numpy as np
 import torch.nn as nn
 
-from ..lowlevel import logging
+from ..lowlevel import logging, utils
 
 logger = logging.get_logger()
 
@@ -51,3 +51,11 @@ class MultipleWeightedLosses(nn.Module):
 
     def extra_repr(self):
         return "weight={}".format(self.weight)
+
+
+class SAMLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input, target):
+        return utils.sam(input, target)
