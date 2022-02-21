@@ -2,9 +2,13 @@
 import torch
 import torch.nn as nn
 
+from ... import transform_domain
+
 
 class MemNet(nn.Module):
-    def __init__(self, in_channels, channels, num_memblock, num_resblock, conv3d=False):
+    def __init__(
+        self, in_channels, channels, num_memblock, num_resblock, conv3d=False, hyres=False
+    ):
         super(MemNet, self).__init__()
         if conv3d:
             in_channels = 1
@@ -16,10 +20,12 @@ class MemNet(nn.Module):
         self.freeze_bn = True
         self.freeze_bn_affine = True
         self.conv3d = conv3d
+        self.HyRes = transform_domain.HyRes()
 
     def forward(self, x):
         if x.ndim == 5 and not self.conv3d:
             x = x.squeeze(1)
+        x = self.HyRes(x)
         residual = x
         out = self.feature_extractor(x)
         ys = [out]
