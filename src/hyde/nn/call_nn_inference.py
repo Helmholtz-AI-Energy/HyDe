@@ -13,7 +13,7 @@ __all__ = ["NNInference", "inference_windows"]
 
 
 class NNInference(nn.Module):
-    def __init__(self, arch: str, pretrained_file, frozen=True, band_window=None, window_shape=128):
+    def __init__(self, arch: str, pretrained_file, frozen=True, band_window=None, window_shape=256):
         # get model
         super().__init__()
         network = models.__dict__[arch]()
@@ -75,7 +75,6 @@ class NNInference(nn.Module):
             image, consts = utils.normalize(image, by_band=True, band_dim=band_dim)
 
         buff = (4, 4, 2)
-        self.band_window = 10  # image.shape[-1]
         # todo: make class variable -> buffer
 
         out = inference_windows(
@@ -172,10 +171,6 @@ def inference_windows(network, image, buff, window_size, band_window, frozen):
     # replace the first item with 0 (it currently has the end of the first window)
     dim_b_starts[0], dim_b_set_starts[0] = 0, 0
 
-    #print("row", dim_r_starts, dim_r_set_starts)
-    #print("cols", dim_c_starts, dim_c_set_starts)
-    #print("bands", dim_b_starts, dim_b_set_starts, sh_b)
-
     out = torch.zeros_like(image)
     # This will drop the data from the windows
     # dim _r is outside loop -> dim_c is inside loop -> dim_b on last loop
@@ -216,15 +211,12 @@ def inference_windows(network, image, buff, window_size, band_window, frozen):
                 if beg_b != 0:
                     cut_slice[band_dim] = slice(buff[2], None)
                     cut_slice_out[band_dim] = slice(beg_b + buff[2], end_b)
-                if end_b > sh_b:  # if we go past the end on the slice, this will cause issue when the network has a fixed number of bands
+                if end_b > sh_b:
+                    # if we go past the end on the slice,
+                    # this will cause issue when the network has a fixed number of bands
                     sl[band_dim] = slice(sh_b - bw, sh_b)
-                    #last_num = sh_b - bw
-                    cut_slice[band_dim] = slice(-1 * (bw - buff[2]), None)  # sh_b - bw + buff[2], sh_b)
+                    cut_slice[band_dim] = slice(-1 * (bw - buff[2]), None)
                     cut_slice_out[band_dim] = slice(-1 * (bw - buff[2]), None)
-                #print("out slice", cut_slice_out)
-                #print("image slice", sl)  #, len(sl), len(cut_slice), len(cut_slice_out))
-                ret = _call_nn(network=network, image=image[sl], frozen=frozen)
-                #print('ret slice', cut_slice)
                 out[cut_slice_out] = _call_nn(network=network, image=image[sl], frozen=frozen)[
                     cut_slice
                 ]

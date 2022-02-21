@@ -226,9 +226,6 @@ def main():
     val_dataset = ds_utils.ICVLDataset(
         basefolder,
         transform=AddGaussianNoise(40),
-        # AddGaussianNoiseBlind(
-        #    max_sigma_db=45, min_sigma_db=20, scale_factor=scale_factor
-        # ),  # blind gaussain noise
         val=True,
         crop_size=crop_size,
         band_norm=band_norm,
@@ -271,26 +268,6 @@ def main():
         # np.random.seed(epoch + 2018)
         # random.seed(epoch + 2018)
 
-        # if epoch < 25:
-        #    criterion = nn.MSELoss()
-        # else:
-        #    criterion = PSNRLoss(1)
-
-        # noise = None
-
-        # if epoch == 20:
-        #    helper.adjust_learning_rate(optimizer, base_lr*0.1)
-        # if epoch == 30:
-        #    helper.adjust_learning_rate(optimizer, base_lr)
-        # if epoch == 35:
-        #    helper.adjust_learning_rate(optimizer, base_lr*0.1)
-        # if epoch == 45:
-        #    helper.adjust_learning_rate(optimizer, base_lr*0.01)
-
-        # if epoch < 5:
-        #    # lr warmup
-        #    helper.adjust_learning_rate(optimizer, cla.lr * 10 ** (epoch - 4))
-
         # if epoch < -10:
         #    noise = 20
         # elif epoch < 100:
@@ -307,10 +284,6 @@ def main():
         #    helper.adjust_learning_rate(optimizer, cla.lr)
 
         if epoch < 30:
-            # noise = epoch * 2 + 10
-            # train_icvl.transform = AddGaussianNoise(noise)
-            # logger.info("Noise level: 75 dB")
-
             train_icvl.transform = AddGaussianNoiseBlind(
                 max_sigma_db=40, min_sigma_db=10, scale_factor=scale_factor
             )  # 36/20
@@ -334,17 +307,6 @@ def main():
         # if epoch == 135: #140:
         #    helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
 
-        # if noise is not None:
-        #    train_icvl.transform = AddGaussianNoise(noise)
-        #    logger.info(f"Noise level: {noise} dB")
-        # else:
-        #    train_icvl.transform = AddGaussianNoiseBlind(
-        #        max_sigma_db=50, min_sigma_db=5, scale_factor=scale_factor
-        #    )  # 36/20
-        #    logger.info("Noise level: BLIND!")
-
-        # if epoch == 70:
-        #     helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
         helper.display_learning_rate(optimizer)
         ttime = time.perf_counter()
         training_utils.train(
@@ -358,11 +320,6 @@ def main():
             iterations=150,
         )
         ttime = time.perf_counter() - ttime
-
-        # torch.manual_seed(cla.rank)
-        # torch.cuda.manual_seed(cla.rank)
-        # np.random.seed(cla.rank)
-        # random.seed(cla.rank)
 
         vtime = time.perf_counter()
         psnr, ls = training_utils.validate(
