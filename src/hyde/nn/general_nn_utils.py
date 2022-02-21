@@ -10,6 +10,7 @@ logger = logging.get_logger()
 __all__ = [
     "crop_center",
     "MultipleWeightedLosses",
+    "SAMLoss",
 ]
 
 
@@ -58,4 +59,4 @@ class SAMLoss(nn.Module):
         super().__init__()
 
     def forward(self, input, target):
-        return utils.sam(input, target)
+        return utils.sam(input, target).mean()

@@ -21,7 +21,7 @@ from kornia.losses import (
 from torch.utils.data import DataLoader
 
 from hyde.lowlevel import logging
-from hyde.nn import MultipleWeightedLosses, comm, helper, models, training_utils
+from hyde.nn import MultipleWeightedLosses, comm, helper, models, training_utils, SAMLoss
 from hyde.nn.datasets import dataset_utils as ds_utils
 from hyde.nn.datasets.transforms import AddGaussianNoise, AddGaussianNoiseBlind
 from hyde.nn.parsers import qrnn_parser
@@ -113,11 +113,18 @@ def main():
             [nn.MSELoss(), SSIMLoss(window_size=11, max_val=1.0)], weight=[1, 2.5e-3]
         )
     elif cla.loss == "psnr":
-        criterion = PSNRLoss(20)
+        criterion = PSNRLoss(1)
     elif cla.loss == "tv":
         criterion = TotalVariation()
     elif cla.loss == "dice":
         criterion = DiceLoss()
+    elif cla.loss == "l2_psnr":
+        criterion = MultipleWeightedLosses(
+            [nn.MSELoss(), PSNRLoss(1)], weight=[1, 1]  # SSIMLoss(window_size=11, max_val=1.0)], weight=[1, 2.5e-3]
+        )
+    elif cla.loss == 'sam':
+        criterion = SAMLoss()
+
     # elif cla.loss == "tversky":
     #     criterion = TverskyLoss
     # elif cla.loss == "focal":
@@ -139,7 +146,9 @@ def main():
         writer = helper.get_summary_writer(os.path.join(cla.basedir, "logs"), cla.cla.prefix)
 
     """Optimization Setup"""
+
     optimizer = optim.Adam(net.parameters(), lr=cla.lr, weight_decay=cla.wd, amsgrad=False)
+    #optimizer = optim.SGD(net.parameters(), cla.lr, momentum=0.9, weight_decay=1e-4)
 
     start_epoch = 0
     # """Resume previous model"""
@@ -172,6 +181,12 @@ def main():
 
     cudnn.benchmark = True
 
+    torch.manual_seed(cla.rank)
+    torch.cuda.manual_seed(cla.rank)
+    np.random.seed(cla.rank)
+    random.seed(cla.rank)
+
+
     crop_size = (256, 256)
     band_norm = True
     scale_factor = 255  # max os ICVL dataset
@@ -183,10 +198,10 @@ def main():
         crop_size=crop_size,
         band_norm=band_norm,
     )
-    if distributed:
-        train_sampler = torch.utils.data.distributed.DistributedSampler(train_icvl)
-    else:
-        train_sampler = None
+    #if distributed:
+    #    train_sampler = torch.utils.data.distributed.DistributedSampler(train_icvl)
+    #else:
+    train_sampler = None
 
     # worker_init_fn is in dataset -> just getting the seed
     train_loader = DataLoader(
@@ -204,9 +219,11 @@ def main():
 
     val_dataset = ds_utils.ICVLDataset(
         basefolder,
-        transform=AddGaussianNoiseBlind(
-            max_sigma_db=40, min_sigma_db=10, scale_factor=scale_factor
-        ),  # blind gaussain noise
+        transform=AddGaussianNoise(40),
+        
+        #AddGaussianNoiseBlind(
+        #    max_sigma_db=45, min_sigma_db=20, scale_factor=scale_factor
+        #),  # blind gaussain noise
         val=True,
         crop_size=crop_size,
         band_norm=band_norm,
@@ -225,41 +242,102 @@ def main():
         sampler=val_sampler,
     )
 
-    helper.adjust_learning_rate(optimizer, cla.lr)
+    helper.adjust_learning_rate(optimizer, 0.01)
     max_epochs = 150
     best_val_loss, best_val_psnr = 100000, 0
     epochs_wo_best = 0
 
+    #criterion = nn.MSELoss()
+    #criterion = PSNRLoss(1)
+    #torch.manual_seed(2018)
+    #torch.cuda.manual_seed(2018)
+    #np.random.seed(2018)
+    #random.seed(2018)
+    base_lr = 1e-3
+    cla.lr = base_lr
+    helper.adjust_learning_rate(optimizer, base_lr)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5)
+
     for epoch in range(start_epoch, max_epochs):
         logger.info(f"\t\t--------- Start epoch {epoch} of {max_epochs - 1} ---------\t")
-        torch.manual_seed(epoch + 2018)
-        torch.cuda.manual_seed(epoch + 2018)
-        np.random.seed(epoch + 2018)
-        random.seed(epoch + 2018)
+        #helper.display_learning_rate(optimizer)
+        #torch.manual_seed(epoch + 2018)
+        #torch.cuda.manual_seed(epoch + 2018)
+        #np.random.seed(epoch + 2018)
+        #random.seed(epoch + 2018)
 
-        if epoch < 100:
-            noise = 40
-        else:
-            noise = None
+        #if epoch < 25:
+        #    criterion = nn.MSELoss()
+        #else:
+        #    criterion = PSNRLoss(1)
 
-        if epoch < 5:
-            # lr warmup
-            helper.adjust_learning_rate(optimizer, cla.lr * 10 ** (epoch - 4))
+        #noise = None
 
-        if epoch == 120:
-            helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
-        if epoch == 140:
-            helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
 
-        if noise is not None:
-            train_icvl.transform = AddGaussianNoise(noise)
-            logger.info(f"Noise level: {noise} dB")
+        #if epoch == 20:
+        #    helper.adjust_learning_rate(optimizer, base_lr*0.1)
+        #if epoch == 30:
+        #    helper.adjust_learning_rate(optimizer, base_lr)
+        #if epoch == 35:
+        #    helper.adjust_learning_rate(optimizer, base_lr*0.1)
+        #if epoch == 45:
+        #    helper.adjust_learning_rate(optimizer, base_lr*0.01)
+
+        #if epoch < 5:
+        #    # lr warmup
+        #    helper.adjust_learning_rate(optimizer, cla.lr * 10 ** (epoch - 4))
+        
+        #if epoch < -10:
+        #    noise = 20
+        #elif epoch < 100:
+        #    noise = (epoch / 3.) * 2.
+        #    #helper.adjust_learning_rate(optimizer, cla.lr
+        #elif epoch < -30:
+        #    noise = 40
+        #else:
+        #noise = 40  # None
+        #if epoch == 30:
+        #    criterion = SAMLoss()
+        #    best_val_loss, best_val_psnr = 100000, 0
+        #    scheduler._reset()
+        #    helper.adjust_learning_rate(optimizer, cla.lr)
+
+
+        if epoch < 30:
+            #noise = epoch * 2 + 10
+            #train_icvl.transform = AddGaussianNoise(noise)
+            #logger.info("Noise level: 75 dB")
+            train_icvl.transform = AddGaussianNoiseBlind(
+                max_sigma_db=40, min_sigma_db=10, scale_factor=scale_factor
+            )  # 36/20
+            logger.info("Noise level: 10-40 Blind")
+        elif epoch < 50: 
+            train_icvl.transform = AddGaussianNoise(50)
+            logger.info("Noise level: 50")
         else:
             train_icvl.transform = AddGaussianNoiseBlind(
-                max_sigma_db=42, min_sigma_db=10, scale_factor=scale_factor
+                max_sigma_db=55, min_sigma_db=40, scale_factor=scale_factor
             )  # 36/20
 
-            logger.info("Noise level: BLIND!")
+            logger.info("Noise level: BLIND! - 40-55")
+
+        if epoch == 50:
+            helper.adjust_learning_rate(optimizer, 1e-3)
+            scheduler._reset()
+
+        #if epoch == 100: #120:
+        #    helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
+        #if epoch == 135: #140:
+        #    helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
+
+        #if noise is not None:
+        #    train_icvl.transform = AddGaussianNoise(noise)
+        #    logger.info(f"Noise level: {noise} dB")
+        #else:
+        #    train_icvl.transform = AddGaussianNoiseBlind(
+        #        max_sigma_db=50, min_sigma_db=5, scale_factor=scale_factor
+        #    )  # 36/20
+        #    logger.info("Noise level: BLIND!")
 
         # if epoch == 70:
         #     helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
@@ -274,20 +352,23 @@ def main():
             criterion,
             bandwise,
             writer=writer,
-            iterations=16,
+            iterations=150,
         )
         ttime = time.perf_counter() - ttime
 
-        torch.manual_seed(cla.rank)
-        torch.cuda.manual_seed(cla.rank)
-        np.random.seed(cla.rank)
-        random.seed(cla.rank)
+        #torch.manual_seed(cla.rank)
+        #torch.cuda.manual_seed(cla.rank)
+        #np.random.seed(cla.rank)
+        #random.seed(cla.rank)
 
         vtime = time.perf_counter()
         psnr, ls = training_utils.validate(
             val_loader, "validate", net, cla, epoch, criterion, bandwise, writer=writer
         )
         vtime = time.perf_counter() - vtime
+        
+        if epoch >= 30: 
+            scheduler.step(ls)
 
         expected_time_remaining = time.strftime(
             "%H:%M:%S", time.gmtime((ttime + vtime) * (max_epochs - epoch))
@@ -312,7 +393,7 @@ def main():
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(
-                cla.save_dir, prefix, f"current-network-gaussian-{cla.loss}-short.pth"
+                cla.save_dir, prefix, f"new-blind-short-gaussian-bs4x4-{cla.loss}.pth"
             )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
