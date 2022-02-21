@@ -30,7 +30,7 @@ def generate_noisy_images(base_image, save_loc, noise_type="gaussian"):
     if noise_type == "gaussian":
         noise_levels = (20, 30, 40)
         transform = AddGaussianNoise
-        kwargs = {"scale_factor": 1.0}
+        kwargs = {"scale_factor": 255.0 / 65517.0}  # houston dataset is int16
     else:
         raise NotImplementedError("implement mixed/complex noise cases")
 
@@ -44,8 +44,6 @@ def generate_noisy_images(base_image, save_loc, noise_type="gaussian"):
     torch.cuda.manual_seed(42)
     np.random.seed(42)
     random.seed(42)
-
-    print(imp_clean.dtype)
 
     for nl in noise_levels:
         sv_folder = save_loc / str(nl)

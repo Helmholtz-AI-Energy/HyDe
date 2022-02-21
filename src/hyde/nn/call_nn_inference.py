@@ -13,7 +13,7 @@ __all__ = ["NNInference", "inference_windows"]
 
 
 class NNInference(nn.Module):
-    def __init__(self, arch: str, pretrained_file, frozen=True, band_window=None, window_shape=256):
+    def __init__(self, arch: str, pretrained_file, frozen=True, band_window=10, window_shape=256):
         # get model
         super().__init__()
         network = models.__dict__[arch]()
@@ -191,6 +191,12 @@ def inference_windows(network, image, buff, window_size, band_window, frozen):
         if beg_r != 0:
             cut_slice[row_dim] = slice(buff[0], None)
             cut_slice_out[row_dim] = slice(beg_r + buff[0], end_r)
+        if end_r > sh_r:
+            # if we go past the end on the slice,
+            # this will cause issue when the network has a fixed number of bands
+            sl[row_dim] = slice(sh_r - ws, sh_r)
+            cut_slice[row_dim] = slice(-1 * (ws - buff[0]), None)
+            cut_slice_out[row_dim] = slice(-1 * (ws - buff[0]), None)
         cut_slice[col_dim] = slice(None)
         for beg_c, set_c in zip(dim_c_starts, dim_c_set_starts):
             # create overlap
@@ -201,6 +207,12 @@ def inference_windows(network, image, buff, window_size, band_window, frozen):
             if beg_c != 0:
                 cut_slice[col_dim] = slice(buff[1], None)
                 cut_slice_out[col_dim] = slice(beg_c + buff[1], end_c)
+            if end_c > sh_c:
+                # if we go past the end on the slice,
+                # this will cause issue when the network has a fixed number of bands
+                sl[col_dim] = slice(sh_c - ws, sh_c)
+                cut_slice[col_dim] = slice(-1 * (ws - buff[1]), None)
+                cut_slice_out[col_dim] = slice(-1 * (ws - buff[1]), None)
             cut_slice[band_dim] = slice(None)
             for beg_b, set_b in zip(dim_b_starts, dim_b_set_starts):
                 # create overlap

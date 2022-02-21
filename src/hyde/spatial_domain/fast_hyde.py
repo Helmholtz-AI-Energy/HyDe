@@ -133,7 +133,7 @@ class FastHyDe(torch.nn.Module):
         eigen_y_bm3d = fast_hyde_eigen_image_denoising(img, k_subspace, r_w, e, eigen_y, n)
         eigen_y_bm3d = torch.tensor(eigen_y_bm3d, dtype=img.dtype, device=img.device)
         # % reconstruct data using denoising engin images
-        y_reconst = e @ eigen_y_bm3d
+        y_reconst = e @ eigen_y_bm3d[: e.shape[1]]
         # %% ----------------- Re-transform ------------------------------
         if noise_type == "additive":
             if not iid:
@@ -156,9 +156,12 @@ def fast_hyde_eigen_image_denoising(img, k_subspace, r_w, e, eigen_y, n) -> np.n
     r_w = r_w.to(device="cpu", non_blocking=True)
 
     nxt_eigen = eigen_y[0].cpu()
-    for i in range(k_subspace):
+    mx = min(k_subspace, eigen_y.shape[0])
+    print(mx)
+    for i in range(mx):
         lp_eigen = nxt_eigen.numpy()
-        if i < k_subspace - 1:
+        if i < mx - 1:
+            print(eigen_y.shape)
             nxt_eigen = eigen_y[i + 1].to(device="cpu", non_blocking=True)
         # produce eigen-image
         eigen_im = lp_eigen
