@@ -158,7 +158,7 @@ def inference_windows(network, image, buff, window_size, band_window, frozen):
     dim_c_starts[0], dim_c_set_starts[0] = 0, 0
     # ==== bands ============
     bw = band_window
-    dim_b_starts = [bw, bw - buff[0]]
+    dim_b_starts = [bw, bw - buff[2]]
     dim_b_set_starts = [bw, bw]
     if dim_b_starts[-1] >= sh_b or bw >= sh_b:
         # if the second window starts after the image ends
@@ -171,6 +171,10 @@ def inference_windows(network, image, buff, window_size, band_window, frozen):
         dim_b_starts, dim_b_set_starts = dim_b_starts[:-1], dim_b_set_starts[:-1]
     # replace the first item with 0 (it currently has the end of the first window)
     dim_b_starts[0], dim_b_set_starts[0] = 0, 0
+
+    #print("row", dim_r_starts, dim_r_set_starts)
+    #print("cols", dim_c_starts, dim_c_set_starts)
+    #print("bands", dim_b_starts, dim_b_set_starts, sh_b)
 
     out = torch.zeros_like(image)
     # This will drop the data from the windows
@@ -212,6 +216,15 @@ def inference_windows(network, image, buff, window_size, band_window, frozen):
                 if beg_b != 0:
                     cut_slice[band_dim] = slice(buff[2], None)
                     cut_slice_out[band_dim] = slice(beg_b + buff[2], end_b)
+                if end_b > sh_b:  # if we go past the end on the slice, this will cause issue when the network has a fixed number of bands
+                    sl[band_dim] = slice(sh_b - bw, sh_b)
+                    #last_num = sh_b - bw
+                    cut_slice[band_dim] = slice(-1 * (bw - buff[2]), None)  # sh_b - bw + buff[2], sh_b)
+                    cut_slice_out[band_dim] = slice(-1 * (bw - buff[2]), None)
+                #print("out slice", cut_slice_out)
+                #print("image slice", sl)  #, len(sl), len(cut_slice), len(cut_slice_out))
+                ret = _call_nn(network=network, image=image[sl], frozen=frozen)
+                #print('ret slice', cut_slice)
                 out[cut_slice_out] = _call_nn(network=network, image=image[sl], frozen=frozen)[
                     cut_slice
                 ]

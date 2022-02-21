@@ -310,6 +310,7 @@ def main():
             # noise = epoch * 2 + 10
             # train_icvl.transform = AddGaussianNoise(noise)
             # logger.info("Noise level: 75 dB")
+
             train_icvl.transform = AddGaussianNoiseBlind(
                 max_sigma_db=40, min_sigma_db=10, scale_factor=scale_factor
             )  # 36/20

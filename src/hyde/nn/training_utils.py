@@ -75,16 +75,18 @@ def validate(valid_loader, name, network, cla, epoch, criterion, writer=None):
     total_psnr = 0
     ls, psnrs = [], []
     logger.info(f"Validation:\tEpoch: {epoch} dataset name: {name}")
+    is_2d = True if cla.arch in ["memnet", "denet"] else False
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(valid_loader):
             if not cla.no_cuda and torch.cuda.is_available():
                 inputs, targets = inputs.to(cla.device), targets.to(cla.device)
 
             loss_data = 0
-            if network.use_2dconv:
+            if is_2d:
                 # todo: nn_inference style
+                inputs = inputs.squeeze(1)
                 outputs = inference_windows(
-                    network, inputs, window_size=128, band_window=10, frozen=True
+                    network, inputs, window_size=256, band_window=10, buff=(4, 4, 2), frozen=True
                 )
                 outputs = outputs.squeeze(1)
                 targets = targets.squeeze(1)
