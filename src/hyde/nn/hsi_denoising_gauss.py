@@ -72,7 +72,6 @@ def main():
     # init params will set the model params with a random distribution
     # helper.init_params(net, init_type=cla.init)  # disable for default initialization
     distributed = False
-    bandwise = net.bandwise
     # world_size = 1
     if torch.cuda.device_count() > 1 and cuda:
         logger.info("Spawning torch groups for DDP")
@@ -354,7 +353,6 @@ def main():
             epoch,
             optimizer,
             criterion,
-            bandwise,
             writer=writer,
             iterations=150,
         )
@@ -367,7 +365,7 @@ def main():
 
         vtime = time.perf_counter()
         psnr, ls = training_utils.validate(
-            val_loader, "validate", net, cla, epoch, criterion, bandwise, writer=writer
+            val_loader, "validate", net, cla, epoch, criterion, writer=writer
         )
         vtime = time.perf_counter() - vtime
 

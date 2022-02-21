@@ -6,6 +6,7 @@ import torch.nn as nn
 from torch.cuda import amp
 
 from ..lowlevel import logging, utils
+from .call_nn_inference import inference_windows
 
 __all__ = ["train"]
 
@@ -13,9 +14,7 @@ __all__ = ["train"]
 logger = logging.get_logger()
 
 
-def _train_loop(
-    train_loader, network, cla, epoch, optimizer, criterion, bandwise, scaler, iter_num
-):
+def _train_loop(train_loader, network, cla, epoch, optimizer, criterion, scaler, iter_num):
     train_loss = 0
     avg_loss = 0
     for batch_idx, (inputs, targets) in enumerate(train_loader):
@@ -23,31 +22,21 @@ def _train_loop(
             inputs, targets = inputs.to(cla.device), targets.to(cla.device)
         optimizer.zero_grad()
         loss_data = 0
-        if bandwise:
-            outs = []
-            for time, (i, t) in enumerate(zip(inputs.split(1, 1), targets.split(1, 1))):
-                out = network(i)
-                outs.append(out)
-                loss = criterion(out, t)
-                loss.backward()
-                loss_data += loss.item()
-        else:
-            with amp.autocast():
-                outputs = network(inputs)
-                outputs = outputs.squeeze(1)
-                targets = targets.squeeze(1)
-                loss = criterion(outputs, targets)
-            scaler.scale(loss).backward()
-            loss_data += loss.item()
+        with amp.autocast():
+            outputs = network(inputs)
+            outputs = outputs.squeeze(1)
+            targets = targets.squeeze(1)
+            loss = criterion(outputs, targets)
 
-        total_norm = None
+        scaler.scale(loss).backward()
+        loss_data += loss.item()
         scaler.step(optimizer)
         scaler.update()
 
         train_loss += loss_data
         avg_loss = train_loss / (batch_idx + 1)
 
-        #if batch_idx % cla.log_freq == 0 and cla.rank == 0:
+        # if batch_idx % cla.log_freq == 0 and cla.rank == 0:
         #    logger.info(
         #        f"Epoch: {epoch} outer iter: {outer_iter} iteration: {batch_idx} Loss: {avg_loss} Norm: {total_norm}"
         #    )
@@ -56,15 +45,11 @@ def _train_loop(
     return avg_loss, iter_num
 
 
-def train(
-    train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer=None, iterations=150
-):
+def train(train_loader, network, cla, epoch, optimizer, criterion, writer=None, iterations=150):
     logger.info(f"Train:\t\tEpoch: {epoch}")
     network.train()
 
     scaler = amp.GradScaler()
-    avg_loss = None
-    stop = False
     it = 0
     while True:
         avg_loss, it = _train_loop(
@@ -74,32 +59,17 @@ def train(
             epoch=epoch,
             optimizer=optimizer,
             criterion=criterion,
-            bandwise=bandwise,
             scaler=scaler,
             iter_num=it,
         )
         if it >= iterations:
             break
 
-
-    #for it in range(iterations):
-    #    avg_loss = _train_loop(
-    #        train_loader=train_loader,
-    #        network=network,
-    #        cla=cla,
-    #        epoch=epoch,
-    #        optimizer=optimizer,
-    #        criterion=criterion,
-    #        bandwise=bandwise,
-    #        scaler=scaler,
-    #        outer_iter=it,
-    #    )
-
     if writer is not None:
         writer.add_scalar(os.path.join(cla.prefix, "train_loss_epoch"), avg_loss, epoch)
 
 
-def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, writer=None):
+def validate(valid_loader, name, network, cla, epoch, criterion, writer=None):
     network.eval()
     validate_loss = 0
     total_psnr = 0
@@ -111,14 +81,15 @@ def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, write
                 inputs, targets = inputs.to(cla.device), targets.to(cla.device)
 
             loss_data = 0
-            if bandwise:
-                outs = []
-                for time, (i, t) in enumerate(zip(inputs.split(1, 1), targets.split(1, 1))):
-                    out = network(i)
-                    outs.append(out)
-                    loss = criterion(out, t)
-                    loss_data += loss.item()
-                outputs = torch.cat(outs, dim=1)
+            if network.use_2dconv:
+                # todo: nn_inference style
+                outputs = inference_windows(
+                    network, inputs, window_size=128, band_window=10, frozen=True
+                )
+                outputs = outputs.squeeze(1)
+                targets = targets.squeeze(1)
+                loss = criterion(outputs, targets)
+                loss_data += loss.item()
             else:
                 outputs = network(inputs)
                 outputs = outputs.squeeze(1)
@@ -130,9 +101,7 @@ def validate(valid_loader, name, network, cla, epoch, criterion, bandwise, write
             psnr = []
             for d in range(outputs.shape[0]):
                 # band dim assumes that the batch is > 1
-                psnr.append(
-                    torch.mean(utils.peak_snr(outputs[d], targets[d], bandwise=True, band_dim=1))
-                )
+                psnr.append(utils.peak_snr(outputs[d], targets[d], bandwise=False, band_dim=-3))
             psnrs.extend(psnr)
             psnr = sum(psnr) / float(len(psnr))
 

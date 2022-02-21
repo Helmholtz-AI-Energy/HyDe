@@ -1,9 +1,9 @@
 import argparse
 import os
+import random
 import time
 from os.path import join
 
-import random
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
@@ -62,7 +62,6 @@ def main():
     # init params will set the model params with a random distribution
     # helper.init_params(net, init_type=cla.init)  # disable for default initialization
     distributed = False
-    bandwise = net.bandwise
     # world_size = 1
     if torch.cuda.device_count() > 1 and cuda:
         logger.info("Spawning torch groups for DDP")
@@ -268,7 +267,6 @@ def main():
                 ]
             )
 
-
         if epoch == 120:
             helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
         if epoch == 140:
@@ -286,7 +284,6 @@ def main():
             epoch,
             optimizer,
             criterion,
-            bandwise,
             writer=writer,
             iterations=30,
         )
@@ -304,7 +301,6 @@ def main():
             cla,
             epoch,
             criterion,
-            bandwise,
             writer=writer,
         )
         psnr_mixture, ls_mixture = training_utils.validate(
@@ -314,7 +310,6 @@ def main():
             cla,
             epoch,
             criterion,
-            bandwise,
             writer=writer,
         )
         vtime = time.perf_counter() - vtime

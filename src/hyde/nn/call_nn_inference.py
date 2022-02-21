@@ -9,8 +9,11 @@ from . import models
 logger = logging.get_logger()
 
 
+__all__ = ["NNInference", "inference_windows"]
+
+
 class NNInference(nn.Module):
-    def __init__(self, arch: str, pretrained_file, frozen=True, band_window=None):
+    def __init__(self, arch: str, pretrained_file, frozen=True, band_window=None, window_shape=128):
         # get model
         super().__init__()
         network = models.__dict__[arch]()
@@ -39,7 +42,7 @@ class NNInference(nn.Module):
         self.network.eval()
 
         self.band_window = band_window
-        self.windows = 128  # band_window is not None
+        self.window_shape = window_shape  # band_window is not None
 
     def forward(
         self, image: torch.Tensor, band_dim: int, normalize: bool = False, permute: bool = False
@@ -59,108 +62,30 @@ class NNInference(nn.Module):
         -------
 
         """
-        if self.windows is None:
+        if self.window_shape is None:
             return self._forward(image, band_dim, normalize, permute)
 
-        row_dim = 0
-        col_dim = 1
-        band_dim = 2
-        sh_r, sh_c, sh_b = image.shape
-        buff = (8, 8, 8)
         self.network = self.network.to(image.device, non_blocking=True)
         if permute and image.ndim == 3:
             image = image.permute((2, 0, 1)).unsqueeze(0)
             band_dim = -3
-            row_dim = -2
-            col_dim = -1
             image = image.unsqueeze(0)
 
         if normalize:
             image, consts = utils.normalize(image, by_band=True, band_dim=band_dim)
 
+        buff = (4, 4, 2)
         self.band_window = 10  # image.shape[-1]
         # todo: make class variable -> buffer
-        ws = 128
 
-        # design this to move over windows (like conv groups)
-        # assume band_dim = -1
-        # min_dim = 0 if image.shape[0] < image.shape[1] else 1
-        # more windows:
-
-        # dim_r_ws = (sh_r + buff[0]) // ws
-
-        dim_r_starts = [ws, ws - buff[0]]
-        if dim_r_starts[-1] >= sh_r or ws >= sh_r:
-            # if the second window starts after the image ends
-            dim_r_starts = [0]
-        else:
-            while dim_r_starts[-1] < sh_r:
-                # layer the images over one another to avoid tiling (hopfully)
-                dim_r_starts.append(dim_r_starts[-1] + ws - buff[0])
-            dim_r_starts = dim_r_starts[:-1]
-        # replace the first item with 0 (it currently has the end of the first window)
-        dim_r_starts[0] = 0
-
-        dim_c_starts = [ws, ws - buff[1]]
-        if dim_c_starts[-1] >= sh_c or ws >= sh_c:
-            # if the second window starts after the image ends
-            dim_c_starts = [0]
-        else:
-            while dim_c_starts[-1] < sh_c:
-                # layer the images over one another to avoid tiling (hopfully)
-                dim_c_starts.append(dim_c_starts[-1] + ws - buff[1])
-            dim_c_starts = dim_c_starts[:-1]
-        # replace the first item with 0 (it currently has the end of the first window)
-        dim_c_starts[0] = 0
-
-        bw = self.band_window
-        dim_b_starts = [bw, bw - buff[2]]
-        if dim_b_starts[-1] >= sh_b or bw >= sh_b:
-            # if the second window starts after the image ends
-            dim_b_starts = [0]
-        else:
-            while dim_b_starts[-1] < sh_b:
-                # layer the images over one another to avoid tiling (hopfully)
-                dim_b_starts.append(dim_b_starts[-1] + bw - buff[2])
-            dim_b_starts = dim_b_starts[:-1]
-        # replace the first item with 0 (it currently has the end of the first window)
-        dim_b_starts[0] = 0
-
-        # dim_r_ws = 1 + ((sh_r - ws + buff[0]) // ws)
-        # dim_r_rem = abs(sh_r - (dim_r_ws * ws) - buff[0])  # (sh_r + buff[_r]) % ws
-        #
-        # dim_c_ws = 1 + ((sh_c - ws + buff[1]) // ws)  # (sh_c + buff[1]) // ws
-        # dim_c_rem = abs(sh_c - (dim_c_ws * ws) - buff[1])  # (sh1 + buff[1]) % ws
-        #
-        # bw = self.band_window
-        # dim_b_ws = 1 + ((sh_b - bw + buff[2]) // bw)  # (sh_b + buff[2]) // bw
-        # dim_b_rem = abs(sh_b - (dim_b_ws * bw) - buff[2])
-        # print(dim_r_ws, dim_r_rem, dim_c_ws, dim_c_rem, dim_b_ws, dim_b_rem)
-
-        out = torch.zeros_like(image)
-        # dim _r is outside loop -> dim_c is inside loop -> dim_b on last loop
-        for beg_r in dim_r_starts:
-            sl = [
-                slice(None),
-            ] * image.ndim
-            # create overlap
-            end_r = beg_r + ws
-            sl[row_dim] = slice(beg_r, end_r)
-
-            # set_sl = [slice(None)] * image.ndim
-
-            for beg_c in dim_c_starts:
-                # create overlap
-                end_c = beg_c + ws
-                sl[col_dim] = slice(beg_c, end_c)
-
-                for beg_b in dim_b_starts:
-                    # create overlap
-                    end_b = beg_b + bw
-                    sl[band_dim] = slice(beg_b, end_b)
-                    # print(sl)
-
-                    out[sl] = self._call_nn(image[sl])
+        out = inference_windows(
+            network=self.network,
+            image=image,
+            buff=buff,
+            window_size=self.window_shape,
+            band_window=self.band_window,
+            frozen=self.frozen,
+        )
 
         if permute:
             out = out.squeeze().permute((1, 2, 0))
@@ -170,13 +95,6 @@ class NNInference(nn.Module):
             out = utils.undo_normalize(out, **consts, by_band=True, band_dim=band_dim)
 
         return out
-
-    def _call_nn(self, image):
-        if self.frozen:
-            with torch.no_grad():
-                return self.network(image)
-        else:
-            return self.network(image)
 
     def _forward(self, image, band_dim, normalize, permute):
         if permute and band_dim == -1 and image.ndim == 3:
@@ -190,7 +108,7 @@ class NNInference(nn.Module):
             image, consts = utils.normalize(image, by_band=True, band_dim=band_dim)
 
         self.network = self.network.to(image.device)
-        ret = self._call_nn(image)
+        ret = _call_nn(self.network, image, self.frozen)
 
         if permute:
             ret = ret.squeeze().permute((1, 2, 0))
@@ -200,6 +118,112 @@ class NNInference(nn.Module):
             ret = utils.undo_normalize(ret, **consts, by_band=True, band_dim=band_dim)
 
         return ret
+
+
+def inference_windows(network, image, buff, window_size, band_window, frozen):
+    # THIS ASSMUES THAT THE IMAGE/BATCH IS SHAPE: [..., BANDS, H, W]
+    band_dim = -3
+    row_dim = -2
+    col_dim = -1
+    ws = window_size
+    sh_b, sh_r, sh_c = image.shape[-3:]
+    # design this to move over windows (like conv groups)
+    # ==== rows ============
+    dim_r_starts = [ws, ws - buff[0]]
+    dim_r_set_starts = [ws, ws]
+    if dim_r_starts[-1] >= sh_r or ws >= sh_r:
+        # if the second window starts after the image ends
+        dim_r_starts, dim_r_set_starts = [0], [0]
+    else:
+        while dim_r_starts[-1] < sh_r:
+            # layer the images over one another to avoid tiling (hopfully)
+            dim_r_starts.append(dim_r_starts[-1] + ws - buff[0])
+            dim_r_set_starts.append(dim_r_set_starts[-1] + ws)
+        dim_r_starts, dim_r_set_starts = dim_r_starts[:-1], dim_r_set_starts[:-1]
+    # replace the first item with 0 (it currently has the end of the first window)
+    dim_r_starts[0], dim_r_set_starts[0] = 0, 0
+    # ==== cols ============
+    dim_c_starts = [ws, ws - buff[0]]
+    dim_c_set_starts = [ws, ws]
+    if dim_c_starts[-1] >= sh_c or ws >= sh_c:
+        # if the second window starts after the image ends
+        dim_c_starts, dim_c_set_starts = [0], [0]
+    else:
+        while dim_c_starts[-1] < sh_c:
+            # layer the images over one another to avoid tiling (hopfully)
+            dim_c_starts.append(dim_c_starts[-1] + ws - buff[1])
+            dim_c_set_starts.append(dim_c_set_starts[-1] + ws)
+        dim_c_starts, dim_c_set_starts = dim_c_starts[:-1], dim_c_set_starts[:-1]
+    # replace the first item with 0 (it currently has the end of the first window)
+    dim_c_starts[0], dim_c_set_starts[0] = 0, 0
+    # ==== bands ============
+    bw = band_window
+    dim_b_starts = [bw, bw - buff[0]]
+    dim_b_set_starts = [bw, bw]
+    if dim_b_starts[-1] >= sh_b or bw >= sh_b:
+        # if the second window starts after the image ends
+        dim_b_starts, dim_b_set_starts = [0], [0]
+    else:
+        while dim_b_starts[-1] < sh_b:
+            # layer the images over one another to avoid tiling (hopfully)
+            dim_b_starts.append(dim_b_starts[-1] + bw - buff[2])
+            dim_b_set_starts.append(dim_b_set_starts[-1] + bw)
+        dim_b_starts, dim_b_set_starts = dim_b_starts[:-1], dim_b_set_starts[:-1]
+    # replace the first item with 0 (it currently has the end of the first window)
+    dim_b_starts[0], dim_b_set_starts[0] = 0, 0
+
+    out = torch.zeros_like(image)
+    # This will drop the data from the windows
+    # dim _r is outside loop -> dim_c is inside loop -> dim_b on last loop
+    # KEY:
+    # sl -> slice the image to get the window
+    # cut_slice -> slice the result after applying the network
+    # cut_slice_out -> where to put the result after its cut out
+    for beg_r, set_r in zip(dim_r_starts, dim_r_set_starts):
+        sl = [slice(None)] * image.ndim
+        # create overlap
+        end_r = beg_r + ws
+        sl[row_dim] = slice(beg_r, end_r)
+
+        # need to make something that
+        cut_slice = [slice(None)] * image.ndim
+        cut_slice_out = [slice(None)] * image.ndim
+        cut_slice_out[row_dim] = slice(set_r, set_r + ws)
+        if beg_r != 0:
+            cut_slice[row_dim] = slice(buff[0], None)
+            cut_slice_out[row_dim] = slice(beg_r + buff[0], end_r)
+        cut_slice[col_dim] = slice(None)
+        for beg_c, set_c in zip(dim_c_starts, dim_c_set_starts):
+            # create overlap
+            end_c = beg_c + ws
+            sl[col_dim] = slice(beg_c, end_c)
+
+            cut_slice_out[col_dim] = slice(set_c, set_c + ws)
+            if beg_c != 0:
+                cut_slice[col_dim] = slice(buff[1], None)
+                cut_slice_out[col_dim] = slice(beg_c + buff[1], end_c)
+            cut_slice[band_dim] = slice(None)
+            for beg_b, set_b in zip(dim_b_starts, dim_b_set_starts):
+                # create overlap
+                end_b = beg_b + bw
+                sl[band_dim] = slice(beg_b, end_b)
+
+                cut_slice_out[band_dim] = slice(set_b, set_b + bw)
+                if beg_b != 0:
+                    cut_slice[band_dim] = slice(buff[2], None)
+                    cut_slice_out[band_dim] = slice(beg_b + buff[2], end_b)
+                out[cut_slice_out] = _call_nn(network=network, image=image[sl], frozen=frozen)[
+                    cut_slice
+                ]
+    return out
+
+
+def _call_nn(network, image, frozen):
+    if frozen:
+        with torch.no_grad():
+            return network(image)
+    else:
+        return network(image)
 
 
 class QRNNInference(nn.Module):
