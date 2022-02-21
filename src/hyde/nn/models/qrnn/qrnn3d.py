@@ -1,5 +1,3 @@
-import gc
-
 import torch
 import torch.nn as nn
 
@@ -391,14 +389,11 @@ class QRNNREDC3D(nn.Module):
 
     def forward(self, x):
         xs = [x]
-        gc.enable()
         out = self.feature_extractor(xs[0])
-        gc.collect()
 
         xs.append(out)
         if self.enable_ad:
             out, reverse = self.encoder(out, xs, reverse=False)
-            gc.collect()
             out = self.decoder(out, xs, reverse=(reverse))
         else:
             out = self.encoder(out, xs)

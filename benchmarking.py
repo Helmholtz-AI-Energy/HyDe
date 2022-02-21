@@ -61,6 +61,7 @@ def generate_noisy_images(base_image, save_loc, noise_type="gaussian"):
 max_houston = 65517.0
 
 gaussian_noise_removers_args = {
+    "WSRRR": {"rank": 10},
     "HyMiNoR": {"lam": 10.0, "iterations": 50},
     "FORPDN_SURE": {
         "s_int_st": torch.tensor([0, 0, 0, 0]),
@@ -73,7 +74,6 @@ gaussian_noise_removers_args = {
     },
     "HyRes": {},
     "OTVCA": {"features": 6, "num_itt": 10, "lam": 0.01},
-    "WSRRR": {"rank": 10},
     "FastHyDe": {"noise_type": "additive", "iid": True, "k_subspace": 10, "normalize": True},
     "L1HyMixDe": {
         "k_subspace": 10,
@@ -85,7 +85,7 @@ gaussian_noise_removers_args = {
 }
 
 nn_noise_removers = {
-    "qrnn3d": "pretrained-models/qrnn3d/hyde-qrnn3d-gauss-l2.pth",
+    "qrnn3d": "pretrained-models/qrnn3d/current-network-gaussian-psnr-short.pth",  # "pretrained-models/qrnn3d/hyde-qrnn3d-gauss-l2.pth",
     "qrnn2d": "pretrained-models/qrnn2d/qrnn2d_gauss-l2.pth",
     "memnet": "pretrained-models/memnet/memnet-2d_gauss-l2.pth",
     "memnet3d": "pretrained-models/memnet3d/memnet3d_gauss-l2.pth",
@@ -104,7 +104,12 @@ def benchmark(file_loc, method, device, output, original):
         nn = False
         method_call = getattr(hyde, method)()
     else:
-        method_call = hyde.NNInference(arch=method, pretrained_file=nn_noise_removers[method])
+        if method in ["qrnn3d", "qrnn2d", "memnet3d", "denet3d"]:
+            method_call = hyde.NNInference(
+                arch=method, pretrained_file=nn_noise_removers[method], band_window=5
+            )
+        else:
+            method_call = hyde.NNInference(arch=method, pretrained_file=nn_noise_removers[method])
         nn = True
     # TODO: load and update the pandas dict with the results
     output = Path(output)
@@ -173,8 +178,6 @@ def benchmark(file_loc, method, device, output, original):
             psnrs.append(psnr.item())
             sads.append(sam.item())
             print(f"file: {fil} time: {t1}, psnr: {psnr}, sam: {sam}")
-            gc.collect()
-            torch.cuda.empty_cache()
 
         times = np.array(times)
         psnrs = np.array(psnrs)
@@ -219,30 +222,31 @@ def benchmark(file_loc, method, device, output, original):
 
 
 if __name__ == "__main__":
-    import os
-
-    print(os.sched_getaffinity(0))
-    torch.set_num_threads(24)
-    print(torch.__config__.parallel_info())
-
-    parser = argparse.ArgumentParser(description="HyDe Benchmarking")
-    cla = hyde.nn.parsers.benchmark_parser(parser)
-    print(cla)
-    logger.info(cla)
-    # generate_noisy_images(base_image="/mnt/ssd/hyde/houston.mat", save_loc="/mnt/ssd/hyde/")
-    benchmark(
-        file_loc=cla.data_dir,
-        method=cla.method,
-        device=cla.device,
-        output=cla.output_dir,
-        original=cla.original_image,
-    )
+    # import os
+    #
+    # print(os.sched_getaffinity(0))
+    # torch.set_num_threads(24)
+    # print(torch.__config__.parallel_info())
+    #
+    # parser = argparse.ArgumentParser(description="HyDe Benchmarking")
+    # cla = hyde.nn.parsers.benchmark_parser(parser)
+    # print(cla)
+    # logger.info(cla)
+    # # generate_noisy_images(base_image="/mnt/ssd/hyde/houston.mat", save_loc="/mnt/ssd/hyde/")
+    # benchmark(
+    #     file_loc=cla.data_dir,
+    #     method=cla.method,
+    #     device=cla.device,
+    #     output=cla.output_dir,
+    #     original=cla.original_image,
+    # )
     # for method in gaussian_noise_removers_args:
-    #     print(method)
-    #     benchmark(
-    #         "/mnt/ssd/hyde/",
-    #         method=method,
-    #         device="cuda",
-    #         output="/mnt/ssd/hyde/",
-    #         original="/mnt/ssd/hyde/houston.mat",
-    #     )
+    for method in nn_noise_removers:
+        print(method)
+        benchmark(
+            "/mnt/ssd/hyde/",
+            method=method,
+            device="cuda",
+            output="/mnt/ssd/hyde/",
+            original="/mnt/ssd/hyde/houston.mat",
+        )

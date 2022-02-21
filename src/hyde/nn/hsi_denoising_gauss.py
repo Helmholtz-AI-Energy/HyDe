@@ -118,6 +118,7 @@ def main():
         criterion = TotalVariation()
     elif cla.loss == "dice":
         criterion = DiceLoss()
+
     # elif cla.loss == "tversky":
     #     criterion = TverskyLoss
     # elif cla.loss == "focal":
