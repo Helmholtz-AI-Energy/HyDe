@@ -85,13 +85,12 @@ gaussian_noise_removers_args = {
 }
 
 nn_noise_removers = {
-    "qrnn3d": "pretrained-models/qrnn3d/current-network-gaussian-psnr-short.pth",  # "pretrained-models/qrnn3d/hyde-qrnn3d-gauss-l2.pth",
-    "qrnn2d": "pretrained-models/qrnn2d/qrnn2d_gauss-l2.pth",
-    "memnet": "pretrained-models/memnet/memnet-2d_gauss-l2.pth",
-    "memnet3d": "pretrained-models/memnet3d/memnet3d_gauss-l2.pth",
-    "denet": "pretrained-models/denet/gauss_denet-2d-l2.pth",
-    "denet3d": "pretrained-models/denet3d/denet3d_gauss_3d-l2.pth",
-    "2d-models": ["denet", "memnet"],
+    "qrnn3d": "pretrained-models/qrnn3d/hyde-bs16-blindinc-gaussian-qrnn3d-l2.pth",
+    "qrnn2d": "pretrained-models/qrnn2d/hyde-bs16-blindinc-gaussian-qrnn2d-l2.pth",
+    "memnet": "pretrained-models/memnet/hyde-bs16-blindinc-gaussian-memnet-l2.pth",
+    "memnet3d": "pretrained-models/memnet3d/hyde-bs16-blindinc-gaussian-memnet3d-l2",
+    "denet": "pretrained-models/denet/hyde-bs16-blindinc-gaussian-denet-l2.pth",
+    "denet3d": "pretrained-models/denet3d/hyde-bs16-blindinc-gaussian-denet3d-l2.pth",
 }
 
 # out_df -> cols = [method, 20dB, 30dB, 40dB]
@@ -104,37 +103,32 @@ def benchmark(file_loc, method, device, output, original):
         nn = False
         method_call = getattr(hyde, method)()
     else:
-        if method in ["qrnn3d", "qrnn2d", "memnet3d", "denet3d"]:
-            method_call = hyde.NNInference(
-                arch=method, pretrained_file=nn_noise_removers[method], band_window=5
-            )
-        else:
-            method_call = hyde.NNInference(arch=method, pretrained_file=nn_noise_removers[method])
+        # is2d = method in nn_noise_removers["2d-models"]
+        method_call = hyde.NNInference(
+            arch=method, pretrained_file=nn_noise_removers[method], band_window=10, window_shape=256
+        )
+
+        # if method in ["qrnn3d", "qrnn2d", "memnet3d", "denet3d"]:
+        #     method_call = hyde.NNInference(
+        #         arch=method, pretrained_file=nn_noise_removers[method], band_window=5,
+        #     )
+        # else:
+        #     method_call = hyde.NNInference(arch=method, pretrained_file=nn_noise_removers[method])
         nn = True
     # TODO: load and update the pandas dict with the results
     output = Path(output)
     og = sio.loadmat(original)["houston"]
     og = og.reshape(og.shape)
 
-    # import cProfile
-    # import io
-    # import pstats
-    # from pstats import SortKey
-
-    # print(og)
-
-    # import cProfile, pstats, io
-    # from pstats import SortKey
-
     original_im = torch.from_numpy(og.astype(np.float32)).to(device=device)
-    # out_df = pd.DataFrame(columns=["noise", "method", "device", "psnr", "sam", "time"])
     out_df = None
-    # print(original_im.mean(-1))
+
     for noise in [20, 30, 40]:
         # todo: see if the file exists
         working_dir = Path(file_loc) / str(noise)
-        psnrs, sads, times = [], [], []
+        psnrs, sads, times, mems = [], [], [], []
         for c, fil in enumerate(working_dir.iterdir()):  # data loading and method for each file
+            torch.cuda.reset_peak_memory_stats()
             print(c, fil)
             # 1. load data + convert to torch
             dat_i = sio.loadmat(fil)
@@ -143,18 +137,10 @@ def benchmark(file_loc, method, device, output, original):
             # 2. start timer
             t0 = time.perf_counter()
 
-            # pr = cProfile.Profile()
-            # number_trials = 1
-            # pr.enable()
-
             if nn:
                 kwargs = gaussian_noise_removers_args["nn"]
-                is2d = method in nn_noise_removers["2d-models"]
-                dat_i = dat_i if not is2d else dat_i[:, :, :31]
-                original_im = original_im if not is2d else original_im[:, :, :31]
             else:
                 kwargs = gaussian_noise_removers_args[method]
-                is2d = False
 
             if len(kwargs) > 0:
                 # dat_i = dat_i if not is2d else dat_i[:, :, :31]#.contiguous()
@@ -163,29 +149,23 @@ def benchmark(file_loc, method, device, output, original):
                 # dat_i = dat_i if not is2d else dat_i[:, :, :31]#.contiguous()
                 res = method_call(dat_i)
 
-            # pr.disable()
-            # s = io.StringIO()
-            # sortby = SortKey.TIME
-            # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-            # ps.print_stats(30)
-            # print(s.getvalue())
-
             t1 = time.perf_counter() - t0
-
+            mems.append(torch.cuda.max_memory_allocated())
             if isinstance(res, tuple):
                 res = res[0]
 
             psnr = hyde.peak_snr(res, original_im)
-            # print((original_im).mean(-1))
             sam = hyde.sam(res, original_im).mean()
             times.append(t1)
             psnrs.append(psnr.item())
             sads.append(sam.item())
+
             print(f"file: {fil} time: {t1}, psnr: {psnr}, sam: {sam}")
 
         times = np.array(times)
         psnrs = np.array(psnrs)
         sads = np.array(sads)
+        mem = np.array(mems)
 
         tsorted = times.argsort()
         good_idxs = tsorted  # [1:-1]
@@ -193,8 +173,7 @@ def benchmark(file_loc, method, device, output, original):
         times = times[good_idxs]
         psnrs = psnrs[good_idxs]
         sads = sads[good_idxs]
-
-        # ret =
+        mem = mem[good_idxs]
 
         pd_dict = {
             "noise": noise,
@@ -203,6 +182,7 @@ def benchmark(file_loc, method, device, output, original):
             "psnr": psnrs.mean(),
             "sam": sads.mean(),
             "time": times.mean(),
+            "memory": mem.mean(),
         }
         # save the results
         ret_df = pd.DataFrame(pd_dict, index=[0], columns=list(pd_dict.keys()))
@@ -213,7 +193,7 @@ def benchmark(file_loc, method, device, output, original):
         # print(out_df)
 
     # print(ret_df)
-    noise_out = output / "python-benchmarks.csv"
+    noise_out = output / "python-benchmarks-new.csv"
     if not noise_out.exists():
         out_df.to_csv(noise_out, index=False)
         print(out_df)
@@ -226,36 +206,36 @@ def benchmark(file_loc, method, device, output, original):
 
 
 if __name__ == "__main__":
-    # import os
-    #
-    # print(os.sched_getaffinity(0))
-    # torch.set_num_threads(24)
-    # print(torch.__config__.parallel_info())
-    #
-    # parser = argparse.ArgumentParser(description="HyDe Benchmarking")
-    # cla = hyde.nn.parsers.benchmark_parser(parser)
-    # print(cla)
-    # logger.info(cla)
-    #
-    # pd.set_option('display.max_rows', 500)
-    # pd.set_option('display.max_columns', 500)
-    # pd.set_option('display.width', 1000)
-    # # generate_noisy_images(base_image="/mnt/ssd/hyde/houston.mat", save_loc="/mnt/ssd/hyde/")
-    # benchmark(
-    #     file_loc=cla.data_dir,
-    #     method=cla.method,
-    #     device=cla.device,
-    #     output=cla.output_dir,
-    #     original=cla.original_image,
-    # )
+    import os
 
-    # for method in gaussian_noise_removers_args:
-    for method in nn_noise_removers:
-        print(method)
-        benchmark(
-            "/mnt/ssd/hyde/",
-            method=method,
-            device="cuda",
-            output="/mnt/ssd/hyde/",
-            original="/mnt/ssd/hyde/houston.mat",
-        )
+    print(os.sched_getaffinity(0))
+    torch.set_num_threads(24)
+    print(torch.__config__.parallel_info())
+
+    parser = argparse.ArgumentParser(description="HyDe Benchmarking")
+    cla = hyde.nn.parsers.benchmark_parser(parser)
+    print(cla)
+    logger.info(cla)
+
+    pd.set_option("display.max_rows", 500)
+    pd.set_option("display.max_columns", 500)
+    pd.set_option("display.width", 1000)
+    # generate_noisy_images(base_image="/mnt/ssd/hyde/houston.mat", save_loc="/mnt/ssd/hyde/")
+    benchmark(
+        file_loc=cla.data_dir,
+        method=cla.method,
+        device=cla.device,
+        output=cla.output_dir,
+        original=cla.original_image,
+    )
+
+    # # for method in gaussian_noise_removers_args:
+    # for method in nn_noise_removers:
+    #     print(method)
+    #     benchmark(
+    #         "/mnt/ssd/hyde/",
+    #         method=method,
+    #         device="cuda",
+    #         output="/mnt/ssd/hyde/",
+    #         original="/mnt/ssd/hyde/houston.mat",
+    #     )

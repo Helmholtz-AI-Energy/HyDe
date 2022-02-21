@@ -29,12 +29,6 @@ def memnet3d():
     return net
 
 
-def memnet3d_64():
-    net = MemNet(1, 64, 3, 2, conv3d=True)
-    net.use_2dconv = False
-    return net
-
-
 def denet():
     # net = DeNet(in_channels=10)
     net = DeNet(in_channels=10)
