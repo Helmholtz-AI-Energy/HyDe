@@ -142,10 +142,10 @@ class ICVLDataset(Dataset):
         self.band_norm = band_norm
         for c, f in enumerate(self.files):
             # the images are already in [bands, height, width]
-            loaded, _ = utils.normalize(
-                torch.tensor(np.load(f), dtype=torch.float32), by_band=band_norm, band_dim=0
-            )
-            # loaded = torch.tensor(np.load(f), dtype=torch.float32)
+            # loaded, _ = utils.normalize(
+            #     torch.tensor(np.load(f), dtype=torch.float32), by_band=band_norm, band_dim=0
+            # )
+            loaded = torch.tensor(np.load(f), dtype=torch.float32)
             self.loadfrom.append(loaded)
 
         self.loadfrom = tuple(self.loadfrom)
@@ -154,8 +154,10 @@ class ICVLDataset(Dataset):
             self.base_transforms = transforms.Compose(
                 [
                     # transforms.CenterCrop(crop_size),
-                    #transforms.RandomCrop(crop_size),
-                    transforms.RandomResizedCrop(crop_size, scale=(0.08, 1.0), ratio=(0.75, 1.3333333333333333)),
+                    # transforms.RandomCrop(crop_size),
+                    transforms.RandomResizedCrop(
+                        crop_size, scale=(0.08, 1.0), ratio=(0.75, 1.3333333333333333)
+                    ),
                     hyde_transforms.RandomBandPerm(10),
                     hyde_transforms.RandChoice(
                         [
@@ -163,7 +165,7 @@ class ICVLDataset(Dataset):
                             transforms.RandomVerticalFlip(p=0.9),
                             transforms.RandomAffine(
                                 degrees=180,
-                                #scale=(0.1, 10), # old (0.1, 3)
+                                # scale=(0.1, 10), # old (0.1, 3)
                                 shear=20,
                             ),
                             transforms.RandomHorizontalFlip(p=0.9),
@@ -189,7 +191,7 @@ class ICVLDataset(Dataset):
     def __getitem__(self, idx):
         img = self.loadfrom[idx].unsqueeze(0)
 
-        #if self.num_bands > 0:
+        # if self.num_bands > 0:
         #    img = img[:, : self.num_bands]
 
         img = self.base_transforms(img)
@@ -206,4 +208,8 @@ class ICVLDataset(Dataset):
 
         img = img.to(dtype=torch.float)
         target = target.to(dtype=torch.float)
+        # norm after noise
+        img, consts = utils.normalize(img, by_band=self.band_norm, band_dim=-3)
+        # target, _ = utils.normalize(target, by_band=self.band_norm, band_dim=-3)
+        target = utils.normalize_w_consts(target, consts, -3)
         return img, target

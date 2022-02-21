@@ -18,6 +18,7 @@ __all__ = [
     "estimate_hyperspectral_noise",
     "hysime",
     "normalize",
+    "normalize_w_consts",
     "peak_snr",
     "rescale_wo_shift",
     "sam",
@@ -426,6 +427,20 @@ def normalize(
 
         out[sl] = (image[sl] - min_y) / (max_y - min_y)
     return out, {"mins": min_y, "maxs": max_y}
+
+
+def normalize_w_consts(image, consts, band_dim=-1):
+    out = torch.zeros_like(image)
+    mins, maxs = consts["mins"], consts["maxs"]
+    for b in range(image.shape[band_dim]):
+        sl = [
+            slice(None),
+        ] * image.ndim
+        sl[band_dim] = b
+        # sl = [slice(None), slice(None), b]
+        sl = tuple(sl)
+        out[sl] = (image[sl] - mins[b]) / (maxs[b] - mins[b])
+    return out
 
 
 def peak_snr(

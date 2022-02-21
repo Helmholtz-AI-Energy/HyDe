@@ -195,12 +195,12 @@ def main():
 
     crop_size = (256, 256)
     band_norm = True
-    scale_factor = 255  # max os ICVL dataset
+    scale_factor = 1  # max os ICVL dataset
 
     train_icvl = ds_utils.ICVLDataset(
         cla.datadir,
         common_transforms=None,
-        transform=AddGaussianNoise(15),
+        transform=AddGaussianNoise(15, scale_factor),
         crop_size=crop_size,
         band_norm=band_norm,
     )
@@ -225,7 +225,7 @@ def main():
 
     val_dataset = ds_utils.ICVLDataset(
         basefolder,
-        transform=AddGaussianNoise(40),
+        transform=AddGaussianNoise(40, scale_factor),
         val=True,
         crop_size=crop_size,
         band_norm=band_norm,
