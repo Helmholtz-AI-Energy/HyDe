@@ -40,7 +40,7 @@ def basic_parser(parser):
         type=str,
         default="l2",
         help="which loss to choose.",
-        choices=["l1", "l2", "smooth_l1", "ssim", "l2_ssim"],
+        #choices=["l1", "l2", "smooth_l1", "ssim", "l2_ssim"],
     )
     parser.add_argument(
         "--nn-init-mode",

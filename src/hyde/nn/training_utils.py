@@ -14,7 +14,7 @@ logger = logging.get_logger()
 
 
 def _train_loop(
-    train_loader, network, cla, epoch, optimizer, criterion, bandwise, scaler, outer_iter
+    train_loader, network, cla, epoch, optimizer, criterion, bandwise, scaler, iter_num
 ):
     train_loss = 0
     avg_loss = 0
@@ -47,23 +47,27 @@ def _train_loop(
         train_loss += loss_data
         avg_loss = train_loss / (batch_idx + 1)
 
-        if batch_idx % cla.log_freq == 0 and cla.rank == 0:
-            logger.info(
-                f"Epoch: {epoch} outer iter: {outer_iter} iteration: {batch_idx} Loss: {avg_loss} Norm: {total_norm}"
-            )
-    return avg_loss
+        #if batch_idx % cla.log_freq == 0 and cla.rank == 0:
+        #    logger.info(
+        #        f"Epoch: {epoch} outer iter: {outer_iter} iteration: {batch_idx} Loss: {avg_loss} Norm: {total_norm}"
+        #    )
+    iter_num += batch_idx
+    logger.info(f"Epoch: {epoch} iter_num: {iter_num} Loss: {avg_loss}")
+    return avg_loss, iter_num
 
 
 def train(
-    train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer=None, iterations=3
+    train_loader, network, cla, epoch, optimizer, criterion, bandwise, writer=None, iterations=150
 ):
     logger.info(f"Train:\t\tEpoch: {epoch}")
     network.train()
 
     scaler = amp.GradScaler()
     avg_loss = None
-    for it in range(iterations):
-        avg_loss = _train_loop(
+    stop = False
+    it = 0
+    while True:
+        avg_loss, it = _train_loop(
             train_loader=train_loader,
             network=network,
             cla=cla,
@@ -72,8 +76,24 @@ def train(
             criterion=criterion,
             bandwise=bandwise,
             scaler=scaler,
-            outer_iter=it,
+            iter_num=it,
         )
+        if it >= iterations:
+            break
+
+
+    #for it in range(iterations):
+    #    avg_loss = _train_loop(
+    #        train_loader=train_loader,
+    #        network=network,
+    #        cla=cla,
+    #        epoch=epoch,
+    #        optimizer=optimizer,
+    #        criterion=criterion,
+    #        bandwise=bandwise,
+    #        scaler=scaler,
+    #        outer_iter=it,
+    #    )
 
     if writer is not None:
         writer.add_scalar(os.path.join(cla.prefix, "train_loss_epoch"), avg_loss, epoch)

@@ -47,7 +47,7 @@ class AddGaussianNoise(object):
     def __call__(self, img):
         # noise = np.random.randn(*img.shape) * self.sigma_ratio
         return add_noise.add_noise_db(
-            img, self.sigma_db, scale_factor=self.scale_factor, verbose=True
+            img, self.sigma_db, scale_factor=self.scale_factor, verbose=False
         )
 
 
@@ -244,12 +244,13 @@ class RandomBandPerm(object):
     def __call__(self, image):
         # assume that the image is larger than the crop size
         # order: [1, bands, height, width]
-        bands = torch.randperm(image.shape[-3], device=image.device)
-        bands = bands[: self.bands]
+        #bands = torch.randperm(image.shape[-3], device=image.device)
+        st = torch.randint(image.shape[-3] - self.bands, (1,)).item()
+        #bands = bands[: self.bands]
         sl = [
             slice(None),
         ] * image.ndim
-        sl[-3] = bands
+        sl[-3] = slice(st, st+self.bands)
         return image[sl]
 
 
