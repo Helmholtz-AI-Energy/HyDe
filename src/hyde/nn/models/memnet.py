@@ -33,10 +33,18 @@ class MemNet(nn.Module):
         for b in range(x.shape[0]):
             i = x[b].squeeze().permute((1, 2, 0))
             ret = self.hyres(i).permute((2, 0, 1))
-            #nz = torch.nonzero(torch.isnan(x[b])).shape
-            #if nz[0] == 0:
-            #    x[b] = ret
-            #print(torch.nonzero(torch.isnan(x[b])).shape)
+            nz = torch.nonzero(torch.isnan(ret))
+            if nz.shape[0] == 0:
+                x[b] = ret
+            else:
+                #ret[torch.isnan(ret)] = 0
+                ret = torch.nan_to_num(ret, nan=0, posinf=1, neginf=0)
+                x[b] = ret
+            #print(nz)
+            nz = torch.nonzero(torch.isnan(x[b]))
+            if nz.shape[0] > 0:
+                print(b, torch.nonzero(torch.isnan(x[b])))
+                raise RuntimeError('nans!')
         residual = x
         out = self.feature_extractor(x)
         ys = [out]
