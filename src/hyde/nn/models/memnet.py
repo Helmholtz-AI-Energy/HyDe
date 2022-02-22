@@ -20,12 +20,23 @@ class MemNet(nn.Module):
         self.freeze_bn = True
         self.freeze_bn_affine = True
         self.conv3d = conv3d
-        self.HyRes = transform_domain.HyRes()
+        self.hyres = transform_domain.HyRes()
 
     def forward(self, x):
         if x.ndim == 5 and not self.conv3d:
             x = x.squeeze(1)
-        x = self.HyRes(x)
+
+        #with torch.no_grad()
+        # current shape: [batch, band, h, w]
+        #with torch.no_grad():
+        #self.hyres = transform_domain.HyRes()
+        for b in range(x.shape[0]):
+            i = x[b].squeeze().permute((1, 2, 0))
+            ret = self.hyres(i).permute((2, 0, 1))
+            #nz = torch.nonzero(torch.isnan(x[b])).shape
+            #if nz[0] == 0:
+            #    x[b] = ret
+            #print(torch.nonzero(torch.isnan(x[b])).shape)
         residual = x
         out = self.feature_extractor(x)
         ys = [out]

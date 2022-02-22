@@ -281,7 +281,7 @@ def estimate_hyperspectral_noise(
     return w, r_w
 
 
-@torch.jit.script
+#@torch.jit.script
 def _est_additive_noise(
     subdata: torch.Tensor, calculation_dtype: torch.dtype = torch.float
 ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -305,9 +305,10 @@ def _est_additive_noise(
         # beta = XX * RRa;
         beta[i] = 0
         # beta(i)=0; % this remove the effects of XX(i,:)
-        w[i, :] = subdata[i, :] - (beta.T @ subdata)
+        w[i, :] = subdata[i, :] - (beta @ subdata)
     # ret = torch.diag(torch.diag(ddp / dim1data))
     # Rw=diag(diag(w*w'/N));
+    #print("here", w.shape)
     hold2 = torch.matmul(w, w.T) / float(subdata.shape[1])
     ret = torch.diag(torch.diagonal(hold2))
     w = w.to(dtype=dtp)

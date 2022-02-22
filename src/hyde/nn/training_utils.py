@@ -29,7 +29,11 @@ def _train_loop(train_loader, network, cla, epoch, optimizer, criterion, scaler,
             loss = criterion(outputs, targets)
 
         scaler.scale(loss).backward()
+        scaler.unscale_(optimizer)
+        torch.nn.utils.clip_grad_norm_(network.parameters(), 1e6)  # max_norm)
+        #loss.backward()
         loss_data += loss.item()
+        #optimizer.step()
         scaler.step(optimizer)
         scaler.update()
 
@@ -75,7 +79,7 @@ def validate(valid_loader, name, network, cla, epoch, criterion, writer=None):
     total_psnr = 0
     ls, psnrs = [], []
     logger.info(f"Validation:\tEpoch: {epoch} dataset name: {name}")
-    is_2d = True if cla.arch in ["memnet", "denet"] else False
+    is_2d = True if cla.arch in ["memnet", "denet", "memnet_hyres"] else False
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(valid_loader):
             if not cla.no_cuda and torch.cuda.is_available():

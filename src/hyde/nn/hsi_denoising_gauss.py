@@ -283,7 +283,10 @@ def main():
         #    scheduler._reset()
         #    helper.adjust_learning_rate(optimizer, cla.lr)
 
-        if epoch < 30:
+        #if epoch < 5:
+        #    helper.adjust_learning_rate(optimizer, cla.lr * 10 ** (epoch - 4))
+
+        if epoch < 20:
             train_icvl.transform = AddGaussianNoiseBlind(
                 max_sigma_db=40, min_sigma_db=10, scale_factor=scale_factor
             )  # 36/20
@@ -293,10 +296,10 @@ def main():
             logger.info("Noise level: 50")
         else:
             train_icvl.transform = AddGaussianNoiseBlind(
-                max_sigma_db=55, min_sigma_db=40, scale_factor=scale_factor
+                max_sigma_db=55, min_sigma_db=30, scale_factor=scale_factor
             )  # 36/20
 
-            logger.info("Noise level: BLIND! - 40-55")
+            logger.info("Noise level: BLIND! - 30-55")
 
         if epoch == 50:
             helper.adjust_learning_rate(optimizer, 1e-3)
@@ -327,8 +330,8 @@ def main():
         )
         vtime = time.perf_counter() - vtime
 
-        if epoch >= 30:
-            scheduler.step(ls)
+        #if epoch >= 30:
+        scheduler.step(ls)
 
         expected_time_remaining = time.strftime(
             "%H:%M:%S", time.gmtime((ttime + vtime) * (max_epochs - epoch))
@@ -353,7 +356,7 @@ def main():
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(
-                cla.save_dir, prefix, f"new-blind-short-gaussian-bs4x4-{cla.loss}.pth"
+                cla.save_dir, prefix, f"new-norm-gaussian-bs4x4-{cla.loss}.pth"
             )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
