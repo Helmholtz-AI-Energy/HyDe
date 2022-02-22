@@ -281,7 +281,7 @@ def estimate_hyperspectral_noise(
     return w, r_w
 
 
-#@torch.jit.script
+@torch.jit.script
 def _est_additive_noise(
     subdata: torch.Tensor, calculation_dtype: torch.dtype = torch.float
 ) -> Tuple[torch.Tensor, torch.Tensor]:

@@ -29,6 +29,12 @@ def memnet_hyres():
     return net
 
 
+def memnet3d_hyres():
+    net = MemNet(1, 16, 3, 3, conv3d=True)  # old: (31, 64, 6, 6)
+    net.use_2dconv = False
+    return net
+
+
 def memnet3d():
     net = MemNet(1, 32, 2, 2, conv3d=True)  # large -> 1, 64, 3, 2  # small -> 32, 2, 2
     net.use_2dconv = False

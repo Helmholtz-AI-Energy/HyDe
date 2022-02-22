@@ -122,11 +122,17 @@ class HyRes(torch.nn.Module):
         # -------------------------------------------------------
         # next is twoDWTon3Ddata -> requires permute + unsqueeze
         pc = pc.to(torch.float)  # no-op if already float
-
+        #print('pc nans', torch.isnan(pc).sum(), pc.numel())
         # pc -> h x w x c
         v_dwt_full, v_dwt_lows, v_dwt_highs = self.dwt_forward.forward(
             pc.permute((2, 0, 1)).unsqueeze(0)
         )
+        v_dwt_lows = torch.nan_to_num(v_dwt_lows, nan=0, posinf=x.max(), neginf=x.min())
+        for c in range(len(v_dwt_highs)):
+            v_dwt_highs[c] = torch.nan_to_num(v_dwt_highs[c], nan=0, posinf=x.max(), neginf=x.min())
+        #v_dwt_lows = torch.nan_to_num(v_dwt_lows, nan=0, posinf=x.max(), neginf=x.min())
+        #print('pc nans', torch.isnan(v_dwt_lows).sum(), v_dwt_lows.numel())
+
         v_dwt_permed, v_dwt_filter_starts = dwt3d.construct_2d_from_filters(
             low=v_dwt_lows, highs=v_dwt_highs
         )
@@ -150,10 +156,11 @@ class HyRes(torch.nn.Module):
             min_sure.append(min_sure_h)
             if rank > 1 and min_sure[rank] > min_sure[rank - 1]:
                 break
-
+        #print(torch.nonzero(torch.isnan(v_dwt_lows)).shape)
         inv_lows = v_dwt_lows[:, :rank]
         inv_highs = [asdf[:, :rank] for asdf in v_dwt_highs]
         y_est_sure_model_y = self.dwt_inverse((inv_lows, inv_highs))
+        #print(torch.nonzero(torch.isnan(y_est_sure_model_y)).shape)
 
         # y_est_sure_model_y -> n x c x h x w  -> perm back: squeeze -> 1, 2, 0 (h, w, c)
         y_est_sure_model_y = y_est_sure_model_y.squeeze().permute((1, 2, 0))
