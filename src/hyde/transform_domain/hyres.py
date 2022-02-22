@@ -51,8 +51,15 @@ class HyRes(torch.nn.Module):
 
         self.padding_method = padding_method
 
-        self.dwt_forward = None
-        self.dwt_inverse = None
+        self.dwt_forward = dwt3d.DWTForwardOverwrite(
+            self.decomp_level,
+            self.wavelet_name,
+            self.padding_method,
+            device=self.device,
+        )
+        self.dwt_inverse = dwt3d.DWTInverse(
+            wave=self.wavelet_name, padding_method=self.padding_method, device=self.device
+        )
 
     def forward(self, x: torch.Tensor):
         """
@@ -68,15 +75,8 @@ class HyRes(torch.nn.Module):
         denoised_image : torch.Tensor
         """
         self.device = x.device
-        self.dwt_forward = dwt3d.DWTForwardOverwrite(
-            self.decomp_level,
-            self.wavelet_name,
-            self.padding_method,
-            device=self.device,
-        )
-        self.dwt_inverse = dwt3d.DWTInverse(
-            wave=self.wavelet_name, padding_method=self.padding_method, device=self.device
-        )
+        # self.dwt_forward =
+        # self.dwt_inverse =
         # need to have the dims be (num images (1), C_in, H_in, W_in) for twave ops
         # current order: rows, columns, bands (H, W, C) -> permute tuple (2, 0, 1)
         og_rows, og_cols, og_channels = x.shape
