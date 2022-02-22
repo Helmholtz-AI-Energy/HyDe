@@ -124,34 +124,42 @@ def inference_windows(network, image, buff, window_size, band_window, frozen):
     band_dim = -3
     row_dim = -2
     col_dim = -1
-    ws = window_size
+    row_w, col_w = window_size, window_size
     sh_b, sh_r, sh_c = image.shape[-3:]
+    buff = list(buff)
+    if row_w >= sh_r:
+        row_w = sh_r
+        buff[0] = 0
+    if col_w >= sh_c:
+        col_w = sh_c
+        buff[1] = 0
+
     # design this to move over windows (like conv groups)
     # ==== rows ============
-    dim_r_starts = [ws, ws - buff[0]]
-    dim_r_set_starts = [ws, ws]
-    if dim_r_starts[-1] >= sh_r or ws >= sh_r:
+    dim_r_starts = [row_w, row_w - buff[0]]
+    dim_r_set_starts = [row_w, row_w]
+    if dim_r_starts[-1] >= sh_r or row_w >= sh_r:
         # if the second window starts after the image ends
         dim_r_starts, dim_r_set_starts = [0], [0]
     else:
         while dim_r_starts[-1] < sh_r:
             # layer the images over one another to avoid tiling (hopfully)
-            dim_r_starts.append(dim_r_starts[-1] + ws - buff[0])
-            dim_r_set_starts.append(dim_r_set_starts[-1] + ws)
+            dim_r_starts.append(dim_r_starts[-1] + row_w - buff[0])
+            dim_r_set_starts.append(dim_r_set_starts[-1] + row_w)
         dim_r_starts, dim_r_set_starts = dim_r_starts[:-1], dim_r_set_starts[:-1]
     # replace the first item with 0 (it currently has the end of the first window)
     dim_r_starts[0], dim_r_set_starts[0] = 0, 0
     # ==== cols ============
-    dim_c_starts = [ws, ws - buff[0]]
-    dim_c_set_starts = [ws, ws]
-    if dim_c_starts[-1] >= sh_c or ws >= sh_c:
+    dim_c_starts = [col_w, col_w - buff[1]]
+    dim_c_set_starts = [col_w, col_w]
+    if dim_c_starts[-1] >= sh_c or col_w >= sh_c:
         # if the second window starts after the image ends
         dim_c_starts, dim_c_set_starts = [0], [0]
     else:
         while dim_c_starts[-1] < sh_c:
             # layer the images over one another to avoid tiling (hopfully)
-            dim_c_starts.append(dim_c_starts[-1] + ws - buff[1])
-            dim_c_set_starts.append(dim_c_set_starts[-1] + ws)
+            dim_c_starts.append(dim_c_starts[-1] + col_w - buff[1])
+            dim_c_set_starts.append(dim_c_set_starts[-1] + col_w)
         dim_c_starts, dim_c_set_starts = dim_c_starts[:-1], dim_c_set_starts[:-1]
     # replace the first item with 0 (it currently has the end of the first window)
     dim_c_starts[0], dim_c_set_starts[0] = 0, 0
@@ -181,38 +189,38 @@ def inference_windows(network, image, buff, window_size, band_window, frozen):
     for beg_r, set_r in zip(dim_r_starts, dim_r_set_starts):
         sl = [slice(None)] * image.ndim
         # create overlap
-        end_r = beg_r + ws
+        end_r = beg_r + row_w
         sl[row_dim] = slice(beg_r, end_r)
 
         # need to make something that
         cut_slice = [slice(None)] * image.ndim
         cut_slice_out = [slice(None)] * image.ndim
-        cut_slice_out[row_dim] = slice(set_r, set_r + ws)
+        cut_slice_out[row_dim] = slice(set_r, set_r + row_w)
         if beg_r != 0:
             cut_slice[row_dim] = slice(buff[0], None)
             cut_slice_out[row_dim] = slice(beg_r + buff[0], end_r)
         if end_r > sh_r:
             # if we go past the end on the slice,
             # this will cause issue when the network has a fixed number of bands
-            sl[row_dim] = slice(sh_r - ws, sh_r)
-            cut_slice[row_dim] = slice(-1 * (ws - buff[0]), None)
-            cut_slice_out[row_dim] = slice(-1 * (ws - buff[0]), None)
+            sl[row_dim] = slice(sh_r - row_w, sh_r)
+            cut_slice[row_dim] = slice(-1 * (row_w - buff[0]), None)
+            cut_slice_out[row_dim] = slice(-1 * (row_w - buff[0]), None)
         cut_slice[col_dim] = slice(None)
         for beg_c, set_c in zip(dim_c_starts, dim_c_set_starts):
             # create overlap
-            end_c = beg_c + ws
+            end_c = beg_c + col_w
             sl[col_dim] = slice(beg_c, end_c)
 
-            cut_slice_out[col_dim] = slice(set_c, set_c + ws)
+            cut_slice_out[col_dim] = slice(set_c, set_c + col_w)
             if beg_c != 0:
                 cut_slice[col_dim] = slice(buff[1], None)
                 cut_slice_out[col_dim] = slice(beg_c + buff[1], end_c)
             if end_c > sh_c:
                 # if we go past the end on the slice,
                 # this will cause issue when the network has a fixed number of bands
-                sl[col_dim] = slice(sh_c - ws, sh_c)
-                cut_slice[col_dim] = slice(-1 * (ws - buff[1]), None)
-                cut_slice_out[col_dim] = slice(-1 * (ws - buff[1]), None)
+                sl[col_dim] = slice(sh_c - col_w, sh_c)
+                cut_slice[col_dim] = slice(-1 * (col_w - buff[1]), None)
+                cut_slice_out[col_dim] = slice(-1 * (col_w - buff[1]), None)
             cut_slice[band_dim] = slice(None)
             for beg_b, set_b in zip(dim_b_starts, dim_b_set_starts):
                 # create overlap
