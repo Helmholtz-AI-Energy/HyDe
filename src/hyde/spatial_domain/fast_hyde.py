@@ -157,11 +157,9 @@ def fast_hyde_eigen_image_denoising(img, k_subspace, r_w, e, eigen_y, n) -> np.n
 
     nxt_eigen = eigen_y[0].cpu()
     mx = min(k_subspace, eigen_y.shape[0])
-    print(mx)
     for i in range(mx):
         lp_eigen = nxt_eigen.numpy()
         if i < mx - 1:
-            print(eigen_y.shape)
             nxt_eigen = eigen_y[i + 1].to(device="cpu", non_blocking=True)
         # produce eigen-image
         eigen_im = lp_eigen

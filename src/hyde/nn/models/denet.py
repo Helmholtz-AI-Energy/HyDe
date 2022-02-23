@@ -27,7 +27,7 @@ class DeNet(nn.Module):
             elif dilation == 2:
                 padding = 2
             layers.append(
-                nn.Conv2d(  #nn.Conv2d(
+                nn.Conv2d(  # nn.Conv2d(
                     in_channels=in_channels,
                     out_channels=out_channels,
                     kernel_size=kernel_size,
@@ -36,15 +36,16 @@ class DeNet(nn.Module):
                     bias=False,
                 )
             )
-            layers.append(nn.BatchNorm2d(num_features=out_channels))  #BatchNorm2d(num_features=out_channels))
+            layers.append(
+                nn.BatchNorm2d(num_features=out_channels)
+            )  # BatchNorm2d(num_features=out_channels))
             layers.append(nn.ReLU(inplace=True))
             in_channels = out_channels
 
         # add C
         layers.append(
             nn.Conv2d(  # nn.Conv2d(
-                in_channels=64, out_channels=out_ch, 
-                kernel_size=kernel_size, padding=1, bias=False
+                in_channels=64, out_channels=out_ch, kernel_size=kernel_size, padding=1, bias=False
             )
         )
         self.denet = nn.Sequential(*layers)
@@ -52,12 +53,15 @@ class DeNet(nn.Module):
         #   self._initialize_weights()
 
     def forward(self, x):
-        #y = x
+        squeezed = False
         if x.ndim == 5:
+            squeezed = True
             x = x.squeeze(1)
-        
+
         out = self.denet(x)
-        return out #y - out
+        if squeezed:
+            out = out.unsqueeze(1)
+        return out
 
     def _initialize_weights(self):
         print("===> Start initializing weights")
@@ -93,12 +97,13 @@ cfg = (
     [64, 1],
 )
 
+
 class DeNetLite3D(nn.Module):
     def __init__(self, in_channels=1, kernel_size=3, init_weights=True):
         super(DeNetLite3D, self).__init__()
         layers = []
         out_ch = in_channels
-        out_channels = 32 #64
+        out_channels = 32  # 64
         # add CR
         layers.append(
             nn.Conv3d(  # nn.Conv2d(
@@ -118,7 +123,7 @@ class DeNetLite3D(nn.Module):
             elif dilation == 2:
                 padding = 2
             layers.append(
-                nn.Conv3d(  #nn.Conv2d(
+                nn.Conv3d(  # nn.Conv2d(
                     in_channels=in_channels,
                     out_channels=out_channels,
                     kernel_size=kernel_size,
@@ -127,16 +132,20 @@ class DeNetLite3D(nn.Module):
                     bias=False,
                 )
             )
-            layers.append(nn.BatchNorm3d(num_features=out_channels))  #BatchNorm2d(num_features=out_channels))
+            layers.append(
+                nn.BatchNorm3d(num_features=out_channels)
+            )  # BatchNorm2d(num_features=out_channels))
             layers.append(nn.ReLU(inplace=True))
             in_channels = out_channels
 
         # add C
         layers.append(
             nn.Conv3d(  # nn.Conv2d(
-                in_channels=32, #64
+                in_channels=32,  # 64
                 out_channels=out_ch,
-                kernel_size=kernel_size, padding=1, bias=False
+                kernel_size=kernel_size,
+                padding=1,
+                bias=False,
             )
         )
         self.denet = nn.Sequential(*layers)
@@ -144,12 +153,12 @@ class DeNetLite3D(nn.Module):
         #   self._initialize_weights()
 
     def forward(self, x):
-        #y = x
-        #if x.ndim == 5:
+        # y = x
+        # if x.ndim == 5:
         #    x = x.squeeze(1)
 
         out = self.denet(x)
-        return out #y - out
+        return out  # y - out
 
     def _initialize_weights(self):
         print("===> Start initializing weights")
@@ -167,21 +176,20 @@ class DeNetLite3D(nn.Module):
 each tuple unit: [out_channels, dilation]
 """
 cfg3d = (
-    [2**5, 1], #    [64, 1],
-    [2**5, 1], #    [64, 1],
-    [2**5, 1], #    [64, 1],
-    [2**6, 1], #    [128, 1],
-    [2**6, 1], #    [128, 1],
-    [2**6, 1], #    [128, 1],
-    [2**7, 1], #    [256, 2],
-        #    [256, 2],
-        #    [256, 2],
-        #    [128, 1],
-    [2**6, 1], #    [128, 1],
-        #    [128, 1],
-        #    [64, 1],
-    [2**5, 1], #    [64, 1],
-    [2**5, 1], #    [64, 1],
-    [2**5, 1], #    [64, 1],
+    [2 ** 5, 1],  # [64, 1],
+    [2 ** 5, 1],  # [64, 1],
+    [2 ** 5, 1],  # [64, 1],
+    [2 ** 6, 1],  # [128, 1],
+    [2 ** 6, 1],  # [128, 1],
+    [2 ** 6, 1],  # [128, 1],
+    [2 ** 7, 1],  # [256, 2],
+    # [256, 2],
+    # [256, 2],
+    # [128, 1],
+    [2 ** 6, 1],  # [128, 1],
+    # [128, 1],
+    # [64, 1],
+    [2 ** 5, 1],  # [64, 1],
+    [2 ** 5, 1],  # [64, 1],
+    [2 ** 5, 1],  # [64, 1],
 )
-

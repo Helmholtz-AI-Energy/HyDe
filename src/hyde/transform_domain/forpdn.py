@@ -106,10 +106,6 @@ class FORPDN_SURE(torch.nn.Module):
         denoised_image: torch.Tensor
         noise_std: torch.Tensor
             noise standard deviation for each band as a vector
-        optimal_sure_params: torch.Tensor
-            optimal parameters for the SURE function
-        sure: torch.Tensor
-            SURE threshold values
         """
         self.wavelet_name = "db" + str(wavelet_level)
         rows, cols, bands = img.shape
