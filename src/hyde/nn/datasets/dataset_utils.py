@@ -213,13 +213,12 @@ class ICVLDataset(Dataset):
         img = img.to(dtype=torch.float)
         target = target.to(dtype=torch.float)
         # norm after noise
-
         #hyres = transform_domain.HyRes()
         #for b in range(x.shape[0]):
         #img = img.squeeze().permute((1, 2, 0))
         #img = hyres(img).permute((2, 0, 1)).unsqueeze(0)
 
         img, consts = utils.normalize(img, by_band=self.band_norm, band_dim=-3)
-        # target, _ = utils.normalize(target, by_band=self.band_norm, band_dim=-3)
+        #target, _ = utils.normalize(target, by_band=self.band_norm, band_dim=-3)
         target = utils.normalize_w_consts(target, consts, -3)
         return img, target

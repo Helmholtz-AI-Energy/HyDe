@@ -2,7 +2,7 @@
 import torch
 import torch.nn as nn
 
-from ... import transform_domain
+from ... import lowlevel, transform_domain
 
 
 class MemNet(nn.Module):
@@ -25,28 +25,26 @@ class MemNet(nn.Module):
     def forward(self, x):
         squeezed = False
         if x.ndim == 5 and not self.conv3d:
-            squeezed = True
             x = x.squeeze(1)
+            squeezed = True
 
         # with torch.no_grad()
         # current shape: [batch, band, h, w]
         # with torch.no_grad():
-        # self.hyres = transform_domain.HyRes()
-        for b in range(x.shape[0]):
-            i = x[b].squeeze().permute((1, 2, 0))
-            ret = self.hyres(i).permute((2, 0, 1))
-            nz = torch.nonzero(torch.isnan(ret))
-            if nz.shape[0] == 0:
-                x[b] = ret
-            else:
-                # ret[torch.isnan(ret)] = 0
-                ret = torch.nan_to_num(ret, nan=0, posinf=1, neginf=0)
-                x[b] = ret
-            # print(nz)
-            nz = torch.nonzero(torch.isnan(x[b]))
-            if nz.shape[0] > 0:
-                print(b, torch.nonzero(torch.isnan(x[b])))
-                raise RuntimeError("nans!")
+        # for b in range(x.shape[0]):
+        #     i = x[b].squeeze().permute((1, 2, 0))
+        #     #print('b', i.min(), i.max())
+        #     ret = self.hyres(i).permute((2, 0, 1))
+        #     #print(ret.min(), ret.max())
+        #     # nz = torch.nonzero(torch.isnan(ret))
+        #     #if nz.shape[0] > 0:
+        #     #    #print(ret)
+        #     #    raise RuntimeError('nans :(')
+        #     #ret = torch.nan_to_num(ret, nan=0, posinf=1, neginf=0)
+        #     #print(ret.min(), ret.max())
+        #     # if self.conv3d:
+        #     #     ret = ret.unsqueeze(0)
+        #     x[b] = ret
         residual = x
         out = self.feature_extractor(x)
         ys = [out]

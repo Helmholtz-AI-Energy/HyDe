@@ -356,7 +356,7 @@ def main():
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(
-                cla.save_dir, prefix, f"new-norm-gaussian-bs4x4-{cla.loss}.pth"
+                cla.save_dir, prefix, f"hyres-nograd-gaussian-bs4x4-{cla.loss}.pth"
             )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
