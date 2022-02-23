@@ -49,6 +49,7 @@ def generate_noisy_images(base_image, save_loc, noise_type="gaussian"):
         sv_folder = save_loc / str(nl)
         sv_folder.mkdir(exist_ok=True)
         tfm = transform(nl, **kwargs)
+        print(sv_folder)
         for i in range(15):
             print(nl, i)
             lp_img = tfm(imp_torch)
@@ -74,9 +75,9 @@ gaussian_noise_removers_args = {
     "OTVCA": {"features": 6, "num_itt": 10, "lam": 0.01},
     "FastHyDe": {"noise_type": "additive", "iid": True, "k_subspace": 10, "normalize": True},
     "L1HyMixDe": {
-        "k_subspace": 10,
-        "p": 0.05,
-        "max_iter": 10,
+        "k_subspace": 8,
+        "p": 0.1,
+        "max_iter": 10,  # 40
         "normalize": True,
     },
     "nn": {"band_dim": -1, "normalize": True, "permute": True},
@@ -86,9 +87,10 @@ nn_noise_removers = {
     "qrnn3d": "pretrained-models/qrnn3d/hyde-bs16-blindinc-gaussian-qrnn3d-l2.pth",
     "qrnn2d": "pretrained-models/qrnn2d/hyde-bs16-blindinc-gaussian-qrnn2d-l2.pth",
     "memnet": "pretrained-models/memnet/hyde-bs16-blindinc-gaussian-memnet-l2.pth",
-    "memnet3d": "pretrained-models/memnet3d/hyde-bs16-blindinc-gaussian-memnet3d-l2",
+    "memnet3d": "pretrained-models/memnet3d/hyde-bs16-blindinc-gaussian-memnet3d-l2.pth",
     "denet": "pretrained-models/denet/hyde-bs16-blindinc-gaussian-denet-l2.pth",
     "denet3d": "pretrained-models/denet3d/hyde-bs16-blindinc-gaussian-denet3d-l2.pth",
+    "is2d": ["denet", "memnet"]
 }
 
 # out_df -> cols = [method, 20dB, 30dB, 40dB]
@@ -102,9 +104,11 @@ def benchmark(file_loc, method, device, output, original):
         method_call = getattr(hyde, method)()
     else:
         # is2d = method in nn_noise_removers["2d-models"]
+        is2d = method in nn_noise_removers["is2d"]
         method_call = hyde.NNInference(
-            arch=method, pretrained_file=nn_noise_removers[method], band_window=10, window_shape=256
+            arch=method, pretrained_file=nn_noise_removers[method], band_window=31 if not is2d else 10, window_shape=512
         )
+        #is2d = method in nn_noise_removers["is2d"]
 
         # if method in ["qrnn3d", "qrnn2d", "memnet3d", "denet3d"]:
         #     method_call = hyde.NNInference(
@@ -137,6 +141,8 @@ def benchmark(file_loc, method, device, output, original):
 
             if nn:
                 kwargs = gaussian_noise_removers_args["nn"]
+                if is2d:
+                    dat_i = dat_i.squeeze(1)
             else:
                 kwargs = gaussian_noise_removers_args[method]
 
@@ -218,7 +224,7 @@ if __name__ == "__main__":
     pd.set_option("display.max_rows", 500)
     pd.set_option("display.max_columns", 500)
     pd.set_option("display.width", 1000)
-    # generate_noisy_images(base_image="/mnt/ssd/hyde/houston.mat", save_loc="/mnt/ssd/hyde/")
+    #generate_noisy_images(base_image=cla.original_image, save_loc=cla.data_dir)
     benchmark(
         file_loc=cla.data_dir,
         method=cla.method,
