@@ -154,22 +154,22 @@ class ICVLDataset(Dataset):
             self.base_transforms = transforms.Compose(
                 [
                     # transforms.CenterCrop(crop_size),
-                    transforms.RandomCrop(crop_size),
-                    # transforms.RandomResizedCrop(
-                    #     crop_size, scale=(0.08, 1.0), ratio=(0.75, 1.3333333333333333)
-                    # ),
+                    #transforms.RandomCrop(crop_size),
+                    transforms.RandomResizedCrop(
+                        crop_size, scale=(0.08, 1.0), ratio=(0.75, 1.3333333333333333)
+                    ),
                     hyde_transforms.RandomBandPerm(10),
                     hyde_transforms.RandChoice(
                         [
                             hyde_transforms.RandRot90Transform(),
                             transforms.RandomVerticalFlip(p=0.9),
-                            # transforms.RandomAffine(
-                            #     degrees=180,
-                            #     # scale=(0.1, 10), # old (0.1, 3)
-                            #     shear=20,
-                            # ),
+                            transforms.RandomAffine(
+                                degrees=180,
+                                # scale=(0.1, 10), # old (0.1, 3)
+                                shear=20,
+                            ),
                             transforms.RandomHorizontalFlip(p=0.9),
-                            # transforms.RandomPerspective(p=0.88),
+                            transforms.RandomPerspective(p=0.88),
                         ],
                         p=None,  # 0.5,
                         combos=True,
