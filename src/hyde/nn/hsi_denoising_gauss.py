@@ -249,7 +249,7 @@ def main():
     base_lr = 1e-3
     cla.lr = base_lr
     helper.adjust_learning_rate(optimizer, base_lr)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer)#, factor=0.5)
 
     for epoch in range(start_epoch, max_epochs):
         logger.info(f"\t\t--------- Start epoch {epoch} of {max_epochs - 1} ---------\t")
@@ -262,21 +262,21 @@ def main():
         # if epoch < 20:
         #     train_icvl.transform = GaussianBlindSNRLevel(max_sigma_db=50, min_sigma_db=30)
         #     logger.info("Noise level: 50-30 Blind")
-        # elif epoch < 30:
-        #     train_icvl.transform = GaussianSNRLevel(20)
-        #     logger.info("Noise level: 20")
-        # else:
-        train_icvl.transform = GaussianBlindSNRLevel(max_sigma_db=30, min_sigma_db=15)
-        logger.info("Noise level: 30-15 blind")
+        #if epoch < 30:
+        #    train_icvl.transform = GaussianSNRLevel(30)
+        #    logger.info("SNR level: 30")
+        #else:
+        train_icvl.transform = GaussianBlindSNRLevel(max_sigma_db=30, min_sigma_db=20)
+        logger.info("SNR level: 30-20 blind")
 
-        # if epoch == 50:
-        #     helper.adjust_learning_rate(optimizer, 1e-3)
-        #     scheduler._reset()
+        #if epoch == 50:
+        #    helper.adjust_learning_rate(optimizer, 1e-3)
+        #    scheduler._reset()
 
-        # if epoch == 100: #120:
-        #    helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
-        # if epoch == 135: #140:
-        #    helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
+        if epoch == 40: #120:
+           helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
+        if epoch == 45: #140:
+           helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
 
         helper.display_learning_rate(optimizer)
         ttime = time.perf_counter()
@@ -288,7 +288,7 @@ def main():
             optimizer,
             criterion,
             writer=writer,
-            iterations=150,
+            iterations=250,
         )
         ttime = time.perf_counter() - ttime
 

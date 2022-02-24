@@ -20,7 +20,7 @@ class MemNet(nn.Module):
         self.freeze_bn = True
         self.freeze_bn_affine = True
         self.conv3d = conv3d
-        self.hyres = transform_domain.HyRes()
+        #self.hyres = transform_domain.HyRes()
 
     def forward(self, x):
         squeezed = False
