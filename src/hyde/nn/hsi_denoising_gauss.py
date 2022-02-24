@@ -30,7 +30,7 @@ from hyde.nn import (
     training_utils,
 )
 from hyde.nn.datasets import dataset_utils as ds_utils
-from hyde.nn.datasets.transforms import AddGaussianNoise, AddGaussianNoiseBlind
+from hyde.nn.datasets.transforms import GaussianBlindSNRLevel, GaussianSNRLevel
 from hyde.nn.parsers import qrnn_parser
 
 logger = logging.get_logger()
@@ -195,12 +195,11 @@ def main():
 
     crop_size = (256, 256)
     band_norm = True
-    scale_factor = 1  # max os ICVL dataset
 
     train_icvl = ds_utils.ICVLDataset(
         cla.datadir,
         common_transforms=None,
-        transform=AddGaussianNoise(15, scale_factor),
+        transform=GaussianSNRLevel(50),
         crop_size=crop_size,
         band_norm=band_norm,
     )
@@ -225,7 +224,7 @@ def main():
 
     val_dataset = ds_utils.ICVLDataset(
         basefolder,
-        transform=AddGaussianNoise(40, scale_factor),
+        transform=GaussianSNRLevel(20),
         val=True,
         crop_size=crop_size,
         band_norm=band_norm,
@@ -244,17 +243,9 @@ def main():
         sampler=val_sampler,
     )
 
-    helper.adjust_learning_rate(optimizer, 0.01)
-    max_epochs = 150
+    max_epochs = 50
     best_val_loss, best_val_psnr = 100000, 0
     epochs_wo_best = 0
-
-    # criterion = nn.MSELoss()
-    # criterion = PSNRLoss(1)
-    # torch.manual_seed(2018)
-    # torch.cuda.manual_seed(2018)
-    # np.random.seed(2018)
-    # random.seed(2018)
     base_lr = 1e-3
     cla.lr = base_lr
     helper.adjust_learning_rate(optimizer, base_lr)
@@ -268,42 +259,19 @@ def main():
         # np.random.seed(epoch + 2018)
         # random.seed(epoch + 2018)
 
-        # if epoch < -10:
-        #    noise = 20
-        # elif epoch < 100:
-        #    noise = (epoch / 3.) * 2.
-        #    #helper.adjust_learning_rate(optimizer, cla.lr
-        # elif epoch < -30:
-        #    noise = 40
+        # if epoch < 20:
+        #     train_icvl.transform = GaussianBlindSNRLevel(max_sigma_db=50, min_sigma_db=30)
+        #     logger.info("Noise level: 50-30 Blind")
+        # elif epoch < 30:
+        #     train_icvl.transform = GaussianSNRLevel(20)
+        #     logger.info("Noise level: 20")
         # else:
-        # noise = 40  # None
-        # if epoch == 30:
-        #    criterion = SAMLoss()
-        #    best_val_loss, best_val_psnr = 100000, 0
-        #    scheduler._reset()
-        #    helper.adjust_learning_rate(optimizer, cla.lr)
+        train_icvl.transform = GaussianBlindSNRLevel(max_sigma_db=30, min_sigma_db=15)
+        logger.info("Noise level: 30-15 blind")
 
-        #if epoch < 5:
-        #    helper.adjust_learning_rate(optimizer, cla.lr * 10 ** (epoch - 4))
-
-        if epoch < 20:
-            train_icvl.transform = AddGaussianNoiseBlind(
-                max_sigma_db=40, min_sigma_db=10, scale_factor=scale_factor
-            )  # 36/20
-            logger.info("Noise level: 10-40 Blind")
-        elif epoch < 50:
-            train_icvl.transform = AddGaussianNoise(50)
-            logger.info("Noise level: 50")
-        else:
-            train_icvl.transform = AddGaussianNoiseBlind(
-                max_sigma_db=55, min_sigma_db=30, scale_factor=scale_factor
-            )  # 36/20
-
-            logger.info("Noise level: BLIND! - 30-55")
-
-        if epoch == 50:
-            helper.adjust_learning_rate(optimizer, 1e-3)
-            scheduler._reset()
+        # if epoch == 50:
+        #     helper.adjust_learning_rate(optimizer, 1e-3)
+        #     scheduler._reset()
 
         # if epoch == 100: #120:
         #    helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
@@ -330,7 +298,6 @@ def main():
         )
         vtime = time.perf_counter() - vtime
 
-        #if epoch >= 30:
         scheduler.step(ls)
 
         expected_time_remaining = time.strftime(
@@ -356,7 +323,7 @@ def main():
             # best_val_psnr < psnr or best_val_psnr > ls:
             logger.info("Saving current network...")
             model_latest_path = os.path.join(
-                cla.save_dir, prefix, f"hyres-nograd-gaussian-bs4x4-{cla.loss}.pth"
+                cla.save_dir, prefix, f"new-noise-gaussian-bs4x4-{cla.loss}.pth"
             )
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path

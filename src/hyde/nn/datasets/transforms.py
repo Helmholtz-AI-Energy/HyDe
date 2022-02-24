@@ -19,10 +19,57 @@ __all__ = [
     "AddNoiseMixed",
     "AddNoiseNonIIDdB",
     "AddNoiseStripe",
+    "GaussianSNRLevel",
+    "GaussianBlindSNRLevel",
     "RandChoice",
     "RandomBandPerm",
     "RandRot90Transform",
 ]
+
+
+class GaussianSNRLevel(object):
+    """
+    Add Gaussian white noise to a torch.Tensor. The *power* of the noise is controlled
+    by the `noise_pow` parameter. This value is in dB
+
+    Parameters
+    ----------
+    sigma_db: int, float
+    scale_factor: float, optional
+        The noise added is relative to the initial signal strength. if the signal is normalized,
+        then the final values should be scaled by the same max value
+    """
+
+    def __init__(self, sigma_db, scale_factor=1):
+        self.sigma_db = sigma_db
+        self.scale_factor = scale_factor
+
+    def __call__(self, img):
+        return add_noise.add_noise_to_db_level(img, self.sigma_db)
+
+
+class GaussianBlindSNRLevel(object):
+    """
+    Add Gaussian white noise to a torch.Tensor. The *power* of the noise is controlled
+    by the `noise_pow` parameter. This value is in dB
+
+    Parameters
+    ----------
+    sigma_db: int, float
+    scale_factor: float, optional
+        The noise added is relative to the initial signal strength. if the signal is normalized,
+        then the final values should be scaled by the same max value
+    """
+
+    def __init__(self, max_sigma_db, min_sigma_db=0, scale_factor=1):
+        self.max_sigma_db = max_sigma_db
+        self.min_sigma_db = min_sigma_db
+        self.diff = max_sigma_db - min_sigma_db
+        self.scale_factor = scale_factor
+
+    def __call__(self, img):
+        db = self.diff * np.random.random() + self.min_sigma_db
+        return add_noise.add_noise_to_db_level(img, db)
 
 
 class AddGaussianNoise(object):
@@ -244,13 +291,13 @@ class RandomBandPerm(object):
     def __call__(self, image):
         # assume that the image is larger than the crop size
         # order: [1, bands, height, width]
-        #bands = torch.randperm(image.shape[-3], device=image.device)
+        # bands = torch.randperm(image.shape[-3], device=image.device)
         st = torch.randint(image.shape[-3] - self.bands, (1,)).item()
-        #bands = bands[: self.bands]
+        # bands = bands[: self.bands]
         sl = [
             slice(None),
         ] * image.ndim
-        sl[-3] = slice(st, st+self.bands)
+        sl[-3] = slice(st, st + self.bands)
         return image[sl]
 
 

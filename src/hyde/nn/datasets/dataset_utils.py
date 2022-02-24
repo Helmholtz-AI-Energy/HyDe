@@ -18,7 +18,6 @@ from tqdm import tqdm
 
 from ...lowlevel import logging, utils
 from . import transforms as hyde_transforms
-from ... import transform_domain
 
 logger = logging.get_logger()
 
@@ -156,21 +155,21 @@ class ICVLDataset(Dataset):
                 [
                     # transforms.CenterCrop(crop_size),
                     transforms.RandomCrop(crop_size),
-                    #transforms.RandomResizedCrop(
-                    #    crop_size, scale=(0.08, 1.0), ratio=(0.75, 1.3333333333333333)
-                    #),
+                    # transforms.RandomResizedCrop(
+                    #     crop_size, scale=(0.08, 1.0), ratio=(0.75, 1.3333333333333333)
+                    # ),
                     hyde_transforms.RandomBandPerm(10),
                     hyde_transforms.RandChoice(
                         [
                             hyde_transforms.RandRot90Transform(),
                             transforms.RandomVerticalFlip(p=0.9),
-                            #transforms.RandomAffine(
-                            #    degrees=180,
-                            #    # scale=(0.1, 10), # old (0.1, 3)
-                            #    shear=20,
-                            #),
+                            # transforms.RandomAffine(
+                            #     degrees=180,
+                            #     # scale=(0.1, 10), # old (0.1, 3)
+                            #     shear=20,
+                            # ),
                             transforms.RandomHorizontalFlip(p=0.9),
-                            #transforms.RandomPerspective(p=0.88),
+                            # transforms.RandomPerspective(p=0.88),
                         ],
                         p=None,  # 0.5,
                         combos=True,
@@ -192,13 +191,7 @@ class ICVLDataset(Dataset):
     def __getitem__(self, idx):
         img = self.loadfrom[idx].unsqueeze(0)
 
-        # if self.num_bands > 0:
-        #    img = img[:, : self.num_bands]
-
         img = self.base_transforms(img)
-        #img, consts = utils.normalize(img, by_band=self.band_norm, band_dim=-3)
-        #target = img.clone().detach()
-
 
         if self.common_transforms is not None:
             img = self.common_transforms(img)
@@ -213,12 +206,6 @@ class ICVLDataset(Dataset):
         img = img.to(dtype=torch.float)
         target = target.to(dtype=torch.float)
         # norm after noise
-        #hyres = transform_domain.HyRes()
-        #for b in range(x.shape[0]):
-        #img = img.squeeze().permute((1, 2, 0))
-        #img = hyres(img).permute((2, 0, 1)).unsqueeze(0)
-
         img, consts = utils.normalize(img, by_band=self.band_norm, band_dim=-3)
-        #target, _ = utils.normalize(target, by_band=self.band_norm, band_dim=-3)
         target = utils.normalize_w_consts(target, consts, -3)
         return img, target
