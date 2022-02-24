@@ -117,7 +117,7 @@ def benchmark(file_loc, method, device, output, original):
         method_call = hyde.NNInference(
             arch=method,
             pretrained_file=nn_noise_removers[method],
-            band_window=31 if not is2d else 10,
+            band_window=10,
             window_shape=512,
         )
         # is2d = method in nn_noise_removers["is2d"]
