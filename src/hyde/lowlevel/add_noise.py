@@ -1,13 +1,14 @@
-from typing import Tuple, Union
+from typing import Callable, Dict, Iterable, Tuple, Union
 
 import numpy as np
 import torch
 
+from . import utils
 from .logging import get_logger
 
 logger = get_logger()
 
-__all__ = ["add_noise_db", "add_noise_std", "add_simulated_lines"]
+__all__ = ["add_noise_db", "add_noise_std", "add_simulated_lines", "add_noise_to_db_level"]
 
 
 def add_noise_std(
@@ -95,7 +96,7 @@ def add_noise_db(
     """
     noise_to_add = 10 ** (noise_pow / 20) / scale_factor
     try:
-        noise = torch.zeros_like(signal).normal_(std=noise_to_add)
+        noise = torch.randn_like(signal) * noise_to_add
         # if verbose:
         #     print(f"Added Noise [dB]: {10 * torch.log10(torch.mean(torch.pow(noise, 2)))}")
     except TypeError:  # numpy.ndarray  todo: raise statement?
@@ -107,6 +108,30 @@ def add_noise_db(
         logger.debug(f"Added Noise [dB]: {(noise * scale_factor).pow(2).mean().log10() * 10}")
 
     return noise + signal
+
+
+def add_noise_to_db_level(signal: torch.Tensor, target_power: float) -> torch.Tensor:
+    """
+    Convert a signal to a given SNR ratio (in dB)
+
+    Parameters
+    ----------
+    signal: torch.Tensor
+    target_power: float
+        target SNR level in dB
+
+    Returns
+    -------
+    noisy signal : torch.Tensor
+    """
+    # get current snr
+    offset = torch.randn_like(signal)
+    offset_db = torch.log10(offset.std()) * 20
+    curr_snr, _ = utils.snr(signal + offset, signal)
+    # NOTE: this assumes that the signal is clean
+    noise_to_add = curr_snr - target_power + offset_db
+    # print("noise_to_add", curr_snr, target_power)
+    return add_noise_db(signal, noise_to_add, scale_factor=1)
 
 
 def add_simulated_lines(signal: torch.Tensor, bands=(9, 15)) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -144,12 +169,49 @@ def add_simulated_lines(signal: torch.Tensor, bands=(9, 15)) -> Tuple[torch.Tens
     return signal, mask
 
 
-def add_gaussian_noise_blind(signal, min_db, max_db, scale_factor: float = 1):
+def add_gaussian_noise_blind(
+    signal: torch.Tensor, min_db: float, max_db: float, scale_factor: float = 1
+) -> torch.Tensor:
+    """
+    Add blind Gaussian (additive) noise to a tensor. The noise generated will be a random dB level
+    between `min_db` and `max_db`.
+
+    Parameters
+    ----------
+    signal: torch.Tensor
+        single on which to add noise
+    min_db: float, optional
+        minimum amount of noise to add unit: dB
+    max_db: float, optional
+        minimum amount of noise to add unit: dB
+    scale_factor: float, optional
+        Scaling factor by which to scale the generated noise.
+
+    Returns
+    -------
+    image + random noise: torch.Tensor
+    """
     noise_db = ((max_db - min_db) * np.random.rand()) + min_db
     return add_noise_db(signal, noise_db, verbose=False, scale_factor=scale_factor)
 
 
-def add_non_iid_noise_db(signal, max_power, scale_factor=1.0):
+def add_non_iid_noise_db(signal: torch.Tensor, max_power, scale_factor=1.0) -> torch.Tensor:
+    """
+    Add non-IID noise to a signal
+
+    Parameters
+    ----------
+    signal: torch.Tensor
+        signal to which noise will be added
+    max_power: float
+        maximum dB value of the added noise
+    scale_factor: float
+        Scaling factor by which to scale the generated noise.
+
+    Returns
+    -------
+    image + non-iid noise: torch.Tensor
+    """
     try:
         bwsigmas = torch.rand(signal.shape[0], 1, 1) * max_power
         bwsigmas = bwsigmas.to(device=signal.device, dtype=signal.dtype)
@@ -162,7 +224,36 @@ def add_non_iid_noise_db(signal, max_power, scale_factor=1.0):
     return signal + noise
 
 
-def add_noise_on_bands(signal, bands, noise_fn, noise_fn_args=None, band_dim=-1, inplace=True):
+def add_noise_on_bands(
+    signal: torch.Tensor,
+    bands: float,
+    noise_fn: Callable,
+    noise_fn_args: Dict = None,
+    band_dim: int = -1,
+    inplace: bool = True,
+) -> torch.Tensor:
+    """
+    Add noise to a random percentage of bands
+    The percentage of bands which are effected is determined by `bands`.
+
+    Parameters
+    ----------
+    signal: torch.Tensor
+    bands: float
+        the percentage of bands upon which noise will be applied
+    noise_fn: Callable
+        the function to generate noise
+    noise_fn_args: dict, optional
+        the arguments for the `noise_fn`, if any
+    band_dim: int, optional
+        index (int) which indicates which dimension of the signal is the band dimension
+    inplace: bool, optional
+        if true (default) overwrite the input signal with the result
+
+    Returns
+    -------
+    noisy image: torch.Tensor
+    """
     if noise_fn_args is None:
         noise_fn_args = dict()
 
@@ -184,8 +275,37 @@ def add_noise_on_bands(signal, bands, noise_fn, noise_fn_args=None, band_dim=-1,
 
 
 def add_noise_impulse(
-    signal, bands, amounts=(0.1, 0.3, 0.5, 0.7), salt_vs_pepper=0.5, band_dim=-1, inplace=True
-):
+    signal: torch.Tensor,
+    bands: float,
+    amounts: Iterable = (0.1, 0.3, 0.5, 0.7),
+    salt_vs_pepper: float = 0.5,
+    band_dim: int = -1,
+    inplace: bool = True,
+) -> torch.Tensor:
+    """
+    Add noise to a random percentage of bands.
+    Impulse noise is sharp noise like clicks and pops. it is also referred to as salt and pepper noise.
+    The percentage of bands which are effected is determined by `bands`.
+
+    Parameters
+    ----------
+    signal: torch.Tensor
+    bands: float
+        the percentage of bands upon which noise will be applied
+    amounts: iterable, optional
+        the amount of noise to add. This will be chosen from randomly
+    salt_vs_pepper: float, optional
+        ratio of salt to pepper noise
+    band_dim: int, optional
+        index (int) which indicates which dimension of the signal is the band dimension
+    inplace: bool, optional
+        if true (default) overwrite the input signal with the result
+
+    Returns
+    -------
+    noisy image: torch.Tensor
+    """
+
     return add_noise_on_bands(
         signal,
         bands,
@@ -199,9 +319,18 @@ def add_noise_impulse(
     )
 
 
+add_noise_salt_n_pepper = add_noise_impulse
+add_noise_salt_n_pepper.__doc__ = "See `add_noise_impulse`"
+
+
 def __add_noise_impulse(
-    signal, bands, amounts=(0.1, 0.3, 0.5, 0.7), salt_vs_pepper=0.5, band_dim=-1
-):
+    signal: torch.Tensor,
+    bands: Iterable,
+    amounts: Iterable,
+    salt_vs_pepper: float,
+    band_dim: int,
+) -> torch.Tensor:
+    # add impulse noise to a tensor, for more info see `add_noise_impulse`
     # note: this is intended to be used with the `add_noise_on_bands` function
     sl = [
         slice(None),
@@ -226,7 +355,35 @@ def __add_noise_impulse(
     return signal
 
 
-def add_noise_stripe(signal, bands, min_amount, max_amount, band_dim=-1, inplace=True):
+def add_noise_stripe(
+    signal: torch.Tensor,
+    bands: float = 0.3333333,
+    min_amount: float = 0.05,
+    max_amount: float = 0.15,
+    band_dim: int = -1,
+    inplace: bool = True,
+) -> torch.Tensor:
+    """
+    Add noise to random vertical stripes in random bands.
+    the noise added is a uniform distribution.
+    The percentage of bands which are effected is determined by `bands`.
+
+    Parameters
+    ----------
+    signal: torch.Tensor
+    bands: float
+        the percentage of bands upon which noise will be applied
+    min_amount: float
+        minimum number of stripes to modify
+    max_amount: float
+        maximum number of stripes to modify
+    band_dim: int, optional
+    inplace: bool, optional
+
+    Returns
+    -------
+    noisy image: torch.Tensor
+    """
     return add_noise_on_bands(
         signal,
         bands,
@@ -240,7 +397,14 @@ def add_noise_stripe(signal, bands, min_amount, max_amount, band_dim=-1, inplace
     )
 
 
-def __add_noise_stripe(signal, bands, min_amount, max_amount, band_dim=-1):
+def __add_noise_stripe(
+    signal: torch.Tensor,
+    bands: Iterable,
+    min_amount: float,
+    max_amount: float,
+    band_dim: int,
+) -> torch.Tensor:
+    # add random uniform noise to random stripes on random bands
     # ASSUMPTION: format is either [batch, band, h, w] or [h, w, band]
     logger.debug(
         "The add_noise_strip function assumes that the image format is "
@@ -269,7 +433,34 @@ def __add_noise_stripe(signal, bands, min_amount, max_amount, band_dim=-1):
     return signal
 
 
-def add_noise_deadline(signal, bands, min_amount, max_amount, band_dim=-1, inplace=True):
+def add_noise_deadline(
+    signal: torch.Tensor,
+    bands: float,
+    min_amount: float = 0.05,
+    max_amount: float = 0.15,
+    band_dim: int = -1,
+    inplace: bool = True,
+) -> torch.Tensor:
+    """
+    Add deadline noise. This will make random veritcal lines 0 on random bands.
+    The percentage of bands which are effected is determined by `bands`.
+
+    Parameters
+    ----------
+    signal: torch.Tensor
+    bands: float
+        the percentage of bands upon which noise will be applied
+    min_amount: float
+        minimum number of stripes to modify
+    max_amount: float
+        maximum number of stripes to modify
+    band_dim: int, optional
+    inplace: bool, optional
+
+    Returns
+    -------
+    noisy image: torch.Tensor
+    """
     return add_noise_on_bands(
         signal,
         bands,

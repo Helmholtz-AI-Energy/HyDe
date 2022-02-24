@@ -281,7 +281,7 @@ def estimate_hyperspectral_noise(
     return w, r_w
 
 
-# @torch.jit.script
+@torch.jit.script
 def _est_additive_noise(
     subdata: torch.Tensor, calculation_dtype: torch.dtype = torch.float
 ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -431,6 +431,22 @@ def normalize(
 
 
 def normalize_w_consts(image, consts, band_dim=-1):
+    """
+    Normalize a signal with some given consts
+
+    Parameters
+    ----------
+    image
+    consts: dict
+        must contain the keys 'mins' and maxs' to work properly.
+        These keys should be the correct shape to normalize given the band_dim and
+        the by_band flag.
+    band_dim: int
+
+    Returns
+    -------
+
+    """
     out = torch.zeros_like(image)
     mins, maxs = consts["mins"], consts["maxs"]
     for b in range(image.shape[band_dim]):
