@@ -130,7 +130,7 @@ def add_noise_to_db_level(signal: torch.Tensor, target_power: float) -> torch.Te
     curr_snr, _ = utils.snr(signal + offset, signal)
     # NOTE: this assumes that the signal is clean
     noise_to_add = curr_snr - target_power + offset_db
-    # print("noise_to_add", curr_snr, target_power)
+    # print("noise_to_add", noise_to_add)
     return add_noise_db(signal, noise_to_add, scale_factor=1)
 
 

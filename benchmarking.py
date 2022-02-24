@@ -12,6 +12,7 @@ from hyde import logging
 # from torchvision.transforms import Compose
 from hyde.nn.datasets.transforms import (  # AddNoiseDeadline,; AddNoiseImpulse,; AddNoiseNonIIDdB,; AddNoiseStripe,; RandChoice,
     AddGaussianNoise,
+    GaussianSNRLevel,
 )
 
 logger = logging.get_logger()
@@ -29,8 +30,9 @@ def generate_noisy_images(base_image, save_loc, noise_type="gaussian"):
     save_loc = Path(save_loc)
     if noise_type == "gaussian":
         noise_levels = (20, 30, 40)
-        transform = AddGaussianNoise
-        kwargs = {"scale_factor": 255.0 / 65517.0}  # houston dataset is int16
+        transform = GaussianSNRLevel
+        kwargs = {}
+        # kwargs = {"scale_factor": 255.0 / 65517.0}  # houston dataset is int16
     else:
         raise NotImplementedError("implement mixed/complex noise cases")
 
@@ -83,12 +85,12 @@ gaussian_noise_removers_args = {
 }
 
 nn_noise_removers = {
-    "qrnn3d": "pretrained-models/qrnn3d/hyde-bs16-blindinc-gaussian-qrnn3d-l2.pth",
-    "qrnn2d": "pretrained-models/qrnn2d/hyde-bs16-blindinc-gaussian-qrnn2d-l2.pth",
-    "memnet": "pretrained-models/memnet/hyde-bs16-blindinc-gaussian-memnet-l2.pth",
-    "memnet3d": "pretrained-models/memnet3d/hyde-bs16-blindinc-gaussian-memnet3d-l2",
-    "denet": "pretrained-models/denet/hyde-bs16-blindinc-gaussian-denet-l2.pth",
-    "denet3d": "pretrained-models/denet3d/hyde-bs16-blindinc-gaussian-denet3d-l2.pth",
+    "qrnn3d": "pretrained-models/qrnn3d/new-noise-gaussian-bs4x4-l2.pth",  # hyde-bs16-blindinc-gaussian-qrnn3d-l2.pth",
+    "qrnn2d": "pretrained-models/qrnn2d/new-noise-gaussian-bs4x4-l2.pth",  # hyde-bs16-blindinc-gaussian-qrnn2d-l2.pth",
+    "memnet": "pretrained-models/memnet/new-noise-gaussian-bs4x4-l2.pth",  # hyde-bs16-blindinc-gaussian-memnet-l2.pth",
+    "memnet3d": "pretrained-models/memnet3d/new-noise-gaussian-bs4x4-l2.pth",  # hyde-bs16-blindinc-gaussian-memnet3d-l2",
+    "denet": "pretrained-models/denet/new-noise-gaussian-bs4x4-l2.pth",  # hyde-bs16-blindinc-gaussian-denet-l2.pth",
+    "denet3d": "pretrained-models/denet3d/new-noise-gaussian-bs4x4-l2.pth",  # hyde-bs16-blindinc-gaussian-denet3d-l2.pth",
 }
 
 # out_df -> cols = [method, 20dB, 30dB, 40dB]
@@ -124,7 +126,7 @@ def benchmark(file_loc, method, device, output, original):
     for noise in [20, 30, 40]:
         # todo: see if the file exists
         working_dir = Path(file_loc) / str(noise)
-        psnrs, sads, times, mems = [], [], [], []
+        psnrs, sads, times, mems, snrs = [], [], [], [], []
         for c, fil in enumerate(working_dir.iterdir()):  # data loading and method for each file
             torch.cuda.reset_peak_memory_stats()
             print(c, fil)
@@ -153,16 +155,19 @@ def benchmark(file_loc, method, device, output, original):
                 res = res[0]
 
             psnr = hyde.peak_snr(res, original_im)
+            snr, _ = hyde.snr(res, original_im)
             sam = hyde.sam(res, original_im).mean()
             times.append(t1)
             psnrs.append(psnr.item())
             sads.append(sam.item())
+            snrs.append(snr.item())
 
-            print(f"file: {fil} time: {t1}, psnr: {psnr}, sam: {sam}")
+            print(f"file: {fil} time: {t1}, psnr: {psnr}, sam: {sam}, snr: {snr}")
 
         times = np.array(times)
         psnrs = np.array(psnrs)
         sads = np.array(sads)
+        snrs = np.array(snrs)
         mem = np.array(mems)
 
         tsorted = times.argsort()
@@ -170,7 +175,7 @@ def benchmark(file_loc, method, device, output, original):
 
         times = times[good_idxs]
         psnrs = psnrs[good_idxs]
-        sads = sads[good_idxs]
+        snrs = sads[good_idxs]
         mem = mem[good_idxs]
 
         pd_dict = {
@@ -178,6 +183,7 @@ def benchmark(file_loc, method, device, output, original):
             "method": method,
             "device": device,
             "psnr": psnrs.mean(),
+            "snr": snrs.mean(),
             "sam": sads.mean(),
             "time": times.mean(),
             "memory": mem.mean(),
@@ -191,7 +197,7 @@ def benchmark(file_loc, method, device, output, original):
         # print(out_df)
 
     # print(ret_df)
-    noise_out = output / "python-benchmarks-new.csv"
+    noise_out = output / "python-benchmarks-new2.csv"
     if not noise_out.exists():
         out_df.to_csv(noise_out, index=False)
         print(out_df)
@@ -219,13 +225,13 @@ if __name__ == "__main__":
     pd.set_option("display.max_columns", 500)
     pd.set_option("display.width", 1000)
     # generate_noisy_images(base_image="/mnt/ssd/hyde/houston.mat", save_loc="/mnt/ssd/hyde/")
-    benchmark(
-        file_loc=cla.data_dir,
-        method=cla.method,
-        device=cla.device,
-        output=cla.output_dir,
-        original=cla.original_image,
-    )
+    # benchmark(
+    #     file_loc=cla.data_dir,
+    #     method=cla.method,
+    #     device=cla.device,
+    #     output=cla.output_dir,
+    #     original=cla.original_image,
+    # )
 
     # # for method in gaussian_noise_removers_args:
     # for method in nn_noise_removers:
@@ -237,3 +243,23 @@ if __name__ == "__main__":
     #         output="/mnt/ssd/hyde/",
     #         original="/mnt/ssd/hyde/houston.mat",
     #     )
+
+    # Convert matlab results
+
+    # times = []
+    # psnrs = []
+    # sads = []
+    #
+    # times = np.array(times)
+    # psnrs = np.array(psnrs)
+    # sads = np.array(sads)
+    # # mem = np.array(mems)
+    #
+    # tsorted = times.argsort()
+    # good_idxs = tsorted  # [1:-1]
+    #
+    # times = times[good_idxs]
+    # psnrs = psnrs[good_idxs]
+    # sads = sads[good_idxs]
+    # print("time\tpsnr\tsad")
+    # print(f"{times.mean()}\t{psnrs.mean()}\t{sads.mean()}")
