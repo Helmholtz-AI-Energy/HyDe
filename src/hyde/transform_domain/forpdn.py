@@ -69,7 +69,7 @@ class FORPDN_SURE(torch.nn.Module):
         scale: bool = True,
         scale_const: Union[int, float] = 255,
         wavelet_level: int = 6,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> torch.Tensor:
         """
         Call the FORPDN_SURE method.
         NOTE: the decomposition level for wavelet-based denoising is 1 minus the length of the s_int_* Tensors.
