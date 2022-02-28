@@ -118,7 +118,7 @@ def benchmark(file_loc, method, device, output, original):
             arch=method,
             pretrained_file=nn_noise_removers[method],
             band_window=10,
-            window_shape=512,
+            window_shape=256,
         )
         # is2d = method in nn_noise_removers["is2d"]
 
@@ -191,7 +191,8 @@ def benchmark(file_loc, method, device, output, original):
 
         times = times[good_idxs]
         psnrs = psnrs[good_idxs]
-        snrs = sads[good_idxs]
+        sads = sads[good_idxs]
+        snrs = snrs[good_idxs]
         mem = mem[good_idxs]
 
         pd_dict = {
@@ -240,16 +241,16 @@ if __name__ == "__main__":
     pd.set_option("display.max_rows", 500)
     pd.set_option("display.max_columns", 500)
     pd.set_option("display.width", 1000)
-    # generate_noisy_images(base_image="/mnt/ssd/hyde/houston.mat", save_loc="/mnt/ssd/hyde/")
+    #generate_noisy_images(base_image="/mnt/ssd/hyde/houston.mat", save_loc="/mnt/ssd/hyde/")
 
-    # generate_noisy_images(base_image=cla.original_image, save_loc=cla.data_dir)
-    # benchmark(
-    #     file_loc=cla.data_dir,
-    #     method=cla.method,
-    #     device=cla.device,
-    #     output=cla.output_dir,
-    #     original=cla.original_image,
-    # )
+    #generate_noisy_images(base_image=cla.original_image, save_loc=cla.data_dir)
+    benchmark(
+        file_loc=cla.data_dir,
+        method=cla.method,
+        device=cla.device,
+        output=cla.output_dir,
+        original=cla.original_image,
+    )
 
     # # for method in gaussian_noise_removers_args:
     # for method in nn_noise_removers:
