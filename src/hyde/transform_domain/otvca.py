@@ -38,6 +38,7 @@ class OTVCA(torch.nn.Module):
         features: int,
         num_itt: int = 10,
         lam: float = 0.01,
+        normalize: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Denoise an image `x` using the HyRes algorithm.
@@ -54,6 +55,8 @@ class OTVCA(torch.nn.Module):
         lam: float, optional
             Tuning parameter; Default is 0.01 for normalized HSI
             the value passed to the denoising algorithm is 1/lam
+        normalize: bool, optional
+            flag indicating if the input should be normalized
 
         Returns
         -------
@@ -64,11 +67,10 @@ class OTVCA(torch.nn.Module):
         """
         nr1, nc1, p1 = x.shape
 
-        xn, consts = utils.normalize(x, by_band=False)
-        x_2d = xn.reshape((nr1 * nc1, p1))
-        # x_min = x.min()
-        # x_max = x.max()
-        # normalized_y = (x_2d - x_min) / (x_max - x_min)
+        if normalize:
+            x, consts = utils.normalize(x, by_band=True)
+
+        x_2d = x.reshape((nr1 * nc1, p1))
         _, _, vh = torch.linalg.svd(x_2d, full_matrices=False)
         v1 = vh.T
         v = v1[:, :features]
@@ -87,5 +89,6 @@ class OTVCA(torch.nn.Module):
             v = c @ gh
 
         denoised_image = (fe_reshape @ v.T).reshape((nr1, nc1, p1))
-        denoised_image = utils.undo_normalize(denoised_image, **consts, by_band=False)
+        if normalize:
+            denoised_image = utils.undo_normalize(denoised_image, **consts, by_band=True)
         return denoised_image, fe
