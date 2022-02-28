@@ -59,8 +59,6 @@ def generate_noisy_images(base_image, save_loc, noise_type="gaussian"):
             sio.savemat(sv_folder / f"{i}.mat", mdic)
 
 
-max_houston = 65517.0
-
 gaussian_noise_removers_args = {
     "WSRRR": {"rank": 10},
     "HyMiNoR": {"lam": 10.0, "iterations": 50},
@@ -70,7 +68,7 @@ gaussian_noise_removers_args = {
         "s_int_end": torch.tensor([0.01, 0.1, 1, 10]),
         "domain": "wavelet",
         "scale": True,
-        "scale_const": max_houston,
+        "scale_const": 255,
         "wavelet_level": 6,
     },
     "HyRes": {},
@@ -241,9 +239,8 @@ if __name__ == "__main__":
     pd.set_option("display.max_rows", 500)
     pd.set_option("display.max_columns", 500)
     pd.set_option("display.width", 1000)
-    #generate_noisy_images(base_image="/mnt/ssd/hyde/houston.mat", save_loc="/mnt/ssd/hyde/")
-
-    #generate_noisy_images(base_image=cla.original_image, save_loc=cla.data_dir)
+    # generate_noisy_images(base_image="/mnt/ssd/hyde/houston.mat", save_loc="/mnt/ssd/hyde/")
+    # generate_noisy_images(base_image=cla.original_image, save_loc=cla.data_dir)
     benchmark(
         file_loc=cla.data_dir,
         method=cla.method,
@@ -265,20 +262,29 @@ if __name__ == "__main__":
 
     # Convert matlab results
 
-    # times = []
-    # psnrs = []
-    # sads = []
-    #
-    # times = np.array(times)
-    # psnrs = np.array(psnrs)
-    # sads = np.array(sads)
-    # # mem = np.array(mems)
-    #
-    # tsorted = times.argsort()
-    # good_idxs = tsorted  # [1:-1]
-    #
-    # times = times[good_idxs]
-    # psnrs = psnrs[good_idxs]
-    # sads = sads[good_idxs]
-    # print("time\tpsnr\tsad")
-    # print(f"{times.mean()}\t{psnrs.mean()}\t{sads.mean()}")
+#     times = [    1845.7,    1847.5,    1848.2,    1848.4,    1848.2,    1848.9,    1845.5,
+#     1845.4,    1845.2  ,  1846.6,    1846.8   , 1847.4   , 1848.0 ,   1849.8,
+#     1850.3
+# ]
+#     psnrs = [  126.6475 , 126.6634 , 126.6521,  126.6932,  126.6694,  126.6588,  126.6481,
+#   126.6566,  126.6405  ,126.6290  ,126.6508 , 126.6507,  126.6438,  126.6605,
+#   126.6766
+# ]
+#     sads = [    0.2276,    0.2274,    0.2273,    0.2271,    0.2283,    0.2274,    0.2277,
+#     0.2279,    0.2284,    0.2283  ,  0.2278,    0.2271  ,  0.2284,    0.2275,
+#     0.2275
+# ]
+#
+#     times = np.array(times)
+#     psnrs = np.array(psnrs)
+#     sads = np.array(sads)
+#     # mem = np.array(mems)
+#
+#     tsorted = times.argsort()
+#     good_idxs = tsorted  # [1:-1]
+#
+#     times = times[good_idxs]
+#     psnrs = psnrs[good_idxs]
+#     sads = sads[good_idxs]
+#     print("time\tpsnr\tsad")
+#     print(f"{times.mean()}\t{psnrs.mean()}\t{sads.mean()}")

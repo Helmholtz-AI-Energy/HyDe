@@ -8,7 +8,19 @@ from .logging import get_logger
 
 logger = get_logger()
 
-__all__ = ["add_noise_db", "add_noise_std", "add_simulated_lines", "add_noise_to_db_level"]
+__all__ = [
+    "add_noise_db",
+    "add_noise_std",
+    "add_noise_to_db_level",
+    "add_simulated_lines",
+    "add_noise_deadline",
+    "add_noise_stripe",
+    "add_noise_on_bands",
+    "add_noise_impulse",
+    "add_noise_salt_n_pepper",
+    "add_non_iid_noise_db",
+    "add_gaussian_noise_blind",
+]
 
 
 def add_noise_std(
