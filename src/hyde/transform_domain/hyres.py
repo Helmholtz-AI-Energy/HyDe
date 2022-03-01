@@ -77,8 +77,6 @@ class HyRes(torch.nn.Module):
         denoised_image : torch.Tensor
         """
         self.device = x.device
-        # self.dwt_forward =
-        # self.dwt_inverse =
         # need to have the dims be (num images (1), C_in, H_in, W_in) for twave ops
         # current order: rows, columns, bands (H, W, C) -> permute tuple (2, 0, 1)
         og_rows, og_cols, og_channels = x.shape
@@ -111,17 +109,9 @@ class HyRes(torch.nn.Module):
         # todo: sigma is the same as MATLAB
         omega1 = omega1.reshape((1, 1, omega1.numel())).repeat(p_rows, p_cols, 1)
         y_w = torch.pow(omega1, -0.5) * x
-        # -------- custom PCA_Image stuff ----------------------
+
         v_pca, pc = utils.custom_pca_image(y_w)
-        # todo: remove this bit
-        # nr, nc, p = y_w.shape
-        # # y_w -> h x w X c
-        # im1 = torch.reshape(y_w, (nr * nc, p))
-        # u, s, v_pca = torch.linalg.svd(im1, full_matrices=False)
-        # # need to modify u and s
-        # pc = torch.matmul(u, torch.diag(s))
-        # pc = pc.reshape((nc, nr, p))
-        # -------------------------------------------------------
+
         # next is twoDWTon3Ddata -> requires permute + unsqueeze
         pc = pc.to(torch.float)  # no-op if already float
         # pc -> h x w x c

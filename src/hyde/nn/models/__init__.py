@@ -24,7 +24,7 @@ def memnet():
 
 
 def memnet_hyres():
-    net = MemNet(10, 64, 6, 6)  # old: (31, 64, 6, 6)
+    net = MemNet(10, 64, 6, 6, hyres=True)  # old: (31, 64, 6, 6)
     net.use_2dconv = True
     return net
 
