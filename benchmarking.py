@@ -90,6 +90,7 @@ nn_noise_removers = {
     "memnet3d": "pretrained-models/memnet3d/new-noise-gaussian-bs4x4-l2.pth",  # hyde-bs16-blindinc-gaussian-memnet3d-l2",
     "denet": "pretrained-models/denet/new-noise-gaussian-bs4x4-l2.pth",  # hyde-bs16-blindinc-gaussian-denet-l2.pth",
     "denet3d": "pretrained-models/denet3d/new-noise-gaussian-bs4x4-l2.pth",  # hyde-bs16-blindinc-gaussian-denet3d-l2.pth",
+    "memnet_hyres": "pretrained-models/memnet_hyres/new-noise-gaussian-bs4x4-l2.pth",
     # =======
     #     "qrnn3d": "pretrained-models/qrnn3d/hyde-bs16-blindinc-gaussian-qrnn3d-l2.pth",
     #     "qrnn2d": "pretrained-models/qrnn2d/hyde-bs16-blindinc-gaussian-qrnn2d-l2.pth",
@@ -97,7 +98,7 @@ nn_noise_removers = {
     #     "memnet3d": "pretrained-models/memnet3d/hyde-bs16-blindinc-gaussian-memnet3d-l2.pth",
     #     "denet": "pretrained-models/denet/hyde-bs16-blindinc-gaussian-denet-l2.pth",
     #     "denet3d": "pretrained-models/denet3d/hyde-bs16-blindinc-gaussian-denet3d-l2.pth",
-    "is2d": ["denet", "memnet"],
+    "is2d": ["denet", "memnet", "memnet_hyres"],
 }
 
 # out_df -> cols = [method, 20dB, 30dB, 40dB]
@@ -189,7 +190,10 @@ def benchmark(file_loc, method, device, output, original):
 
         times = times[good_idxs]
         psnrs = psnrs[good_idxs]
+        #<<<<<<< HEAD
         sads = sads[good_idxs]
+        #=======
+        #>>>>>>> 750247ccf405456e51bdd9bbf3a99fd351d3d861
         snrs = snrs[good_idxs]
         mem = mem[good_idxs]
 
@@ -224,30 +228,67 @@ def benchmark(file_loc, method, device, output, original):
         print(new)
 
 
+def load_n_calc_snr(original, directory, method="fasthyde"):
+    print(method)
+    for noise in [20, 30, 40]:
+        # working_dir = Path(file_loc) / str(noise)
+        psnrs, sads, snrs = [], [], []
+        # for c, fil in enumerate(working_dir.iterdir()):  # data loading and method for each file
+        for c in range(15):
+            torch.cuda.reset_peak_memory_stats()
+            # 1. load data + convert to torch
+            mat = Path(directory) / f"{method}-denoised-{noise}-{c}.mat"
+            res = torch.tensor(sio.loadmat(mat)["restored"], dtype=torch.float)
+
+            psnr = hyde.peak_snr(res, original)
+            snr, _ = hyde.snr(res, original)
+            sam = hyde.sam(res, original).mean()
+            psnrs.append(psnr.item())
+            sads.append(sam.item())
+            snrs.append(snr.item())
+
+        psnrs = np.array(psnrs)
+        sads = np.array(sads)
+        snrs = np.array(snrs)
+
+        pd_dict = {
+            "noise": noise,
+            "method": method,
+            "psnr": psnrs.mean(),
+            "snr": snrs.mean(),
+            "sam": sads.mean(),
+        }
+        # save the results
+        ret_df = pd.DataFrame(pd_dict, index=[0], columns=list(pd_dict.keys()))
+        print(noise)
+        print(ret_df)
+
+
 if __name__ == "__main__":
-    import os
+#<<<<<<< HEAD
+#    import os
 
-    print(os.sched_getaffinity(0))
-    torch.set_num_threads(24)
-    print(torch.__config__.parallel_info())
+    #print(os.sched_getaffinity(0))
+    #torch.set_num_threads(24)
+    #print(torch.__config__.parallel_info())
 
-    parser = argparse.ArgumentParser(description="HyDe Benchmarking")
-    cla = hyde.nn.parsers.benchmark_parser(parser)
-    print(cla)
-    logger.info(cla)
+    #parser = argparse.ArgumentParser(description="HyDe Benchmarking")
+    #cla = hyde.nn.parsers.benchmark_parser(parser)
+    #print(cla)
+    #logger.info(cla)
 
-    pd.set_option("display.max_rows", 500)
-    pd.set_option("display.max_columns", 500)
-    pd.set_option("display.width", 1000)
+    #pd.set_option("display.max_rows", 500)
+    #pd.set_option("display.max_columns", 500)
+    #pd.set_option("display.width", 1000)
     # generate_noisy_images(base_image="/mnt/ssd/hyde/houston.mat", save_loc="/mnt/ssd/hyde/")
     # generate_noisy_images(base_image=cla.original_image, save_loc=cla.data_dir)
-    benchmark(
-        file_loc=cla.data_dir,
-        method=cla.method,
-        device=cla.device,
-        output=cla.output_dir,
-        original=cla.original_image,
-    )
+    #benchmark(
+    #    file_loc=cla.data_dir,
+    #    method=cla.method,
+    #    device=cla.device,
+    #    output=cla.output_dir,
+    #    original=cla.original_image,
+    #)
 
     # # for method in gaussian_noise_removers_args:
     # for method in nn_noise_removers:
@@ -260,22 +301,41 @@ if __name__ == "__main__":
     #         original="/mnt/ssd/hyde/houston.mat",
     #     )
 
-    # Convert matlab results
+    methods = {
+        #"hyres": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/hyminor",
+        #"hyminor": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/hyminor",
+        #"wsrrr": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/hyminor",
+        #"otvca": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/otvca",
+        "fosrpdn": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/forpdn",
+        "fasthyde": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/fasthyde/Demo_FastHyDe_FastHyIn/finished/",
+        "l1hymixde": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/lyhymixde/L1HyMixDe/old-results/",
+    }
+    print('loading og')
+    og = sio.loadmat("/hkfs/work/workspace/scratch/qv2382-hyde2/benchmark-data/houston.mat")[
+        "houston"
+    ]
+    og = og.reshape(og.shape)
 
-#     times = [    1845.7,    1847.5,    1848.2,    1848.4,    1848.2,    1848.9,    1845.5,
-#     1845.4,    1845.2  ,  1846.6,    1846.8   , 1847.4   , 1848.0 ,   1849.8,
-#     1850.3
+    original_im = torch.from_numpy(og.astype(np.float32))
+
+    for method in methods:
+        load_n_calc_snr(original=original_im, directory=methods[method], method=method)
+#     # Convert matlab results
+#
+#     times = [    1.8486,    1.8469,    1.8500,    1.8481,    1.8501,    1.8473,    1.8482,
+#     1.8479,    1.8484,    1.8465,    1.8511,    1.8500   , 1.8487,    1.8475,
+#     1.8498
+# ]8,   30.8920,   30.8682,   30.8568,   30.8483,
+#
+#     psnrs = [   30.8542,   30.8584,   30.850   30.8527,   30.8592,   30.8532   ,30.8574,   30.8446   ,30.8535,   30.8554,
+#    30.8670
 # ]
-#     psnrs = [  126.6475 , 126.6634 , 126.6521,  126.6932,  126.6694,  126.6588,  126.6481,
-#   126.6566,  126.6405  ,126.6290  ,126.6508 , 126.6507,  126.6438,  126.6605,
-#   126.6766
-# ]
-#     sads = [    0.2276,    0.2274,    0.2273,    0.2271,    0.2283,    0.2274,    0.2277,
-#     0.2279,    0.2284,    0.2283  ,  0.2278,    0.2271  ,  0.2284,    0.2275,
+#     sads = [    0.2276    ,0.2274,    0.2273,    0.2271,    0.2283,    0.2274,    0.2277,
+#     0.2279,    0.2284    ,0.2283  ,  0.2278,    0.2271  ,  0.2284,    0.2275,
 #     0.2275
 # ]
 #
-#     times = np.array(times)
+#     times = np.array(times) * 10**3
 #     psnrs = np.array(psnrs)
 #     sads = np.array(sads)
 #     # mem = np.array(mems)
