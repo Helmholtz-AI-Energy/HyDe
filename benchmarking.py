@@ -233,7 +233,7 @@ def load_n_calc_snr(original, directory, method="fasthyde"):
         for c in range(15):
             torch.cuda.reset_peak_memory_stats()
             # 1. load data + convert to torch
-            mat = Path(directory) / f"{method}-denoised-{noise}-{c}.mat"
+            mat = Path(directory) / f"{method}-denoised-nonorm-{noise}-{c}.mat"
             res = sio.loadmat(mat)["restored"]
 
             psnr = hyde.peak_snr(res, original)
@@ -298,13 +298,13 @@ if __name__ == "__main__":
     #     )
 
     methods = {
-        "hyres": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/hyminor",
-        "hyminor": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/hyminor",
-        "wsrrr": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/hyminor",
-        "otvca": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/otvca",
-        "fosrpdn": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/forpdn",
-        "fasthyde": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/fasthyde/Demo_FastHyDe_FastHyIn/finished/",
-        "l1hymixde": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/lyhymixde/L1HyMixDe/old-results/",
+        # "hyres": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/hyminor",
+        # "hyminor": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/hyminor",
+        # "wsrrr": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/hyminor",
+        # "otvca": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/otvca",
+        # "fosrpdn": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/forpdn",
+        "fasthyde": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/fasthyde/Demo_FastHyDe_FastHyIn/",
+        "l1hymixde": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/lyhymixde/L1HyMixDe/",
     }
     og = sio.loadmat("/hkfs/work/workspace/scratch/qv2382-hyde2/benchmark-data/houston.mat")[
         "houston"
