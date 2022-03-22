@@ -249,34 +249,17 @@ def main():
     base_lr = 1e-3
     cla.lr = base_lr
     helper.adjust_learning_rate(optimizer, base_lr)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer)#, factor=0.5)
 
     for epoch in range(start_epoch, max_epochs):
         logger.info(f"\t\t--------- Start epoch {epoch} of {max_epochs - 1} ---------\t")
-        # helper.display_learning_rate(optimizer)
-        # torch.manual_seed(epoch + 2018)
-        # torch.cuda.manual_seed(epoch + 2018)
-        # np.random.seed(epoch + 2018)
-        # random.seed(epoch + 2018)
 
-        # if epoch < 20:
-        #     train_icvl.transform = GaussianBlindSNRLevel(max_sigma_db=50, min_sigma_db=30)
-        #     logger.info("Noise level: 50-30 Blind")
-        #if epoch < 30:
-        #    train_icvl.transform = GaussianSNRLevel(30)
-        #    logger.info("SNR level: 30")
-        #else:
         train_icvl.transform = GaussianBlindSNRLevel(max_sigma_db=30, min_sigma_db=20)
         logger.info("SNR level: 30-20 blind")
 
-        #if epoch == 50:
-        #    helper.adjust_learning_rate(optimizer, 1e-3)
-        #    scheduler._reset()
-
-        if epoch == 40: #120:
-           helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
-        if epoch == 45: #140:
-           helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
+        if epoch == 40:  # 120:
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
+        if epoch == 45:  # 140:
+            helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
 
         helper.display_learning_rate(optimizer)
         ttime = time.perf_counter()
@@ -298,8 +281,6 @@ def main():
         )
         vtime = time.perf_counter() - vtime
 
-        scheduler.step(ls)
-
         expected_time_remaining = time.strftime(
             "%H:%M:%S", time.gmtime((ttime + vtime) * (max_epochs - epoch))
         )
@@ -310,7 +291,6 @@ def main():
 
         epochs_wo_best += 1
 
-        # if (epoch % epoch_per_save == 0 and epoch > 0) or epoch == max_epochs - 1:
         if psnr > best_val_psnr:
             best_val_psnr = psnr
             epochs_wo_best = 0

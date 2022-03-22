@@ -154,7 +154,7 @@ class ICVLDataset(Dataset):
             self.base_transforms = transforms.Compose(
                 [
                     # transforms.CenterCrop(crop_size),
-                    #transforms.RandomCrop(crop_size),
+                    # transforms.RandomCrop(crop_size),
                     transforms.RandomResizedCrop(
                         crop_size, scale=(0.08, 1.0), ratio=(0.75, 1.3333333333333333)
                     ),
