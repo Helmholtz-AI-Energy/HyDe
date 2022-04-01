@@ -110,7 +110,7 @@ def benchmark(file_loc, method, device, output, original):
             arch=method,
             pretrained_file=nn_noise_removers[method],
             band_window=10,
-            window_shape=512,
+            window_shape=256,
         )
         # is2d = method in nn_noise_removers["is2d"]
 
@@ -183,6 +183,10 @@ def benchmark(file_loc, method, device, output, original):
 
         times = times[good_idxs]
         psnrs = psnrs[good_idxs]
+        #<<<<<<< HEAD
+        sads = sads[good_idxs]
+        #=======
+        #>>>>>>> 750247ccf405456e51bdd9bbf3a99fd351d3d861
         snrs = snrs[good_idxs]
         mem = mem[good_idxs]
 
@@ -218,17 +222,22 @@ def benchmark(file_loc, method, device, output, original):
 
 
 def load_n_calc_snr(original, directory, method="fasthyde"):
-
+    print(method)
     for noise in [20, 30, 40]:
         # working_dir = Path(file_loc) / str(noise)
         psnrs, sads, snrs = [], [], []
         # for c, fil in enumerate(working_dir.iterdir()):  # data loading and method for each file
         for c in range(15):
-            torch.cuda.reset_peak_memory_stats()
+            #torch.cuda.reset_peak_memory_stats()
             # 1. load data + convert to torch
+#<<<<<<< HEAD
+#            mat = Path(directory) / f"{method}-denoised-{noise}-{c}.mat"
+#            res = torch.tensor(sio.loadmat(mat)["restored"], dtype=torch.float)
+#=======
             mat = Path(directory) / f"{method}-denoised-nonorm-{noise}-{c}.mat"
-            res = sio.loadmat(mat)["restored"]
-
+            #res = sio.loadmat(mat)["restored"]
+#>>>>>>> 01ae33a41dfa31bf6aa52417ab9acdfeaa6d779f
+            res = torch.tensor(sio.loadmat(mat)["restored"], dtype=torch.float)
             psnr = hyde.peak_snr(res, original)
             snr, _ = hyde.snr(res, original)
             sam = hyde.sam(res, original).mean()
@@ -254,30 +263,30 @@ def load_n_calc_snr(original, directory, method="fasthyde"):
 
 
 if __name__ == "__main__":
-    # import os
-    #
-    # print(os.sched_getaffinity(0))
-    # torch.set_num_threads(24)
-    # print(torch.__config__.parallel_info())
-    #
-    # parser = argparse.ArgumentParser(description="HyDe Benchmarking")
-    # cla = hyde.nn.parsers.benchmark_parser(parser)
-    # print(cla)
-    # logger.info(cla)
-    #
-    # pd.set_option("display.max_rows", 500)
-    # pd.set_option("display.max_columns", 500)
-    # pd.set_option("display.width", 1000)
-    # # generate_noisy_images(base_image="/mnt/ssd/hyde/houston.mat", save_loc="/mnt/ssd/hyde/")
-    #
-    # # generate_noisy_images(base_image=cla.original_image, save_loc=cla.data_dir)
-    # benchmark(
-    #     file_loc=cla.data_dir,
-    #     method=cla.method,
-    #     device=cla.device,
-    #     output=cla.output_dir,
-    #     original=cla.original_image,
-    # )
+#<<<<<<< HEAD
+#    import os
+
+    #print(os.sched_getaffinity(0))
+    #torch.set_num_threads(24)
+    #print(torch.__config__.parallel_info())
+
+    #parser = argparse.ArgumentParser(description="HyDe Benchmarking")
+    #cla = hyde.nn.parsers.benchmark_parser(parser)
+    #print(cla)
+    #logger.info(cla)
+
+    #pd.set_option("display.max_rows", 500)
+    #pd.set_option("display.max_columns", 500)
+    #pd.set_option("display.width", 1000)
+    # generate_noisy_images(base_image="/mnt/ssd/hyde/houston.mat", save_loc="/mnt/ssd/hyde/")
+    # generate_noisy_images(base_image=cla.original_image, save_loc=cla.data_dir)
+    #benchmark(
+    #    file_loc=cla.data_dir,
+    #    method=cla.method,
+    #    device=cla.device,
+    #    output=cla.output_dir,
+    #    original=cla.original_image,
+    #)
 
     # # for method in gaussian_noise_removers_args:
     # for method in nn_noise_removers:
@@ -291,14 +300,25 @@ if __name__ == "__main__":
     #     )
 
     methods = {
+#<<<<<<< HEAD
+        #"hyres": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/hyminor",
+        #"hyminor": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/hyminor",
+        #"wsrrr": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/hyminor",
+        #"otvca": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/otvca",
+#        "fosrpdn": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/forpdn",
+#        "fasthyde": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/fasthyde/Demo_FastHyDe_FastHyIn/finished/",
+#        "l1hymixde": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/lyhymixde/L1HyMixDe/old-results/",
+#=======
         # "hyres": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/hyminor",
         # "hyminor": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/hyminor",
         # "wsrrr": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/hyminor",
         # "otvca": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/otvca",
         # "fosrpdn": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/forpdn",
-        "fasthyde": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/fasthyde/Demo_FastHyDe_FastHyIn/",
+        #"fasthyde": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/fasthyde/Demo_FastHyDe_FastHyIn/",
         "l1hymixde": "/hkfs/work/workspace/scratch/qv2382-hyde2/matlab-stuff/lyhymixde/L1HyMixDe/",
+#>>>>>>> 01ae33a41dfa31bf6aa52417ab9acdfeaa6d779f
     }
+    print('loading og')
     og = sio.loadmat("/hkfs/work/workspace/scratch/qv2382-hyde2/benchmark-data/houston.mat")[
         "houston"
     ]
@@ -307,7 +327,7 @@ if __name__ == "__main__":
     original_im = torch.from_numpy(og.astype(np.float32))
 
     for method in methods:
-        load_n_calc_snr(original=None, directory=methods[method], method=method)
+        load_n_calc_snr(original=original_im, directory=methods[method], method=method)
 #     # Convert matlab results
 #
 #     times = [    1.8486,    1.8469,    1.8500,    1.8481,    1.8501,    1.8473,    1.8482,
