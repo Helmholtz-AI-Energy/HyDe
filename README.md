@@ -32,10 +32,27 @@ Image denoising is the task of recovering the true unknown image from a degraded
 * An inuitive pythonic API design
 * PyTorch compatibility
 
-# Features
+# High Level Methods
 
-* Automatic Hyperspectral Image Restoration Using Sparse and Low-Rank Modeling ([HyRes](https://ieeexplore.ieee.org/document/8098642))
-* Hyperspectral Mixed Gaussian and Sparse Noise Reduction ([HyMiNoR](https://ieeexplore.ieee.org/document/8760540))
+### Conventional methods
+
+* [HyRes](https://ieeexplore.ieee.org/document/8098642)
+* [HyMiNoR](https://ieeexplore.ieee.org/document/8760540)
+* [FastHyDe](https://arxiv.org/pdf/2103.06842.pdf)
+* [L1HyMixDe](https://ieeexplore.ieee.org/document/9040508) or [repo](https://github.com/LinaZhuang/L1HyMixDe)
+* [WSRRR](https://ieeexplore.ieee.org/document/6736073)
+* [OTVCA](https://ieeexplore.ieee.org/document/7530874)
+* [FORPDN](https://ieeexplore.ieee.org/document/6570741)
+
+### Neural Methods (see src/hyde/nn)
+
+* [QRNN3D](https://github.com/Vandermode/QRNN3D/)
+* [QRNN2D](https://github.com/Vandermode/QRNN3D/)
+* [MemNet](https://github.com/Vandermode/QRNN3D/)
+* MemNet3D
+* HSID-CNN (DeNet-like)
+* HSID-CNN-3D (DeNet-like)
+* MemNet + trainable HyRes step
 
 ## High Level Function Usage
 
@@ -50,15 +67,6 @@ input_tens = torch.tensor(loaded_image, dtype=torch.float32, device="gpu or cpu"
 hyres = hyde.HyRes()
 output = hyres(input_tens)
 ```
-
-## Future Features
-
-* [BM3D](https://www.cs.tut.fi/~foi/GCF-BM3D/)
-* [FastHyDe](https://arxiv.org/pdf/2103.06842.pdf)
-* [L1HyMixDe](https://ieeexplore.ieee.org/document/9040508) or [repo](https://github.com/LinaZhuang/L1HyMixDe)
-* [WSRRR](https://ieeexplore.ieee.org/document/6736073)
-* [OTVCA](https://ieeexplore.ieee.org/document/7530874)
-* [FORPDN](https://ieeexplore.ieee.org/document/6570741)
 
 ## Development Installation
 
