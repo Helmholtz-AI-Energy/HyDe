@@ -84,20 +84,13 @@ gaussian_noise_removers_args = {
 }
 
 nn_noise_removers = {
-    "qrnn3d": "pretrained-models/qrnn3d/new-noise-gaussian-bs4x4-l2.pth",  # hyde-bs16-blindinc-gaussian-qrnn3d-l2.pth",
-    "qrnn2d": "pretrained-models/qrnn2d/new-noise-gaussian-bs4x4-l2.pth",  # hyde-bs16-blindinc-gaussian-qrnn2d-l2.pth",
-    "memnet": "pretrained-models/memnet/new-noise-gaussian-bs4x4-l2.pth",  # hyde-bs16-blindinc-gaussian-memnet-l2.pth",
-    "memnet3d": "pretrained-models/memnet3d/new-noise-gaussian-bs4x4-l2.pth",  # hyde-bs16-blindinc-gaussian-memnet3d-l2",
-    "denet": "pretrained-models/denet/new-noise-gaussian-bs4x4-l2.pth",  # hyde-bs16-blindinc-gaussian-denet-l2.pth",
-    "denet3d": "pretrained-models/denet3d/new-noise-gaussian-bs4x4-l2.pth",  # hyde-bs16-blindinc-gaussian-denet3d-l2.pth",
+    "qrnn3d": "pretrained-models/qrnn3d/new-noise-gaussian-bs4x4-l2.pth",
+    "qrnn2d": "pretrained-models/qrnn2d/new-noise-gaussian-bs4x4-l2.pth",
+    "memnet": "pretrained-models/memnet/new-noise-gaussian-bs4x4-l2.pth",
+    "memnet3d": "pretrained-models/memnet3d/new-noise-gaussian-bs4x4-l2.pth",
+    "denet": "pretrained-models/denet/new-noise-gaussian-bs4x4-l2.pth",
+    "denet3d": "pretrained-models/denet3d/new-noise-gaussian-bs4x4-l2.pth",
     "memnet_hyres": "pretrained-models/memnet_hyres/new-noise-gaussian-bs4x4-l2.pth",
-    # =======
-    #     "qrnn3d": "pretrained-models/qrnn3d/hyde-bs16-blindinc-gaussian-qrnn3d-l2.pth",
-    #     "qrnn2d": "pretrained-models/qrnn2d/hyde-bs16-blindinc-gaussian-qrnn2d-l2.pth",
-    #     "memnet": "pretrained-models/memnet/hyde-bs16-blindinc-gaussian-memnet-l2.pth",
-    #     "memnet3d": "pretrained-models/memnet3d/hyde-bs16-blindinc-gaussian-memnet3d-l2.pth",
-    #     "denet": "pretrained-models/denet/hyde-bs16-blindinc-gaussian-denet-l2.pth",
-    #     "denet3d": "pretrained-models/denet3d/hyde-bs16-blindinc-gaussian-denet3d-l2.pth",
     "is2d": ["denet", "memnet", "memnet_hyres"],
 }
 
