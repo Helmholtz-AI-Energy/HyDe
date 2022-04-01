@@ -161,7 +161,6 @@ def main():
     train_transform = transforms.Compose(
         [
             AddNoiseNonIIDdB(),
-            # transforms.RandomApply(
             RandChoice(
                 [AddNoiseImpulse(), AddNoiseStripe(), AddNoiseDeadline()],
                 p=None,  # 0.75,
@@ -227,10 +226,9 @@ def main():
         pin_memory=torch.cuda.is_available(),
     )
 
-    # base_lr = cla.lr
     helper.adjust_learning_rate(optimizer, cla.lr)
     # epoch_per_save = 10  # cla.save_freq
-    max_epochs = 150
+    max_epochs = 50
     epochs_wo_best = 0
     best_psnr_iid, best_psnr_mix, best_ls_iid, best_ls_mix = 0, 0, 100000, 100000
     for epoch in range(start_epoch, max_epochs):
@@ -246,34 +244,10 @@ def main():
             # lr warmup
             helper.adjust_learning_rate(optimizer, cla.lr * 10 ** (epoch - 4))
 
-        if epoch < -20:  # Only Non-iid
-            train_icvl.transform = AddNoiseNonIIDdB()
-        elif epoch < -40:
-            train_icvl.transform = transforms.Compose([AddNoiseNonIIDdB(), AddNoiseImpulse()])
-        elif epoch < -50:
-            train_icvl.transform = transforms.Compose([AddNoiseNonIIDdB(), AddNoiseStripe()])
-        elif epoch < -60:
-            train_icvl.transform = transforms.Compose([AddNoiseNonIIDdB(), AddNoiseDeadline()])
-        else:
-            train_icvl.transform = transforms.Compose(
-                [
-                    AddNoiseNonIIDdB(),
-                    # transforms.RandomApply(
-                    RandChoice(
-                        [AddNoiseImpulse(), AddNoiseStripe(), AddNoiseDeadline()],
-                        p=None,
-                        combos=True,
-                    ),
-                ]
-            )
-
-        if epoch == 120:
+        if epoch == 40:
             helper.adjust_learning_rate(optimizer, cla.lr * 0.1)
-        if epoch == 140:
+        if epoch == 45:
             helper.adjust_learning_rate(optimizer, cla.lr * 0.01)
-
-        if epoch == 50 and "qrnn" in cla.arch:
-            net.clamp = True
 
         # training_utils.train(train_loader, net, cla, epoch, optimizer, criterion, writer=writer)
         ttime = time.perf_counter()
@@ -285,7 +259,7 @@ def main():
             optimizer,
             criterion,
             writer=writer,
-            iterations=30,
+            iterations=250,
         )
         ttime = time.perf_counter() - ttime
 
@@ -346,13 +320,6 @@ def main():
             training_utils.save_checkpoint(
                 cla, epoch, net, optimizer, model_out_path=model_latest_path
             )
-
-        # if (epoch % epoch_per_save == 0 and epoch > 0) or epoch == max_epochs - 1:
-        #    logger.info("Saving current network...")
-        #    model_latest_path = os.path.join(basedir, prefix, "model_latest.pth")
-        #    training_utils.save_checkpoint(
-        #        cla, epoch, net, optimizer, model_out_path=model_latest_path
-        #    )
 
 
 if __name__ == "__main__":

@@ -57,7 +57,6 @@ def adaptive_median_filtering(image: torch.Tensor, max_size: int) -> torch.Tenso
 
     Original Lisense
     ----------------
-    (From MATLAB code)
     Copyright 2002-2004 R. C. Gonzalez, R. E. Woods, & S. L. Eddins
     Digital Image Processing Using MATLAB, Prentice-Hall, 2004
     $Revision: 1.5 $  $Date: 2003/11/21 14:19:05 $
@@ -179,8 +178,6 @@ def diff(x: torch.Tensor, n: int = 1, dim=0) -> torch.Tensor:
     y = torch.zeros_like(x)
     ret = x
     for _ in range(n):
-        # torch.diff does the *last* axis but matlab diff
-        #       does it on the *first* non-1 dimension
         ret = torch.diff(ret, dim=dim)
     y[: ret.shape[0]] = ret
     return y
@@ -670,7 +667,6 @@ def sure_thresh(signal: torch.Tensor) -> torch.Tensor:
     -------
     threshold
     """
-    # based on MATLAB's: thselect function with  `rigsure` option (adaptive threshold selection
     # using principle of Stein's Unbiased Risk Estimate.)
     if signal.ndim:
         signal = signal.unsqueeze(1)
@@ -697,8 +693,6 @@ def sure_soft_modified_lr2(
     x: torch.Tensor, tuning_interval: Optional[torch.Tensor] = None
 ) -> torch.Tensor:
     """
-    This function was adapted from a MATLAB directory, however it is currently unused.
-
     This will apply a soft threshold and calculate Stein's unbiased risk estimator. The current
     recommendation is to use `sure_thresh` instead.
 
@@ -733,7 +727,6 @@ def sure_soft_modified_lr2(
     abv_zero = (x.abs() - t) > 0
 
     x_t = x ** 2 - t ** 2
-    # MATLAB: x_t=max(x_t,0) -> this replaces the things below 0 with 0
     # x_t = torch.where(x_t > 0, x_t, torch.tensor(0.0, dtype=x.dtype, device=x.device))
     x_t[x_t <= 0] = 0
 
@@ -814,8 +807,6 @@ def vertical_difference(x: torch.Tensor, n: int = 1):
     y = torch.zeros_like(x)
     ret = x
     for _ in range(n):
-        # torch.diff does the *last* axis but matlab diff
-        #       does it on the *first* non-1 dimension
         ret = torch.diff(ret, dim=0)
     y[: ret.shape[0]] = ret
     return y

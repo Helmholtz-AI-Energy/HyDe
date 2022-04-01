@@ -37,9 +37,6 @@ logger = logging.get_logger()
 
 
 def main():
-    # print('testing 123')
-    # return None
-
     """Training settings"""
     parser = argparse.ArgumentParser(description="Hyperspectral Image Denoising (Gaussian Noise)")
     # cla == command line arguments

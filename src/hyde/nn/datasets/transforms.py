@@ -1,6 +1,6 @@
 import random
 from itertools import combinations
-from typing import List
+from typing import Iterable, List, Union
 
 import numpy as np
 import torch
@@ -246,12 +246,27 @@ class AddNoiseDeadline(object):
 
 
 class RandChoice:
-    def __init__(self, transforms, p=None, combos=False):
+    """
+    Randomly choose between multiple transforms
+
+    Parameters
+    ----------
+    transforms: iterable
+        iterable with a number of initialized transformation
+    p: int, iterable, optional
+        probability of getting any of the transforms.
+        if `p` is a single value, the same `p` will be used for each transform
+    combos: bool, optional
+        if True, apply combinations of transforms.
+        If this is True, then the `p` value is ignored.
+        defaul: False
+    """
+
+    def __init__(self, transforms: Iterable, p: Union[int, Iterable] = None, combos: bool = False):
         self.transforms = transforms
         self.p = p
-        if isinstance(p, (int, float)):
+        if isinstance(p, (float)):
             self.p = [p for _ in transforms]
-        # TODO: document me!
         # this will apply equal probability to each transform
         self.combos = []
         for i in range(1, len(self.transforms) + 1):
@@ -284,6 +299,10 @@ class RandChoice:
 
 
 class RandomBandPerm(object):
+    """
+    Get a random collection of consecutive bands from an HSI
+    """
+
     # crop an image in 3 dimensions, (also crop the bands)
     def __init__(self, bands=10):
         self.bands = bands

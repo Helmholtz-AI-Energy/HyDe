@@ -2,7 +2,6 @@ import os
 
 import torch
 import torch.distributed as dist
-import torch.nn as nn
 from torch.cuda import amp
 
 from ..lowlevel import logging, utils
@@ -31,19 +30,15 @@ def _train_loop(train_loader, network, cla, epoch, optimizer, criterion, scaler,
         scaler.scale(loss).backward()
         scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_norm_(network.parameters(), 1e6)  # max_norm)
-        #loss.backward()
+        # loss.backward()
         loss_data += loss.item()
-        #optimizer.step()
+        # optimizer.step()
         scaler.step(optimizer)
         scaler.update()
 
         train_loss += loss_data
         avg_loss = train_loss / (batch_idx + 1)
 
-        # if batch_idx % cla.log_freq == 0 and cla.rank == 0:
-        #    logger.info(
-        #        f"Epoch: {epoch} outer iter: {outer_iter} iteration: {batch_idx} Loss: {avg_loss} Norm: {total_norm}"
-        #    )
     iter_num += batch_idx
     logger.info(f"Epoch: {epoch} iter_num: {iter_num} Loss: {avg_loss}")
     return avg_loss, iter_num

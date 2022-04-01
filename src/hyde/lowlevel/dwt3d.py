@@ -12,7 +12,6 @@ __all__ = [
 
 class DWTForwardOverwrite(torch.nn.Module):
     """
-    Mirrors the setup of the matlab function `FWT2_PO_fast`.
     This will compute a normal (2D) DWT transform and will layer the found filters in to a 2D
     matrix. After each decomposition level, the found filers will be put into a 2D matrix
     starting at (0, 0). The filters take this form, where the top left point is (0, 0):

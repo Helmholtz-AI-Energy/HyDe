@@ -1,5 +1,6 @@
 from . import models
-#import models
+
+# import models
 
 __all__ = ["qrnn_parser"]
 
@@ -40,7 +41,7 @@ def basic_parser(parser):
         type=str,
         default="l2",
         help="which loss to choose.",
-        #choices=["l1", "l2", "smooth_l1", "ssim", "l2_ssim"],
+        # choices=["l1", "l2", "smooth_l1", "ssim", "l2_ssim"],
     )
     parser.add_argument(
         "--nn-init-mode",
@@ -97,5 +98,5 @@ def benchmark_parser(parser):
     parser.add_argument("--data-dir", type=str, help="location of the noisy images")
     parser.add_argument("--output-dir", type=str, help="location of the output csv")
     parser.add_argument("--original-image", type=str, help="location of the original file")
-    
+
     return parser.parse_args()

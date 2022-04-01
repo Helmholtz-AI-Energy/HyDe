@@ -119,7 +119,7 @@ def get_local_group(batchnorm_group_size):
 
 
 # do regular init
-def init(method, batchnorm_group_size=1):
+def init(method):
     # NOTE: add this to the bash env to avoid some inference from other variables
     # MASTER_ADDR=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1);
     # MASTER_PORT=6000;
