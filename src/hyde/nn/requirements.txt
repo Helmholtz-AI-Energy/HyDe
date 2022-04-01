@@ -1,0 +1,8 @@
+
+bs4
+h5py
+kornia
+
+# QRNN3D
+torch
+torchvision >= 0.8.0

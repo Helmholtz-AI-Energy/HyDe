@@ -58,3 +58,5 @@ hyde_venv/
 testing.py
 old_bm3d/
 temp_test_result/
+
+slurm*

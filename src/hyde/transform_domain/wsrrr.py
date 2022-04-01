@@ -28,7 +28,7 @@ class WSRRR(torch.nn.Module):
 
         self.padding_method = padding_method
 
-        self.dwt_forward = dwt3d.DWTForwardOverwrite(
+        self.dwt_forward = dwt3d.DWTForward(
             decomp_level,
             self.wavelet_name,
             self.padding_method,
@@ -56,7 +56,7 @@ class WSRRR(torch.nn.Module):
         """
         if x.device != self.device:
             self.device = x.device
-            self.dwt_forward = dwt3d.DWTForwardOverwrite(
+            self.dwt_forward = dwt3d.DWTForward(
                 self.decomp_level,
                 self.wavelet_name,
                 self.padding_method,
@@ -70,14 +70,20 @@ class WSRRR(torch.nn.Module):
         og_rows, og_cols, og_channels = x.shape
 
         # % Noise Variance Estimation
-        _, v_dwt_low, v_dwt_highs = self.dwt_forward.forward(x.permute((2, 0, 1)).unsqueeze(0))
+        v_dwt_low, v_dwt_highs = self.dwt_forward.forward(x.permute((2, 0, 1)).unsqueeze(0))
         # out shape is N x C x H x W
         v_dwt_2d, filter_starts = dwt3d.construct_2d_from_filters(low=v_dwt_low, highs=v_dwt_highs)
 
         # testing the reshape and inverse stuff
         eps = 1e-30
         # this gets the median of the FIRST high level filters
-        omega = torch.median(torch.abs(v_dwt_2d[filter_starts[-1] ** 2 :]), dim=0)[0] / 0.6745 + eps
+        omega = (
+            torch.median(torch.abs(v_dwt_2d[filter_starts[-1][0] * filter_starts[-1][1] :]), dim=0)[
+                0
+            ]
+            / 0.6745
+            + eps
+        )
         # % Covariance matrix
         # Omega_1=permute(sigma(:).^2,[3,2,1]);
         # Omega=repmat(Omega_1,[nx1,ny1,1]);
@@ -88,7 +94,7 @@ class WSRRR(torch.nn.Module):
         # % D^T*Y is fixed through the derivation it is better to be calculated out
         # % of the loop
         # [WY_tilda,s1,s2]=twoDWTon3Ddata(Omega.^-.5.*Y,L,qmf,'FWT_PO_1D_2D_3D_fast');
-        _, wy_tilda_low, wy_tilda_highs = self.dwt_forward(inp.permute((2, 0, 1)).unsqueeze(0))
+        wy_tilda_low, wy_tilda_highs = self.dwt_forward(inp.permute((2, 0, 1)).unsqueeze(0))
 
         wy_tilda_2d, wy_filter_starts = dwt3d.construct_2d_from_filters(
             low=wy_tilda_low, highs=wy_tilda_highs
@@ -100,7 +106,7 @@ class WSRRR(torch.nn.Module):
         thresh = torch.zeros((rank + 1, self.decomp_level + 2), dtype=x.dtype, device=x.device)
         wx = torch.zeros((wy_tilda_2d.shape[0], v.shape[1]), dtype=x.dtype, device=x.device)
 
-        stop = filter_starts[0] ** 2
+        stop = filter_starts[0][0] * filter_starts[0][1]  # ** 2
         # anything which cuts at `stop` gets the low filters from the DWT decomposition
         for cc in range(200):
             # W=WY_tilda*V;
@@ -116,9 +122,9 @@ class WSRRR(torch.nn.Module):
 
                 # the next loop applies thresholding to the high parts of the filters
                 for j in range(self.decomp_level):
-                    st = wy_filter_starts[j] ** 2
+                    st = wy_filter_starts[j][0] * wy_filter_starts[j][1]  # ** 2
                     try:
-                        sp = wy_filter_starts[j + 1] ** 2
+                        sp = wy_filter_starts[j + 1][0] * wy_filter_starts[j + 1][1]  # ** 2
                     except IndexError:
                         sp = None
                     idx = slice(st, sp)
@@ -144,7 +150,7 @@ class WSRRR(torch.nn.Module):
 
         d_w_vt = self.dwt_inverse((dwt_inv_low, dwt_inv_highs))
         d_w_vt = d_w_vt.squeeze().permute((1, 2, 0))
-
+        d_w_vt = d_w_vt[: omega.shape[0], : omega.shape[1], : omega.shape[2]]
         xx = omega * d_w_vt
         xx = xx[:og_rows, :og_cols, :og_channels]
 

@@ -69,7 +69,7 @@ class FORPDN_SURE(torch.nn.Module):
         scale: bool = True,
         scale_const: Union[int, float] = 255,
         wavelet_level: int = 6,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> torch.Tensor:
         """
         Call the FORPDN_SURE method.
         NOTE: the decomposition level for wavelet-based denoising is 1 minus the length of the s_int_* Tensors.
@@ -106,10 +106,6 @@ class FORPDN_SURE(torch.nn.Module):
         denoised_image: torch.Tensor
         noise_std: torch.Tensor
             noise standard deviation for each band as a vector
-        optimal_sure_params: torch.Tensor
-            optimal parameters for the SURE function
-        sure: torch.Tensor
-            SURE threshold values
         """
         self.wavelet_name = "db" + str(wavelet_level)
         rows, cols, bands = img.shape
@@ -128,7 +124,7 @@ class FORPDN_SURE(torch.nn.Module):
 
         # set up the DWT transforms to be used later
         if domain == "wavelet":
-            self.dwt_forward = dwt3d.DWTForwardOverwrite(
+            self.dwt_forward = dwt3d.DWTForward(
                 self.decomp_level,
                 self.wavelet_name,
                 self.padding_method,
@@ -211,9 +207,7 @@ class FORPDN_SURE(torch.nn.Module):
         # wavelet based decomposition
         opt_params = torch.zeros((self.decomp_level + 1, 1), dtype=img.dtype, device=img.device)
         # do wavelet transform
-        ax1_dwt_full_over, img_dwt_lows, img_dwt_highs = self.dwt_forward.forward(
-            img.permute((2, 0, 1)).unsqueeze(0)
-        )
+        img_dwt_lows, img_dwt_highs = self.dwt_forward.forward(img.permute((2, 0, 1)).unsqueeze(0))
         ax1_dwt_full, ax1_filter_starts = dwt3d.construct_2d_from_filters(
             low=img_dwt_lows, highs=img_dwt_highs
         )
@@ -224,7 +218,8 @@ class FORPDN_SURE(torch.nn.Module):
         xp2 = torch.zeros_like(ax1_dwt_full)
         c_break = 0
         st = 0
-        sp = ax1_filter_starts[0] ** 2
+        sp = ax1_filter_starts[0][0] * ax1_filter_starts[0][1]
+        # ax1_filter_starts[0] ** 2
         idx = slice(st, sp)
         # operate on the `low` filters from dwt
         for i, lam in enumerate(t):
@@ -286,9 +281,11 @@ class FORPDN_SURE(torch.nn.Module):
 
             sure *= 0
             # ax1_filter_starts has the filter sizes, since they are square, we know where they start in the 2D matrix.
-            st = ax1_filter_starts[j] ** 2
+            st = ax1_filter_starts[j][0] * ax1_filter_starts[j][1]
+            # ax1_filter_starts[j] ** 2
             try:
-                sp = ax1_filter_starts[j + 1] ** 2
+                sp = ax1_filter_starts[j + 1][0] * ax1_filter_starts[j + 1][1]
+                # ax1_filter_starts[j + 1] ** 2
             except IndexError:
                 sp = ax1_dwt_full.shape[0]
             idx = slice(st, sp)
