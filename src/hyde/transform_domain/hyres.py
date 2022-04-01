@@ -88,6 +88,7 @@ class HyRes(torch.nn.Module):
             calculation_dtype=torch.float64,
         )
 
+        # padd to make things even
         if og_rows % (2 ** self.decomp_level) != 0:
             x = utils.symmetric_pad(
                 x,
@@ -100,24 +101,24 @@ class HyRes(torch.nn.Module):
                     2 ** self.decomp_level - (og_rows % 2 ** self.decomp_level),
                 ],
             )
-
         padded_shape = tuple(x.shape)
 
         p_rows, p_cols, p_ch = x.shape
         eps = 1e-30
         omega1 = (torch.sqrt(torch.var(w, dim=1)) + eps) ** 2
-        # todo: sigma is the same as MATLAB
+        # estimate the noise with the standard deviation? (unsure about if that is whats happening)
         omega1 = omega1.reshape((1, 1, omega1.numel())).repeat(p_rows, p_cols, 1)
         y_w = torch.pow(omega1, -0.5) * x
-
+        # do PCA and combine a couple things (see function)
         v_pca, pc = utils.custom_pca_image(y_w)
-
+        # do wavelet decomp
         # next is twoDWTon3Ddata -> requires permute + unsqueeze
         pc = pc.to(torch.float)  # no-op if already float
         # pc -> h x w x c
         v_dwt_full, v_dwt_lows, v_dwt_highs = self.dwt_forward.forward(
             pc.permute((2, 0, 1)).unsqueeze(0)
         )
+        # remove NaNs with max/min values, Nan -> 0
         v_dwt_lows = torch.nan_to_num(v_dwt_lows, nan=0, posinf=x.max(), neginf=x.min())
         for c in range(len(v_dwt_highs)):
             v_dwt_highs[c] = torch.nan_to_num(v_dwt_highs[c], nan=0, posinf=x.max(), neginf=x.min())
