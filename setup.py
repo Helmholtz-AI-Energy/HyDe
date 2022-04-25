@@ -17,7 +17,7 @@ if __name__ == "__main__":
         setuptools.setup(
             name="hyde-images",
             description="Hyperspectral Denoising algorithm toolbox in Python for GPUs",
-            version="0.3.0",
+            version="0.4.0",
             author="Helmholtz-AI-Energy",
             author_email="consultant-helmholtz.ai@kit.edu",
             license="BSD-3-Clause",
