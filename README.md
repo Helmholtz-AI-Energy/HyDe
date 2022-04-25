@@ -54,6 +54,10 @@ Image denoising is the task of recovering the true unknown image from a degraded
 * HSID-CNN-3D (DeNet-like)
 * MemNet + trainable HyRes step
 
+##### Pretrained Models
+
+Pretrained models are available on the github repository but NOT in the pip release.
+
 ## High Level Function Usage
 
 The high level functions (see Features above) are created with torch.nn.Modules. This means that they are classes
