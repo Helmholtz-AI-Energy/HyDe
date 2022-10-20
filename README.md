@@ -57,6 +57,13 @@ Image denoising is the task of recovering the true unknown image from a degraded
 ##### Pretrained Models
 
 Pretrained models are available on the github repository but NOT in the pip release.
+To use these models, use:
+
+```python
+method = hyde.NNInference(arch="qrnn3d", pretrained_file="/path/to/downloaded/model.pth")
+output = method(noisy, band_dim=-1, permute=True)
+```
+Please check if you need to use the `band_dim` and `permute` flags
 
 ## High Level Function Usage
 
