@@ -168,6 +168,24 @@ This project has been set up using [PyScaffold] 4.0.1 and the [dsproject extensi
 Networking Fund](https://www.helmholtz.de/en/about_us/the_association/initiating_and_networking/)
 under the Helmholtz AI platform grant.*
 
+## Citation
+
+If you use this repositity, please cite the following paper:
+
+Bibtex:
+```
+@article{Coquelin2022HyDeTF,
+  title={HyDe: The First Open-Source, Python-Based, GPU-Accelerated Hyperspectral Denoising Package},
+  author={Daniel Coquelin and Behnood Rasti and Markus Gotz and Pedram Ghamisi and Richard Gloaguen and Achim Streit},
+  journal={ArXiv},
+  year={2022},
+  volume={abs/2204.06979}
+}
+```
+Plain text:
+
+[1] D. Coquelin, B. Rasti, M. Goetz, P. Ghamisi, R. Gloaguen, and A. Streit, ‘HyDe: The First Open-Source, Python-Based, GPU-Accelerated Hyperspectral Denoising Package’, ArXiv, τ. abs/2204.06979, 2022.
+
 ---
 
 <div align="center">
