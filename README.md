@@ -11,17 +11,20 @@ If you use this repositity, please cite the following paper:
 
 Bibtex:
 ```
-@article{Coquelin2022HyDeTF,
-  title={HyDe: The First Open-Source, Python-Based, GPU-Accelerated Hyperspectral Denoising Package},
-  author={Daniel Coquelin and Behnood Rasti and Markus Gotz and Pedram Ghamisi and Richard Gloaguen and Achim Streit},
-  journal={ArXiv},
+@INPROCEEDINGS{9955088,
+  author={Coquelin, Daniel and Rasti, Behnood and Götz, Markus and Ghamisi, Pedram and Gloaguen, Richard and Streit, Achim},
+  booktitle={2022 12th Workshop on Hyperspectral Imaging and Signal Processing: Evolution in Remote Sensing (WHISPERS)}, 
+  title={Hyde: The First Open-Source, Python-Based, Gpu-Accelerated Hyperspectral Denoising Package}, 
   year={2022},
-  volume={abs/2204.06979}
+  volume={},
+  number={},
+  pages={1-5},
+  doi={10.1109/WHISPERS56178.2022.9955088}
 }
 ```
 Plain text:
 
-[1] D. Coquelin, B. Rasti, M. Goetz, P. Ghamisi, R. Gloaguen, and A. Streit, ‘HyDe: The First Open-Source, Python-Based, GPU-Accelerated Hyperspectral Denoising Package’, ArXiv, τ. abs/2204.06979, 2022.
+[1] D. Coquelin, B. Rasti, M. Götz, P. Ghamisi, R. Gloaguen and A. Streit, "Hyde: The First Open-Source, Python-Based, Gpu-Accelerated Hyperspectral Denoising Package," 2022 12th Workshop on Hyperspectral Imaging and Signal Processing: Evolution in Remote Sensing (WHISPERS), 2022, pp. 1-5, doi: 10.1109/WHISPERS56178.2022.9955088.
 
 ## General User Installation
 
