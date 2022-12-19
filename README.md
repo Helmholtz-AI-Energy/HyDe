@@ -5,27 +5,6 @@
 ---
 Hyperspectral Denoising algorithm toolbox in Python
 
-## Citation
-
-If you use this repositity, please cite the following paper:
-
-Bibtex:
-```
-@INPROCEEDINGS{9955088,
-  author={Coquelin, Daniel and Rasti, Behnood and Götz, Markus and Ghamisi, Pedram and Gloaguen, Richard and Streit, Achim},
-  booktitle={2022 12th Workshop on Hyperspectral Imaging and Signal Processing: Evolution in Remote Sensing (WHISPERS)}, 
-  title={Hyde: The First Open-Source, Python-Based, Gpu-Accelerated Hyperspectral Denoising Package}, 
-  year={2022},
-  volume={},
-  number={},
-  pages={1-5},
-  doi={10.1109/WHISPERS56178.2022.9955088}
-}
-```
-Plain text:
-
-[1] D. Coquelin, B. Rasti, M. Götz, P. Ghamisi, R. Gloaguen and A. Streit, "Hyde: The First Open-Source, Python-Based, Gpu-Accelerated Hyperspectral Denoising Package," 2022 12th Workshop on Hyperspectral Imaging and Signal Processing: Evolution in Remote Sensing (WHISPERS), 2022, pp. 1-5, doi: 10.1109/WHISPERS56178.2022.9955088.
-
 ## General User Installation
 
 This project requires the PyTorch-wavelets package. However, this package does not have a PyPi release.
@@ -99,6 +78,27 @@ input_tens = torch.tensor(loaded_image, dtype=torch.float32, device="gpu or cpu"
 hyres = hyde.HyRes()
 output = hyres(input_tens)
 ```
+
+## Citation
+
+If you use this repositity, please cite the following paper:
+
+Bibtex:
+```
+@inproceedings{coquelin2022hyde,
+  author={Coquelin, Daniel and Rasti, Behnood and Götz, Markus and Ghamisi, Pedram and Gloaguen, Richard and Streit, Achim},
+  booktitle={2022 12th Workshop on Hyperspectral Imaging and Signal Processing: Evolution in Remote Sensing (WHISPERS)}, 
+  title={Hyde: The First Open-Source, Python-Based, Gpu-Accelerated Hyperspectral Denoising Package}, 
+  year={2022},
+  volume={},
+  number={},
+  pages={1-5},
+  doi={10.1109/WHISPERS56178.2022.9955088}
+}
+```
+Plain text:
+
+[1] D. Coquelin, B. Rasti, M. Götz, P. Ghamisi, R. Gloaguen and A. Streit, "Hyde: The First Open-Source, Python-Based, Gpu-Accelerated Hyperspectral Denoising Package," 2022 12th Workshop on Hyperspectral Imaging and Signal Processing: Evolution in Remote Sensing (WHISPERS), 2022, pp. 1-5, doi: 10.1109/WHISPERS56178.2022.9955088.
 
 ## Development Installation
 
