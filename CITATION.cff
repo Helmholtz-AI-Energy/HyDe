@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+url: "https://github.com/Helmholtz-AI-Energy/HyDe"
+preferred-citation:
+  type: conference-paper
+  title: "HyDe: The first open-source, Python-based, GPU-accelerated hyperspectral denoising package"
+  collection-title: "12th Workshop on Hyperspectral Imaging and Signal Processing: Evolution in Remote Sensing (WHISPERS)"
+  authors:
+  - family-names: "Coquelin"
+    given-names: "Daniel"
+    orcid: https://orcid.org/0000-0001-8552-5153
+  - family-names: "Rasti"
+    given-names: "Behnood"
+  - family-names: "Götz"
+    given-names: "Markus"
+    orcid: https://orcid.org/0000-0002-2233-1041
+  - family-names: "Ghamisi"
+    given-names: "Pedram"
+  - family-names: "Gloaugen"
+    given-names: "Richard"
+  - family-names: "Streit"
+    given-names: "Achim"
+  start: 1
+  end: 5
+  year: 2022
+  doi: 10.1109/WHISPERS56178.2022.9955088
