@@ -189,7 +189,7 @@ class FORPDN_SURE(torch.nn.Module):
     def _forpdns(img, t: torch.Tensor, rowsp, colsp, bandsp, sigma, diag_s, c1, c12u, c12v, yp_m):
         # signal based decomposition
         x1 = img.reshape((rowsp * colsp, bandsp))
-        x1 = x1.repeat(torch.pow(sigma, 2), (rowsp * colsp, 1)) * x1
+        # x1 = x1.repeat(torch.pow(sigma, 2), (rowsp * colsp, 1)) * x1
         sure = torch.zeros((t.shape[0], 2), dtype=img.dtype, device=img.device)
         for i, lam in enumerate(t):
             sig_lam_eye = torch.diag(1.0 / (1.0 / (lam * diag_s) + 1.0))
